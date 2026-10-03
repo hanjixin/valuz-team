@@ -1,0 +1,25 @@
+{
+  "name": "@agent-base/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "migrate": "tsx src/migrate-cli.ts",
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agent-base/db": "workspace:*",
+    "fastify": "^5.2.0",
+    "ioredis": "^5.4.2",
+    "kysely": "^0.28.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@agent-base/test-utils": "workspace:*"
+  }
+}

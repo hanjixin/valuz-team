@@ -1,21 +1,12 @@
-# Dev/test infrastructure only (non-default ports so it never collides with a local PG/Redis).
+# Local PostgreSQL + Redis for `make dev` (non-default ports, so they never collide with your own).
 name: agent-base-dev
 services:
   postgres:
     image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: agentbase
-      POSTGRES_PASSWORD: agentbase
-      POSTGRES_DB: agentbase
+    environment: { POSTGRES_USER: agentbase, POSTGRES_PASSWORD: agentbase, POSTGRES_DB: agentbase }
     ports: ["127.0.0.1:55432:5432"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentbase"]
-      interval: 2s
-      retries: 30
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U agentbase"], interval: 2s, retries: 30 }
   redis:
     image: redis:7-alpine
     ports: ["127.0.0.1:56379:6379"]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 2s
-      retries: 30
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 2s, retries: 30 }

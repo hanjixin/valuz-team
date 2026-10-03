@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-electron
+release
+.turbo
+pnpm-lock.yaml
+legacy
+coverage
+# Carried over from valuz-agent unchanged, so it can be re-synced without noise.
+frontend
+i18n
+api/openapi.yaml
+**/generated/**

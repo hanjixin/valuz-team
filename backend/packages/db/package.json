@@ -1,0 +1,22 @@
+{
+  "name": "@agent-base/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "kysely": "^0.28.0",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@agent-base/test-utils": "workspace:*",
+    "@types/pg": "^8.11.10"
+  }
+}

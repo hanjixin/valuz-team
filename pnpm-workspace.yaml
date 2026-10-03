@@ -1,5 +1,12 @@
 packages:
-  - packages/*
-  - apps/*
-  # The valuz-agent design system, carried over unchanged (see frontend/README.md).
+  - backend/packages/*
+  - backend/apps/*
   - frontend/packages/*
+  - frontend/apps/*
+
+onlyBuiltDependencies:
+  - esbuild
+  - electron
+  - "@node-rs/argon2"
+  - cpu-features
+  - ssh2

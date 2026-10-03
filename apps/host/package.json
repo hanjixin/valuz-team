@@ -1,0 +1,27 @@
+{
+  "name": "@agent-base/host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agent-base-host": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts run",
+    "start": "node dist/cli.js run",
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agent-base/kernel": "workspace:*",
+    "@agent-base/protocol": "workspace:*",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.288",
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "@openai/codex-sdk": "^0.160.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13"
+  }
+}

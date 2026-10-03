@@ -1,0 +1,5 @@
+packages:
+  - packages/*
+  - apps/*
+  # The valuz-agent design system, carried over unchanged (see frontend/README.md).
+  - frontend/packages/*

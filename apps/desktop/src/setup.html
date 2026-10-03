@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Agent Base</title>
+    <style>
+      body { font: 14px -apple-system, "PingFang SC", sans-serif; display: grid; place-items: center; height: 100vh; margin: 0; background: #f4f4f6; color: #1c1c1a; }
+      form { background: #fff; padding: 28px; border-radius: 12px; width: 380px; display: grid; gap: 12px; box-shadow: 0 2px 16px rgba(0,0,0,.06); }
+      h1 { font-size: 18px; margin: 0; } p { margin: 0; color: #6f6e69; font-size: 13px; }
+      input { font: inherit; padding: 8px 10px; border: 1px solid #d8d7d2; border-radius: 6px; }
+      button { font: inherit; padding: 8px; border: none; border-radius: 6px; background: #725cf9; color: #fff; cursor: pointer; }
+      button:disabled { opacity: .6; } #error { color: #c0392b; font-size: 13px; min-height: 18px; }
+    </style>
+  </head>
+  <body>
+    <form id="form">
+      <h1>连接到 Agent Base 服务器</h1>
+      <p>填写你们团队的服务器地址。之后可以在"设备"页更换。</p>
+      <input id="url" type="url" required placeholder="https://agents.example.com" autofocus />
+      <div id="error"></div>
+      <button id="go">连接</button>
+    </form>
+    <script>
+      const form = document.getElementById("form"), go = document.getElementById("go"), error = document.getElementById("error");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        go.disabled = true; error.textContent = "";
+        const failure = await window.agentBaseDesktop.connectServer(document.getElementById("url").value.trim());
+        if (failure) { error.textContent = failure; go.disabled = false; }
+      });
+    </script>
+  </body>
+</html>

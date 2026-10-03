@@ -1,0 +1,10 @@
+{
+  "extends": "../../frontend/tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "../../frontend",
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": ["vite/client"]
+  },
+  "include": ["src", "vite.config.ts"]
+}

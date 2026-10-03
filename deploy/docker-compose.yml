@@ -1,0 +1,56 @@
+# Production stack: server + PostgreSQL + Redis.
+#   cp deploy/.env.example deploy/.env   # then set APP_SECRET, POSTGRES_PASSWORD, PUBLIC_URL
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+name: agent-base
+services:
+  server:
+    image: agent-base-server:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://agentbase:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/agentbase
+      REDIS_URL: redis://redis:6379/0
+      APP_SECRET: ${APP_SECRET:?set APP_SECRET (32+ random characters)}
+      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL (how clients reach this server)}
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-1}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    volumes:
+      - server-data:/data
+    ports:
+      - "${BIND:-127.0.0.1}:${PORT:-8787}:8787"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    stop_grace_period: 20s
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: agentbase
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: agentbase
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentbase"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+volumes:
+  server-data:
+  pg-data:
+  redis-data:

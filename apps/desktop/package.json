@@ -1,0 +1,18 @@
+{
+  "name": "@agent-base/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsup && cp src/setup.html dist/setup.html",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "electron-log": "^5.4.4"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0"
+  }
+}

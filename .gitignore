@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-electron
+release
+.turbo
+.env
+.env.local
+*.log
+.data
+coverage
+playwright-report
+test-results
+*.tsbuildinfo
+.DS_Store

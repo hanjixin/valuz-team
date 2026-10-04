@@ -8563,6 +8563,7 @@ components:
               nullable: true
             metadata:
               type: object
+              additionalProperties: true
             origin:
               allOf:
                 - $ref: "#/components/schemas/SkillOrigin"

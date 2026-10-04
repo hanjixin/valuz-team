@@ -26,12 +26,12 @@ describe("contract-driven server", () => {
 
   it("answers 501, in the contract's error shape, for an operation not implemented yet", async () => {
     const { token } = await signUp(t, "contract");
-    const res = await t.call("GET", "/v1/skills", { token });
+    const res = await t.call("GET", "/v1/playbooks", { token });
     expect(res.status).toBe(501);
     expect(res.body).toEqual({
       code: "not_implemented",
-      message: "listSkills is not implemented yet",
-      detail: "listSkills is not implemented yet",
+      message: "listPlaybooks is not implemented yet",
+      detail: "listPlaybooks is not implemented yet",
     });
   });
 
@@ -53,7 +53,7 @@ describe("contract-driven server", () => {
   });
 
   it("requires a valid access token on every operation the contract does not mark public", async () => {
-    expect((await t.call("GET", "/v1/skills")).status).toBe(401);
+    expect((await t.call("GET", "/v1/playbooks")).status).toBe(401);
     expect((await t.call("GET", "/v1/me", { token: "not-a-token" })).body).toMatchObject({ code: "unauthorized" });
     expect((await t.call("GET", "/health")).status).toBe(200); // public
     expect((await t.call("GET", "/v1/nope")).body).toMatchObject({ code: "not_found" });

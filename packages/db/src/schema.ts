@@ -286,6 +286,36 @@ export interface MessageFeedbackTable {
   updated_at: Timestamp;
 }
 
+export interface SkillFile {
+  path: string;
+  content: string;
+}
+
+export interface SkillsTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  slug: string;
+  name: string;
+  description: ColumnType<string, string | undefined, string>;
+  files: ColumnType<SkillFile[], string, string>;
+  version: ColumnType<number, number | undefined, number>;
+  creation_origin: ColumnType<string, string | undefined, string>;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface SkillVersionsTable {
+  id: string;
+  skill_id: string;
+  version: number;
+  name: string;
+  description: ColumnType<string, string | undefined, string>;
+  files: ColumnType<SkillFile[], string, string>;
+  created_by: string | null;
+  created_at: Timestamp;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -306,6 +336,8 @@ export interface Database {
   events: EventsTable;
   queued_inputs: QueuedInputsTable;
   notifications: NotificationsTable;
+  skills: SkillsTable;
+  skill_versions: SkillVersionsTable;
   message_feedback: MessageFeedbackTable;
   user_settings: UserSettingsTable;
 }

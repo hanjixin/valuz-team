@@ -371,6 +371,25 @@ describe("sessions", () => {
     expect(system).toContain("only writes limericks");
   });
 
+  it("puts an agent's skills on the device for the turn, each in its current version", async () => {
+    await call(alice, "POST", "/v1/skills", {
+      name: "Rhyme Check",
+      description: "Check that lines rhyme",
+      instructions_markdown: "v1",
+    });
+    await call(alice, "PATCH", "/v1/agents/Poet", { skills: ["rhyme-check", "a-skill-that-was-deleted"] });
+    const session = await newChat(alice, { agent_slug: "Poet" });
+    await call(alice, "PATCH", "/v1/skills/rhyme-check", { instructions_markdown: "v2: read it aloud" });
+    model.replies.push({ content: "Done." });
+    await say(alice, session.id, "Write");
+
+    const manifest = path.join(dir, "data", "skills", session.id, "skills", "rhyme-check", "SKILL.md");
+    expect(await readFile(manifest, "utf8")).toContain("v2: read it aloud");
+    // The runtime tells the model which skills it has.
+    const system = model.requests.at(-1)?.messages.find((m) => m.role === "system")?.content ?? "";
+    expect(system).toContain("rhyme-check");
+  });
+
   it("closes a turn on the device's behalf when the device restarts in the middle of it", async () => {
     const session = await newChat(alice);
     model.replies.push({ hang: true });

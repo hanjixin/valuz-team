@@ -5785,7 +5785,9 @@ export interface components {
             file_count: number;
             root_path?: string | null;
             manifest_filename?: string | null;
-            metadata?: Record<string, never>;
+            metadata?: {
+                [key: string]: unknown;
+            };
             /** @description Import provenance for a URL/GitHub-imported skill; null for skills not imported from a URL. Lets the detail UI show "Imported from …" and link back to the source. */
             origin?: components["schemas"]["SkillOrigin"] | null;
         };

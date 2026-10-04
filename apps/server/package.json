@@ -26,6 +26,7 @@
     "fastify": "^5.2.0",
     "fastify-openapi-glue": "^4.11.5",
     "fastify-sse-v2": "^4.2.2",
+    "gray-matter": "^4.0.3",
     "ioredis": "^5.4.2",
     "ipaddr.js": "^2.5.0",
     "kysely": "^0.28.0",

@@ -3,7 +3,13 @@
  * credential, the agent's current instructions and the project's context are
  * resolved every time a turn is dispatched, then handed to the device.
  */
-import { type Actor, type ApiProtocol as KernelProtocol, Session, type UserMessage } from "@agent-base/protocol";
+import {
+  type Actor,
+  type ApiProtocol as KernelProtocol,
+  Session,
+  type SkillBundle,
+  type UserMessage,
+} from "@agent-base/protocol";
 import type { Schema } from "@agent-base/contract";
 import type { Auth, Ctx } from "../../infra/context.ts";
 import { DeviceOfflineError } from "../../infra/device-hub.ts";
@@ -13,6 +19,7 @@ import * as agents from "../agents/service.ts";
 import * as projects from "../projects/service.ts";
 import { type ApiProtocol, protocolFor } from "../providers/catalog.ts";
 import * as providers from "../providers/service.ts";
+import * as skills from "../skills/service.ts";
 import * as repo from "./repo.ts";
 import * as sessions from "./service.ts";
 import type { StoredEventRow } from "./translate.ts";
@@ -20,8 +27,8 @@ import type { StoredEventRow } from "./translate.ts";
 const QUEUE_LIMIT = 20;
 type Row = NonNullable<Awaited<ReturnType<typeof repo.byId>>>;
 
-/** The session as the kernel on the device needs it for this turn. */
-async function kernelSession(ctx: Ctx, row: Row): Promise<Session> {
+/** The session as the kernel on the device needs it for this turn, and the skill packages its agent carries. */
+async function kernelSession(ctx: Ctx, row: Row): Promise<{ session: Session; skillBundles: SkillBundle[] }> {
   const [agent, project, channel] = await Promise.all([
     row.agent_id ? agents.forSession(ctx, row.agent_id) : null,
     projects.contextForSession(ctx, row.project_id),
@@ -40,7 +47,10 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<Session> {
   ]
     .filter(Boolean)
     .join("\n\n");
-  return Session.parse({
+  // …and its equipment as it is now: the current version of each skill it names.
+  const skillBundles = await skills.bundlesFor(ctx, row.org_id, agent?.skills ?? []);
+  const equipped = skillBundles.map((bundle) => bundle.slug);
+  const session = Session.parse({
     id: row.id,
     agent_config: {
       id: agent?.id ?? "",
@@ -48,6 +58,7 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<Session> {
       model: row.model,
       runtime_provider: row.runtime_provider,
       instructions,
+      skills: equipped,
       permission_mode: row.permission_mode,
       effort: row.effort,
       metadata: agent ? { slug: agent.slug } : {},
@@ -66,6 +77,7 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<Session> {
         : null,
     model_settings: row.effort ? { effort: row.effort } : null,
     instructions,
+    skills: equipped,
     permission_mode: row.permission_mode,
     mode: row.mode,
     status: "running",
@@ -74,6 +86,7 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<Session> {
     todos: row.todos,
     created_at: row.created_at.getTime(),
   });
+  return { session, skillBundles };
 }
 
 /** What a conversation is called until someone names it: the start of its first message. */
@@ -91,7 +104,7 @@ export async function dispatchTurn(ctx: Ctx, sessionId: string, text: string, ac
   const row = await repo.byId(ctx.db, sessionId);
   if (!row) throw notFound("session");
   if (!row.device_id) throw conflict("the device this session ran on was removed", "device_removed");
-  const session = await kernelSession(ctx, row);
+  const { session, skillBundles } = await kernelSession(ctx, row);
   const userMessage: UserMessage = { text, attachments: [], additional_context: "" };
 
   if (!(await repo.claimForTurn(ctx.db, sessionId, text, titleFrom(text))))
@@ -108,7 +121,7 @@ export async function dispatchTurn(ctx: Ctx, sessionId: string, text: string, ac
     await ctx.hub.call(
       row.device_id,
       "session.run",
-      { session, message_id: messageId, user_message: userMessage, skill_bundles: [] },
+      { session, message_id: messageId, user_message: userMessage, skill_bundles: skillBundles },
       actor,
     );
   } catch (err) {

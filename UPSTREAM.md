@@ -84,4 +84,8 @@ Deliberate differences in behaviour:
   when none is named. Deltas are stored as well as final messages, so history replays exactly what a live
   stream showed, and every frame carries the durable `seq`.
 - The native runtime (`deepagents`) speaks chat completions only for now.
+- Skills live in the database, not in a folder on disk: a skill is its files plus every earlier version of them,
+  and an agent's skills are written to the device for each turn. `path` in responses is a label, not a location.
+  Per-project enablement is not modelled — a member's library switch is the only one. `POST /v1/skills/scan` has
+  nothing to scan and returns the count.
 - `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

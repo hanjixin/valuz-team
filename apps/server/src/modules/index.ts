@@ -15,5 +15,6 @@ export * from "./runtimes/handlers.ts";
 export * from "./sessions/handlers.ts";
 export * from "./settings/handlers.ts";
 export * from "./sharing/handlers.ts";
+export * from "./skills/handlers.ts";
 export * from "./system/handlers.ts";
 export * from "./teams/handlers.ts";

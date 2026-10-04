@@ -16,7 +16,11 @@ services:
       ALLOW_SIGNUP: ${ALLOW_SIGNUP:-1}
       ALLOW_PRIVATE_UPSTREAMS: ${ALLOW_PRIVATE_UPSTREAMS:-0}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      # Uploads wait here until they are delivered to a device. Projects themselves stay on devices.
+      MEMORY_REVIEW_IDLE_SECONDS: ${MEMORY_REVIEW_IDLE_SECONDS:-60}
+      AUTOMATION_MIN_INTERVAL_SECONDS: ${AUTOMATION_MIN_INTERVAL_SECONDS:-30}
+      FEISHU_API_BASE: ${FEISHU_API_BASE:-}
+      # Knowledge-base documents live here, and uploads wait here until they are delivered to a device.
+      # Projects themselves stay on devices.
       STORAGE_DIR: /data/storage
       STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
       S3_BUCKET: ${S3_BUCKET:-}

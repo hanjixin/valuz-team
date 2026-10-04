@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/dist-electron
+**/release
+**/.turbo
+**/test-results
+.git
+legacy
+e2e
+docs
+*.log
+.env*

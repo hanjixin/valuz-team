@@ -24,7 +24,7 @@ packages/                                                                    │
   protocol                  domain types + device-link wire protocol
   kernel                    session orchestrator + runtimes (Claude Agent, Codex, native)
 e2e/                        Playwright specs
-deploy/                     Dockerfile, compose files
+deploy/                     the production image and stack, and the dev infra
 scripts/                    dev launcher, contract coverage, i18n tooling
 legacy/                     the working prototype being ported from (not in the workspace)
 ```

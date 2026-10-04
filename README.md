@@ -18,3 +18,24 @@ make test-e2e     # browser tests: built server + web app in Chrome
 ```
 
 `make help` lists every command.
+
+## Deploying
+
+The server, the device link and the web app ship as one image, with PostgreSQL and Redis beside it:
+
+```bash
+cp deploy/.env.example deploy/.env      # set APP_SECRET and POSTGRES_PASSWORD
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+```
+
+It listens on `127.0.0.1:8787` — put a TLS-terminating proxy in front (the device link is a WebSocket on the
+same port). Migrations run on start. The first account to register owns its own organization; set
+`ALLOW_SIGNUP=0` afterwards to make the server invitation-only.
+
+Then link a computer for agents to work on:
+
+```bash
+AGENT_BASE_PASSWORD=… agent-base-host login --server https://your.server --email you@example.com
+agent-base-host share add /path/others/may/use     # optional: what colleagues you share it with can reach
+agent-base-host run
+```

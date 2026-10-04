@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: test-e2e generate-types help install dev infra infra-down test test-all typecheck lint format check migrate migrate-down contract generate-types build clean
+.PHONY: docker-build test-e2e generate-types help install dev infra infra-down test test-all typecheck lint format check migrate migrate-down contract generate-types build clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -24,6 +24,9 @@ test-all: ## Run all tests (integration tests start PostgreSQL/Redis with Testco
 
 test-e2e: ## Browser tests: builds the server and web app, runs them over real PostgreSQL/Redis in Chrome
 	pnpm test:e2e
+
+docker-build: ## Build the deployable server image (server + web app)
+	docker build -f deploy/Dockerfile -t agent-base-server:latest .
 
 typecheck: ## Type check everything
 	pnpm typecheck

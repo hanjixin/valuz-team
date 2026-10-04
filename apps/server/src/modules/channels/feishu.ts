@@ -1,12 +1,11 @@
 /**
  * Feishu bots. One is bound to an agent; every chat the bot is in becomes a
- * session with that agent, and the agent's answers go back to the chat. The
- * Feishu side — tokens, the long connection, event decryption, sending — is the
- * official SDK; this maps chats to sessions.
+ * session with that agent, and the agent's answers go back to the chat.
  *
- * Events arrive over a long connection the server dials itself (no public URL
- * needed), and, for a binding given a Verification Token or Encrypt Key, at an
- * HTTP callback as well. Either way an event is handled once.
+ * The bot's long connection is dialled by the binder's device (`lines.ts`), not
+ * here. What the server does itself: check the app's credentials when asked,
+ * and — for a binding given a Verification Token or Encrypt Key — take events
+ * at an HTTP callback as well. Either way an event is handled once.
  */
 import { createHash } from "node:crypto";
 import * as lark from "@larksuiteoapi/node-sdk";
@@ -18,8 +17,6 @@ import * as repo from "./repo.ts";
 
 export const PLATFORM = "feishu";
 const SECRET_PURPOSE = "channel";
-const REPLY_LIMIT = 28_000;
-const SYNC = "channels:sync";
 
 export interface Secrets {
   app_secret: string;
@@ -53,106 +50,16 @@ export async function checkCredentials(ctx: Ctx, binding: repo.BindingRow): Prom
   }
 }
 
-async function send(ctx: Ctx, binding: repo.BindingRow, chatId: string, text: string): Promise<void> {
+const REPLY_LIMIT = 18_000;
+
+/** Posting needs no connection, so the server can still answer a chat while the bot's device is away. */
+chat.registerDirectSend(PLATFORM, async (ctx, binding, chatId, text) => {
   const body = text.length > REPLY_LIMIT ? `${text.slice(0, REPLY_LIMIT)}\n…（内容过长，已截断）` : text;
   await clientFor(ctx, binding).im.message.create({
     params: { receive_id_type: "chat_id" },
     data: { receive_id: chatId, msg_type: "text", content: JSON.stringify({ text: body }) },
   });
-}
-
-// ------------------------------------------------------------------ long connections
-
-interface Link {
-  client: lark.WSClient;
-  error: string | null;
-}
-
-/** The long connections this replica holds, by binding. */
-const links = new WeakMap<Ctx, Map<string, Link>>();
-const linksOf = (ctx: Ctx): Map<string, Link> => {
-  let mine = links.get(ctx);
-  if (!mine) links.set(ctx, (mine = new Map()));
-  return mine;
-};
-
-function hangUp(ctx: Ctx, bindingId: string): void {
-  const link = linksOf(ctx).get(bindingId);
-  linksOf(ctx).delete(bindingId);
-  try {
-    link?.client.close();
-  } catch {
-    // already closed
-  }
-}
-
-/** Make this replica's long connection match the binding: dialled while enabled, hung up otherwise. */
-async function reconcile(app: FastifyInstance, bindingId: string): Promise<void> {
-  const ctx = app.ctx;
-  hangUp(ctx, bindingId);
-  const binding = await repo.byId(ctx.db, bindingId);
-  if (!binding?.enabled || binding.platform !== PLATFORM) return;
-  // The connection is authenticated by the app credentials, so events on it need no
-  // token or signature. With several replicas the platform delivers each event to
-  // one connection; the event-id check in `receive` covers redelivery.
-  const dispatcher = new lark.EventDispatcher({ loggerLevel: lark.LoggerLevel.error }).register({
-    "im.message.receive_v1": async (data: Record<string, unknown>) => {
-      const message = data["message"] as { message_id?: string } | undefined;
-      await receive(app, bindingId, String(data["event_id"] ?? message?.message_id ?? ""), data);
-    },
-  });
-  const link: Link = {
-    client: new lark.WSClient({
-      appId: binding.app_id,
-      appSecret: secretsOf(ctx, binding).app_secret,
-      domain: domainOf(ctx),
-      loggerLevel: lark.LoggerLevel.error,
-      onError: (err: Error) => {
-        link.error = err.message;
-      },
-    }),
-    error: null,
-  };
-  linksOf(ctx).set(bindingId, link);
-  void link.client.start({ eventDispatcher: dispatcher }).catch((err: unknown) => {
-    link.error = (err as Error).message;
-  });
-}
-
-/** The long connection as this replica sees it, in the words the app shows. */
-export function connection(
-  ctx: Ctx,
-  binding: Pick<repo.BindingRow, "id" | "enabled">,
-): { connected: boolean; connection_status: string; connection_error: string | null } {
-  if (!binding.enabled) return { connected: false, connection_status: "disabled", connection_error: null };
-  const link = linksOf(ctx).get(binding.id);
-  if (!link) return { connected: false, connection_status: "disconnected", connection_error: null };
-  const connected = link.client.getConnectionStatus?.().state === "connected";
-  return {
-    connected,
-    connection_status: connected ? "connected" : link.error ? "error" : "connecting",
-    connection_error: connected ? null : link.error,
-  };
-}
-
-/** Tell every replica that a binding was made, changed or switched off. */
-export const sync = (ctx: Ctx, bindingId: string): Promise<void> => ctx.pubsub.publish(SYNC, { id: bindingId });
-
-/** Dial the enabled bindings, and follow changes made on any replica. */
-export async function start(app: FastifyInstance): Promise<void> {
-  const ctx = app.ctx;
-  const follow = (id: string): void =>
-    void reconcile(app, id).catch((err: unknown) => ctx.log(err, `channel ${id}: could not connect`));
-  const unsubscribe = await ctx.pubsub.subscribe(SYNC, (payload) => follow((payload as { id: string }).id));
-  app.addHook("onClose", async () => {
-    unsubscribe();
-    for (const id of [...linksOf(ctx).keys()]) hangUp(ctx, id);
-  });
-  // Once the server is ready (and its database migrated), not while it is being put together.
-  app.addHook("onReady", async () => {
-    for (const { id } of await repo.listEnabled(ctx.db, PLATFORM)) follow(id);
-  });
-}
+});
 
 // ------------------------------------------------------------------ events in
 
@@ -233,5 +140,3 @@ async function onMessage(ctx: Ctx, binding: repo.BindingRow, event: Record<strin
   text = text.replace(/@_user_\d+/g, "").trim();
   if (text) await chat.hear(ctx, binding, chatId, text);
 }
-
-chat.registerPlatform(PLATFORM, "飞书", send);

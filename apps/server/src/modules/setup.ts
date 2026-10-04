@@ -6,8 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { mountToolkit, toolkitServer } from "../infra/toolkit.ts";
 import * as automations from "./automations/runner.ts";
 import * as channelChat from "./channels/chat.ts";
-import * as feishu from "./channels/feishu.ts";
-import * as wecom from "./channels/wecom.ts";
+import * as channelLines from "./channels/lines.ts";
 import * as artifacts from "./files/artifacts.ts";
 import { registerDeviceLink } from "./devices/link.ts";
 import * as parser from "./knowledge/parse.ts";
@@ -118,7 +117,7 @@ export async function setupModules(app: FastifyInstance): Promise<void> {
 
   // Chat-app bots: a message in becomes a turn, and a turn ending answers in the chat.
   onTurnEnd(app.ctx, (turn) => channelChat.handleTurnEnd(app.ctx, turn));
-  await feishu.start(app);
-  await wecom.start(app);
+  // Their connections are held by devices; the server only follows them.
+  channelLines.attach(app.ctx);
   registerDeviceLink(app);
 }

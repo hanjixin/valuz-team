@@ -61,6 +61,23 @@ export const SERVER_URL_PLACEHOLDER = "agent-base-server:";
 export const Actor = z.object({ user_id: z.string(), name: z.string().default("") });
 export type Actor = z.infer<typeof Actor>;
 
+/** A chat-app bot as a device needs it to hold the bot's connection: its credentials go only to that device. */
+export const ChannelBot = z.object({
+  id: z.string(),
+  platform: z.enum(["feishu", "wecom-aibot"]),
+  app_id: z.string(),
+  secret: z.string(),
+  /** The platform's address, when it is not the public one. */
+  endpoint: z.string().default(""),
+});
+export type ChannelBot = z.infer<typeof ChannelBot>;
+
+export interface ChannelBotStatus {
+  connected: boolean;
+  status: "connected" | "connecting" | "error";
+  error: string | null;
+}
+
 export const RpcMethods = {
   "session.run": z.object({
     session: Session,
@@ -105,6 +122,15 @@ export const RpcMethods = {
     timeout_ms: z.number().int().max(600_000).default(60_000),
   }),
   "device.info": z.object({}),
+  /**
+   * The chat-app bots this device keeps connected: all of them, each time. The
+   * device dials what is listed and enabled, and hangs up everything else.
+   */
+  "channels.sync": z.object({ bots: z.array(ChannelBot) }),
+  /** Post text to one of a bot's chats. */
+  "channels.send": z.object({ bot_id: z.string(), chat_id: z.string(), text: z.string() }),
+  /** How each bot's connection stands. */
+  "channels.status": z.object({}),
 } as const;
 export type RpcMethod = keyof typeof RpcMethods;
 export type RpcParams<M extends RpcMethod> = z.input<(typeof RpcMethods)[M]>;
@@ -173,6 +199,17 @@ export const HostFrame = z.discriminatedUnion("t", [
     patch: SessionPatch,
   }),
   z.object({ t: z.literal("message.upsert"), uid: z.string(), message: Message }),
+  // Something said to a bot this device keeps connected. Resent until acked, like all state.
+  z.object({
+    t: z.literal("channel.message"),
+    uid: z.string(),
+    bot_id: z.string(),
+    /** The platform's own id for the message, so a redelivery is recognised. */
+    event_id: z.string(),
+    chat_id: z.string(),
+    /** Null for what is not text (an image, a file). */
+    text: z.string().nullable(),
+  }),
   z.object({
     t: z.literal("rpc.result"),
     id: z.string(),

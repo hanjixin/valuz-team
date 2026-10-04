@@ -57,3 +57,6 @@ export const recordHello = async (db: Db, id: string, info: Record<string, unkno
 
 export const touch = async (db: Db, id: string): Promise<void> =>
   void (await db.updateTable("devices").set({ last_seen_at: new Date() }).where("id", "=", id).execute());
+
+export const ownerOf = (db: Db, id: string) =>
+  db.selectFrom("devices").select(["org_id", "owner_id"]).where("id", "=", id).executeTakeFirst();

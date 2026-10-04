@@ -204,12 +204,18 @@ importers:
       '@langchain/openai':
         specifier: ^1.6.2
         version: 1.6.2(@aws-sdk/credential-provider-node@3.972.84)(@langchain/core@1.2.14(openai@7.27.0(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.4)(undici@7.30.0)(ws@8.22.0)(zod@3.25.76))(ws@8.22.0))(@smithy/signature-v4@5.7.4)(undici@7.30.0)(ws@8.22.0)
+      '@larksuiteoapi/node-sdk':
+        specifier: ^1.74.0
+        version: 1.74.0
       '@modelcontextprotocol/sdk':
         specifier: ^1.20.0
         version: 1.32.0(@cfworker/json-schema@4.1.1)(zod@3.25.76)
       '@openai/codex-sdk':
         specifier: ^0.160.0
         version: 0.160.0
+      '@wecom/aibot-node-sdk':
+        specifier: ^1.0.7
+        version: 1.0.7
       commander:
         specifier: ^14.0.0
         version: 14.0.3
@@ -286,9 +292,6 @@ importers:
       '@node-rs/argon2':
         specifier: ^2.2.1
         version: 2.2.1
-      '@wecom/aibot-node-sdk':
-        specifier: ^1.0.7
-        version: 1.0.7
       bullmq:
         specifier: ^6.3.11
         version: 6.3.11(ioredis@5.11.1)(pg@8.23.1)

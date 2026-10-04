@@ -64,10 +64,16 @@ test("a new desktop connects to the team's server, links this computer, and runs
     await page.locator("button[type=submit]").click();
     await expect(page.locator("#auth-email")).toHaveCount(0);
 
-    // 3. Link this computer from Settings → Devices; the app starts the host and it connects.
+    // 3. Signing in linked this computer: the app started the host and it connected, unasked.
     await page.evaluate(() => (window.location.hash = "#/settings"));
     await page.getByRole("button", { name: "设备" }).click();
     const computer = page.getByTestId("this-computer");
+    await expect(computer.getByText("已连接")).toBeVisible({ timeout: 30_000 });
+    // Unlinking is the member's decision and is kept; linking by hand takes it back.
+    await computer.getByRole("button", { name: "取消链接" }).click();
+    await expect(computer.getByText("未链接")).toBeVisible();
+    await page.reload();
+    await page.getByRole("button", { name: "设备" }).click();
     await expect(computer.getByText("未链接")).toBeVisible();
     await computer.getByRole("button", { name: "链接这台电脑" }).click();
     await expect(computer.getByText("已连接")).toBeVisible({ timeout: 30_000 });
@@ -75,8 +81,7 @@ test("a new desktop connects to the team's server, links this computer, and runs
       online: boolean;
       owner_id: string;
     }[];
-    expect(devices).toHaveLength(1);
-    expect(devices[0]?.online).toBe(true);
+    expect(devices.filter((device) => device.online)).toHaveLength(1);
 
     // 4. A conversation typed here is answered by an agent running on this computer.
     await page.evaluate(() => (window.location.hash = "#/conversation/new"));

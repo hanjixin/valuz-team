@@ -32,6 +32,7 @@ import {
   type Session,
 } from "@agent-base/protocol";
 import { execa } from "execa";
+import { ChannelLines } from "./channels.ts";
 import type { HostConfig } from "./config.ts";
 import { DeviceLink, RpcError } from "./link.ts";
 import { RemoteStore } from "./remote-store.ts";
@@ -93,6 +94,7 @@ export class Host {
   readonly link: DeviceLink;
   readonly orchestrator: SessionOrchestrator;
   private readonly store: RemoteStore;
+  private readonly channels: ChannelLines;
   private runtimes: RuntimeAvailability[] = [];
   private readonly log: (line: string) => void;
 
@@ -104,6 +106,8 @@ export class Host {
       status: (state, detail) => this.log(`link ${state}${detail ? ` (${detail})` : ""}`),
     });
     this.store = new RemoteStore(this.link);
+    // What people say to the bots goes to the server like any other state: resent until acked.
+    this.channels = new ChannelLines((message) => this.link.sendState({ t: "channel.message", ...message }));
     this.orchestrator = new SessionOrchestrator(this.store, options.runtimeFactory ?? createRuntime, {
       dataDir: options.dataDir,
     });
@@ -120,6 +124,7 @@ export class Host {
   }
 
   async stop(): Promise<void> {
+    this.channels.close();
     await this.orchestrator.shutdown();
     await this.link.stop();
   }
@@ -278,6 +283,20 @@ export class Host {
         await this.orchestrator.cleanup(p.session_id);
         this.store.forget(p.session_id);
         return { closed: true };
+      }
+      case "channels.sync":
+      case "channels.send":
+      case "channels.status": {
+        // A bot's credentials and its chats are its binder's: only the owner's own bots connect from here.
+        if (!this.isOwner(actor)) throw new RpcError("forbidden", "only the device owner's bots connect from here");
+        if (method === "channels.status") return { bots: this.channels.status() };
+        if (method === "channels.sync") {
+          this.channels.sync((parsed.data as ReturnType<(typeof RpcMethods)["channels.sync"]["parse"]>).bots);
+          return { synced: true };
+        }
+        const p = parsed.data as ReturnType<(typeof RpcMethods)["channels.send"]["parse"]>;
+        await this.channels.send(p.bot_id, p.chat_id, p.text);
+        return { sent: true };
       }
       case "session.ask": {
         const p = parsed.data as ReturnType<(typeof RpcMethods)["session.ask"]["parse"]>;

@@ -22,6 +22,39 @@ const bridge = (): Bridge | null => (window as unknown as { valuzDesktop?: Bridg
 /** Whether the page runs inside the desktop app, where this computer can be linked. */
 export const onDesktop = (): boolean => bridge() !== null;
 
+const KEPT_UNLINKED = "agent-base.keep-unlinked";
+const keptUnlinked = (): boolean => {
+  try {
+    return localStorage.getItem(KEPT_UNLINKED) === "1";
+  } catch {
+    return false;
+  }
+};
+const keepUnlinked = (keep: boolean): void => {
+  try {
+    if (keep) localStorage.setItem(KEPT_UNLINKED, "1");
+    else localStorage.removeItem(KEPT_UNLINKED);
+  } catch {
+    // no storage: the computer is linked again next time, which is the default anyway
+  }
+};
+
+/**
+ * Agents run on the member's own computer, so the desktop app links it as soon
+ * as someone is signed in — unless they unlinked it here themselves. Quiet on
+ * failure: Settings → Devices shows the state and offers the button.
+ */
+export async function linkThisComputer(accessToken: string): Promise<void> {
+  const desktop = bridge();
+  if (!desktop || !accessToken || keptUnlinked()) return;
+  try {
+    const current = await desktop.invoke<Connection>("team_connection");
+    if (current.device_id === null) await desktop.invoke<Connection>("team_link_device", { access_token: accessToken });
+  } catch {
+    // left unlinked
+  }
+}
+
 const LABEL = {
   unlinked: "team.devices.hostUnlinked",
   starting: "team.devices.hostStarting",
@@ -55,6 +88,8 @@ export function ThisComputer({ onChanged }: { onChanged: () => void }) {
         setConnection((await bridge()?.invoke<Connection>(channel, args)) ?? null);
       }),
     );
+    // Unlinking here is a decision the app keeps to; linking takes it back.
+    keepUnlinked(channel === "team_unlink_device");
     setBusy(false);
     onChanged();
   };

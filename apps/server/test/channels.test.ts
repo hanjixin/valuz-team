@@ -293,6 +293,12 @@ describe("channels: Feishu", () => {
     await eventually(async () =>
       (await call(alice, "GET", "/v1/devices")).body.devices.every((d: Json) => d.online === false),
     );
+    // The connections were the device's: with it gone, nothing is dialled — the server holds none.
+    await eventually(async () => platform.live() === 0);
+    expect((await call(alice, "GET", "/v1/channels/feishu/bindings/Support")).body).toMatchObject({
+      connected: false,
+      connection_status: "disconnected",
+    });
     const sealedOff = platform.sent.length;
     await bind(alice, "Support", { app_id: "cli_00000000000000a1", encrypt_key: "" }); // back to the token alone
     await post(event({ chat_id: "oc_offline", content: text("在吗") }));

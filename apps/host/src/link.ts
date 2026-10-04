@@ -128,7 +128,8 @@ export class DeviceLink {
   /** Sessions with state still waiting to be acked — not stranded, just in flight. */
   pendingSessionIds(): string[] {
     const ids = new Set<string>();
-    for (const f of this.outbox.values()) ids.add(f.t === "message.upsert" ? f.message.session_id : f.session_id);
+    for (const f of this.outbox.values())
+      if (f.t !== "channel.message") ids.add(f.t === "message.upsert" ? f.message.session_id : f.session_id);
     return [...ids];
   }
 

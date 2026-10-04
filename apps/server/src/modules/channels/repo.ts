@@ -14,8 +14,20 @@ export const find = (db: Db, orgId: string, platform: string, agentSlug: string)
 export const byId = (db: Db, id: string) =>
   db.selectFrom("channel_bindings").selectAll().where("id", "=", id).executeTakeFirst();
 
-export const listEnabled = (db: Db, platform: string) =>
-  db.selectFrom("channel_bindings").select("id").where("platform", "=", platform).where("enabled", "=", true).execute();
+/** The enabled bots a device keeps connected. */
+export const listOnDevice = (db: Db, deviceId: string) =>
+  db.selectFrom("channel_bindings").selectAll().where("device_id", "=", deviceId).where("enabled", "=", true).execute();
+
+/** Give a member's bots that no device holds to this one of theirs. */
+export const claim = async (db: Db, orgId: string, ownerId: string, deviceId: string): Promise<void> => {
+  await db
+    .updateTable("channel_bindings")
+    .set({ device_id: deviceId })
+    .where("org_id", "=", orgId)
+    .where("owner_id", "=", ownerId)
+    .where("device_id", "is", null)
+    .execute();
+};
 
 export const upsert = (
   db: Db,
@@ -28,6 +40,7 @@ export const upsert = (
     app_id: string;
     secret_enc: string;
     enabled: boolean;
+    device_id: string | null;
   },
 ) =>
   db
@@ -39,6 +52,7 @@ export const upsert = (
         app_id: row.app_id,
         secret_enc: row.secret_enc,
         enabled: row.enabled,
+        device_id: row.device_id,
         updated_at: new Date(),
       }),
     )

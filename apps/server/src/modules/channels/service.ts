@@ -8,7 +8,9 @@ import type { Auth, Ctx } from "../../infra/context.ts";
 import { HttpError, badRequest, notFound } from "../../infra/errors.ts";
 import * as agents from "../agents/service.ts";
 import * as audit from "../audit/service.ts";
+import * as devices from "../devices/service.ts";
 import * as feishu from "./feishu.ts";
+import * as lines from "./lines.ts";
 import * as repo from "./repo.ts";
 import * as wecom from "./wecom.ts";
 
@@ -28,7 +30,38 @@ const unbound = (auth: Auth, agentSlug: string): Binding => ({
   connection_error: null,
 });
 
-function present(ctx: Ctx, row: repo.BindingRow): Binding {
+/**
+ * The device that keeps a bot connected: one of the binder's own (its
+ * credentials go nowhere else) — the one it is already on, else one that is
+ * online. With none linked yet, the first to say hello takes it.
+ */
+async function deviceFor(ctx: Ctx, auth: Auth, existing: repo.BindingRow | undefined): Promise<string | null> {
+  const mine = (await devices.list(ctx, auth)).filter((device) => device.owner_id === auth.userId);
+  if (existing?.owner_id === auth.userId && mine.some((device) => device.id === existing.device_id))
+    return existing.device_id;
+  return (mine.find((device) => device.online) ?? mine[0])?.id ?? null;
+}
+
+/** Store a binding and tell the devices concerned. */
+async function save(
+  ctx: Ctx,
+  auth: Auth,
+  existing: repo.BindingRow | undefined,
+  row: Omit<Parameters<typeof repo.upsert>[1], "id" | "org_id" | "owner_id" | "device_id">,
+): Promise<repo.BindingRow> {
+  const saved = await repo.upsert(ctx.db, {
+    ...row,
+    id: existing?.id ?? crypto.randomUUID(),
+    org_id: auth.orgId,
+    owner_id: auth.userId,
+    device_id: await deviceFor(ctx, auth, existing),
+  });
+  if (existing?.device_id && existing.device_id !== saved.device_id) await lines.sync(ctx, existing.device_id);
+  await lines.sync(ctx, saved.device_id);
+  return saved;
+}
+
+async function present(ctx: Ctx, row: repo.BindingRow): Promise<Binding> {
   const secrets = feishu.secretsOf(ctx, row);
   return {
     enabled: row.enabled,
@@ -40,7 +73,7 @@ function present(ctx: Ctx, row: repo.BindingRow): Binding {
     has_app_secret: Boolean(secrets.app_secret),
     has_verification_token: Boolean(secrets.verification_token),
     has_encrypt_key: Boolean(secrets.encrypt_key),
-    ...feishu.connection(ctx, row),
+    ...(await lines.connection(ctx, row)),
   };
 }
 
@@ -71,10 +104,7 @@ export async function putFeishu(
     input.verification_token === undefined ? kept?.verification_token : input.verification_token.trim();
   const encrypt = input.encrypt_key === undefined ? kept?.encrypt_key : input.encrypt_key.trim();
 
-  const row = await repo.upsert(ctx.db, {
-    id: existing?.id ?? crypto.randomUUID(),
-    org_id: auth.orgId,
-    owner_id: auth.userId,
+  const row = await save(ctx, auth, existing, {
     platform: feishu.PLATFORM,
     agent_slug: agentSlug,
     app_id: appId,
@@ -92,7 +122,6 @@ export async function putFeishu(
     { type: "agent", id: agentSlug },
     { platform: feishu.PLATFORM, app_id: appId, enabled: input.enabled },
   );
-  await feishu.sync(ctx, row.id);
   return present(ctx, row);
 }
 
@@ -101,21 +130,21 @@ export async function testFeishu(ctx: Ctx, auth: Auth, agentSlug: string): Promi
   const row = await repo.find(ctx.db, auth.orgId, feishu.PLATFORM, agentSlug);
   if (!row) throw notFound("feishu binding");
   const error = await feishu.checkCredentials(ctx, row);
-  return { credential_ok: error === null, error, ...feishu.connection(ctx, row) };
+  return { credential_ok: error === null, error, ...(await lines.connection(ctx, row)) };
 }
 
 // ------------------------------------------------------------------ WeCom smart bots
 
 type WeComBinding = Schema<"WeComAIBotBinding">;
 
-const presentWeCom = (ctx: Ctx, row: repo.BindingRow): WeComBinding => ({
+const presentWeCom = async (ctx: Ctx, row: repo.BindingRow): Promise<WeComBinding> => ({
   enabled: row.enabled,
   channel_instance_id: row.id,
   owner_user_id: row.owner_id,
   agent_slug: row.agent_slug,
   bot_id: row.app_id,
   has_secret: Boolean(wecom.secretOf(ctx, row)),
-  ...wecom.connection(ctx, row),
+  ...(await lines.connection(ctx, row)),
 });
 
 export async function getWeCom(ctx: Ctx, auth: Auth, agentSlug: string): Promise<WeComBinding> {
@@ -149,10 +178,7 @@ export async function putWeCom(
   // A secret left blank keeps the stored one; there must be one to keep.
   const secret = input.secret?.trim() || (existing ? wecom.secretOf(ctx, existing) : "");
   if (!secret) throw new HttpError(422, "secret_required", "Secret is required");
-  const row = await repo.upsert(ctx.db, {
-    id: existing?.id ?? crypto.randomUUID(),
-    org_id: auth.orgId,
-    owner_id: auth.userId,
+  const row = await save(ctx, auth, existing, {
     platform: wecom.PLATFORM,
     agent_slug: agentSlug,
     app_id: botId,
@@ -166,6 +192,5 @@ export async function putWeCom(
     { type: "agent", id: agentSlug },
     { platform: wecom.PLATFORM, bot_id: botId, enabled: input.enabled },
   );
-  await wecom.sync(ctx, row.id);
   return presentWeCom(ctx, row);
 }

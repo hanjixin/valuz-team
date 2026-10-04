@@ -11,17 +11,39 @@ import { type TurnEnd, dispatchTurn, enqueue } from "../sessions/dispatch.ts";
 import * as sessions from "../sessions/service.ts";
 import * as repo from "./repo.ts";
 
-/** How a platform sends text to one of its chats. */
+const LABELS: Record<string, string> = { feishu: "飞书", "wecom-aibot": "企业微信" };
+const labelOf = (platform: string): string => LABELS[platform] ?? platform;
+
+/** Bots act for whoever bound them. */
+export const actorOf = (userId: string): { user_id: string; name: string } => ({ user_id: userId, name: "channels" });
+
 type Send = (ctx: Ctx, binding: repo.BindingRow, chatId: string, text: string) => Promise<void>;
+const direct = new Map<string, Send>();
 
-const platforms = new Map<string, { label: string; send: Send }>();
+/**
+ * A platform that can be posted to without a connection (a plain HTTP call)
+ * says how. Used only when the bot's device is away, so that a person who
+ * wrote to the bot is told so rather than met with silence.
+ */
+export const registerDirectSend = (platform: string, send: Send): void => void direct.set(platform, send);
 
-/** A platform says how it is called in session titles, and how it sends. */
-export const registerPlatform = (platform: string, label: string, send: Send): void =>
-  void platforms.set(platform, { label, send });
-
-const say = async (ctx: Ctx, binding: repo.BindingRow, chatId: string, text: string): Promise<void> =>
-  platforms.get(binding.platform)?.send(ctx, binding, chatId, text);
+/** Post to a chat: the device holding the bot's connection does it. */
+async function say(ctx: Ctx, binding: repo.BindingRow, chatId: string, text: string): Promise<void> {
+  try {
+    if (!binding.device_id) throw new HttpError(409, "no_device", "没有设备保持这个机器人的连接");
+    await ctx.hub.call(
+      binding.device_id,
+      "channels.send",
+      { bot_id: binding.id, chat_id: chatId, text },
+      actorOf(binding.owner_id),
+    );
+  } catch (err) {
+    const away = err instanceof HttpError && (err.code === "device_offline" || err.code === "no_device");
+    const fallback = direct.get(binding.platform);
+    if (!away || !fallback) throw err;
+    await fallback(ctx, binding, chatId, text);
+  }
+}
 
 /** Take one event, once: platforms redeliver until they are acknowledged. */
 export const firstTime = async (ctx: Ctx, bindingId: string, eventId: string): Promise<boolean> =>
@@ -40,7 +62,7 @@ export async function hear(ctx: Ctx, binding: repo.BindingRow, chatId: string, t
     try {
       await dispatchTurn(ctx, sessionId, text, {
         user_id: owner.userId,
-        name: platforms.get(binding.platform)?.label ?? binding.platform,
+        name: labelOf(binding.platform),
       });
     } catch (err) {
       if (!(err instanceof HttpError) || err.code !== "session_busy") throw err;
@@ -54,7 +76,7 @@ export async function hear(ctx: Ctx, binding: repo.BindingRow, chatId: string, t
       binding,
       chatId,
       offline ? "执行设备当前不在线，请稍后再试。" : `无法处理这条消息：${(err as Error).message}`,
-    );
+    ).catch(() => undefined); // the device that would post it is the one that is gone
   }
 }
 
@@ -66,11 +88,17 @@ export const decline = (ctx: Ctx, binding: repo.BindingRow, chatId: string): Pro
 async function sessionFor(ctx: Ctx, binding: repo.BindingRow, owner: Auth, chatId: string): Promise<string> {
   const existing = await repo.threadSession(ctx.db, binding.id, chatId);
   if (existing) return existing;
-  const label = platforms.get(binding.platform)?.label ?? binding.platform;
+  const label = labelOf(binding.platform);
   const session = await sessions.create(
     ctx,
     owner,
-    { project_id: "chat-default", agent_slug: binding.agent_slug, title: `${label} · ${binding.agent_slug}` },
+    {
+      project_id: "chat-default",
+      agent_slug: binding.agent_slug,
+      title: `${label} · ${binding.agent_slug}`,
+      // The chat runs where the bot is connected.
+      ...(binding.device_id ? { device_id: binding.device_id } : {}),
+    },
     { origin: "user", metadata: { valuz: { channel: { binding_id: binding.id, chat_id: chatId } } } },
   );
   return repo.openThread(ctx.db, binding.id, chatId, session.id);
@@ -92,7 +120,7 @@ export async function handleTurnEnd(ctx: Ctx, turn: TurnEnd): Promise<void> {
   try {
     await say(ctx, binding, meta.chat_id, text);
   } catch (err) {
-    const label = platforms.get(binding.platform)?.label ?? binding.platform;
+    const label = labelOf(binding.platform);
     await notifications.notify(
       ctx,
       { orgId: binding.org_id, userId: binding.owner_id },

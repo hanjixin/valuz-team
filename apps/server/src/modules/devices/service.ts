@@ -31,6 +31,9 @@ export function attach(ctx: Ctx): void {
   });
 }
 
+/** Who linked a device; undefined once it is gone. */
+export const ownerOf = (ctx: Ctx, id: string) => repo.ownerOf(ctx.db, id);
+
 /** The device a link token belongs to, unless it was revoked. */
 export const authenticate = (db: Db, token: string) => repo.findByTokenHash(db, hashToken(token));
 

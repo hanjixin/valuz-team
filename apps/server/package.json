@@ -28,7 +28,6 @@
     "@larksuiteoapi/node-sdk": "^1.74.0",
     "@modelcontextprotocol/sdk": "^1.32.0",
     "@node-rs/argon2": "^2.2.1",
-    "@wecom/aibot-node-sdk": "^1.0.7",
     "bullmq": "^6.3.11",
     "cron-parser": "^5.10.1",
     "cronstrue": "^3.27.0",

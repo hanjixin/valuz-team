@@ -151,19 +151,26 @@ dropped. A conversation's turn ending is what tells its run how it went.
 
 ## Channels
 
-A Feishu bot can be bound to an agent (`modules/channels`). The server dials the open platform's long connection
-with the app's credentials — no public URL is needed — and each chat the bot is in becomes a session with that
-agent, owned by whoever made the binding and run on their device; a turn ending sends the answer back to the
-chat. A WeCom smart bot is bound the same way, over WeCom's own long connection; what the two share — a chat is
-a session, an answer goes back — is `channels/chat.ts`. Every replica holds a connection, the platform delivers an event to one of them, and an event id is taken
-once (Redis), so redelivery is harmless. The platform side is the official SDK.
+A Feishu or WeCom bot can be bound to an agent (`modules/channels`). The server holds no connection to either
+platform: the bot's long connection is dialled by a device — one of the binder's own, where the agent runs anyway
+(`apps/host/src/channels.ts`, the platforms' official SDKs). The server keeps the binding and its sealed
+credentials, tells the device which bots to keep connected (`channels.sync`: on every change, and whenever the
+device says hello), hears from it what people said (a `channel.message` state frame, retried until acked, each
+platform event taken once), and asks it to post the answer (`channels.send`). Credentials go only to a device of
+the member who entered them, and the host runs bots for its owner alone.
+
+Each chat the bot is in becomes a session with that agent, owned by whoever made the binding and run on that same
+device; a turn ending sends the answer back. What the two platforms share is `channels/chat.ts`. With the device
+off the bot is simply offline. A Feishu binding given a Verification Token or Encrypt Key can also take events at
+an HTTP callback on the server, and only then — to say the device is away — does the server post to a chat itself.
 
 ## The desktop app
 
 `apps/desktop` is the carried-over Electron shell with its backend replaced (`src/main/services/team.ts`). There
 is no local server: the app asks once which team server it belongs to, then keeps two things running — a small
-reverse proxy on the local port its pages were built against, pointing at that server, and, once the signed-in
-member links the computer (Settings → Devices), the host as a child process run by Electron's own Node. The pages
+reverse proxy on the local port its pages were built against, pointing at that server, and the host as a child process run by Electron's own Node. Signing in links the
+computer without being asked (agents run here, so there is nothing to choose); a member who unlinks it in
+Settings → Devices is not linked again until they say so. The pages
 are the same ones the web app serves, behind the same sign-in.
 
 ## Calling out on a member's behalf

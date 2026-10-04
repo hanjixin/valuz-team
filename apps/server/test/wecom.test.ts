@@ -17,8 +17,8 @@ import { type Account, type TestServer, eventually, joinOrg, signUp, startTestSe
 type Json = any;
 
 /**
- * A WeCom smart bot bound to an agent, over the long connection the server
- * dials. WeCom's gateway is stood in for; the SDK, the server, the device and
+ * A WeCom smart bot bound to an agent, over the long connection the binder's
+ * device dials. WeCom's gateway is stood in for; the SDK, the server, the device and
  * the runtime are real.
  */
 describe("channels: WeCom", () => {
@@ -27,6 +27,7 @@ describe("channels: WeCom", () => {
   let wecom: WeComGateway;
   let dir: string;
   let host: Host;
+  let startHost: () => Promise<void>;
   let alice: Account;
   let bob: Account;
 
@@ -46,18 +47,21 @@ describe("channels: WeCom", () => {
     alice = await signUp(t, "alice");
     bob = await joinOrg(t, alice, "bob");
     const device = (await call(alice, "POST", "/v1/devices", { name: "Alice's Mac" })).body;
-    host = new Host({
-      config: {
-        server_url: url,
-        device_id: device.id,
-        device_token: device.token,
-        owner_user_id: device.owner_id,
-        shared_roots: [],
-        allow_exec: false,
-      },
-      dataDir: path.join(dir, "data"),
-    });
-    await host.start();
+    startHost = async () => {
+      host = new Host({
+        config: {
+          server_url: url,
+          device_id: device.id,
+          device_token: device.token,
+          owner_user_id: device.owner_id,
+          shared_roots: [],
+          allow_exec: false,
+        },
+        dataDir: path.join(dir, "data"),
+      });
+      await host.start();
+    };
+    await startHost();
     await eventually(async () => (await call(alice, "GET", `/v1/devices/${device.id}`)).body.online === true);
     const channel = (
       await call(alice, "POST", "/v1/providers", {
@@ -160,5 +164,21 @@ describe("channels: WeCom", () => {
     });
     await bind(alice, "Support", { bot_id: "bot-1", enabled: true });
     await eventually(async () => wecom.live() === 1);
+  });
+
+  it("is connected by the device: gone with it, and back when it returns", async () => {
+    await host.stop();
+    await eventually(async () => wecom.live() === 0);
+    expect((await call(alice, "GET", "/v1/channels/wecom-aibot/bindings/Support")).body).toMatchObject({
+      enabled: true,
+      connected: false,
+      connection_status: "disconnected",
+    });
+    // The device is told its bots when it says hello.
+    await startHost();
+    await eventually(async () => wecom.live() === 1);
+    model.replies.push({ content: "我回来了" });
+    wecom.push("bot-1", { text: { content: "在吗" } });
+    await eventually(async () => wecom.sent.at(-1)?.text === "我回来了", 20_000);
   });
 });

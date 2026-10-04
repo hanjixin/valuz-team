@@ -522,6 +522,8 @@ export interface ChannelBindingsTable {
   app_id: string;
   secret_enc: string;
   enabled: ColumnType<boolean, boolean | undefined, boolean>;
+  /** The device holding the bot's connection to its platform. */
+  device_id: string | null;
   created_at: Timestamp;
   updated_at: Timestamp;
 }

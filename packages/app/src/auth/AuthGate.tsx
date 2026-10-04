@@ -2,12 +2,19 @@
  * Shows the sign-in page until there is a session (agent-base addition — the
  * server is multi-user). Everything below it can assume a signed-in user.
  */
-import { type FormEvent, type ReactNode, useState, useSyncExternalStore } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import { authApi, getAuthSession, subscribeAuthSession } from "@valuz/core";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Tabs, TabsList, TabsTrigger, useI18n } from "@valuz/ui";
+import { linkThisComputer } from "../team/ThisComputer";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const session = useSyncExternalStore(subscribeAuthSession, getAuthSession, getAuthSession);
+  const token = session?.access_token ?? "";
+  const signedIn = Boolean(token);
+  // In the desktop app, signing in is enough to run agents: this computer is linked without being asked.
+  useEffect(() => {
+    if (signedIn) void linkThisComputer(getAuthSession()?.access_token ?? "");
+  }, [signedIn]);
   return session ? <>{children}</> : <SignInPage />;
 }
 

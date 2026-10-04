@@ -18,6 +18,7 @@ import * as automations from "./0016_automations.ts";
 import * as kbAttachments from "./0017_kb_attachments.ts";
 import * as channels from "./0018_channels.ts";
 import * as artifacts from "./0019_artifacts.ts";
+import * as channelDevice from "./0020_channel_device.ts";
 
 /**
  * Every migration, keyed by name; Kysely applies them in key order. Listed
@@ -44,4 +45,5 @@ export const migrations: Record<string, Migration> = {
   "0017_kb_attachments": kbAttachments,
   "0018_channels": channels,
   "0019_artifacts": artifacts,
+  "0020_channel_device": channelDevice,
 };

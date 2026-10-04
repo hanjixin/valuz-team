@@ -702,11 +702,12 @@ describe("sessions", () => {
     const session = await newChat(alice);
     model.replies.push({ content: "Noted." });
     await say(alice, session.id, "a private thought");
-    await eventually(async () => forAlice.seen.some((frame) => frame.event === "run.finished"));
+    // An earlier test's session may still be reporting its end on the same stream: look at this one's.
+    const ofSession = () => forAlice.seen.filter((frame) => frame.data.session_id === session.id);
+    await eventually(async () => ofSession().some((frame) => frame.event === "run.status"));
 
-    const mine = forAlice.seen.filter((frame) => frame.event !== "heartbeat");
+    const mine = ofSession();
     expect(mine.map((frame) => frame.event)).toEqual(["run.started", "run.finished", "run.status"]);
-    expect(mine.every((frame) => frame.data.session_id === session.id)).toBe(true);
     expect(mine[1]?.data.payload).toMatchObject({ status: "idle" });
     // Lifecycle only: what was said never travels on this stream.
     expect(JSON.stringify(forAlice.seen)).not.toContain("a private thought");
@@ -717,12 +718,13 @@ describe("sessions", () => {
 
     // Reconnecting from an earlier cursor replays what was missed.
     const replay = await follow(alice, cursor);
-    expect(replay.seen.filter((frame) => frame.event !== "heartbeat").map((frame) => frame.event)).toEqual([
+    expect(replay.seen.filter((frame) => frame.data.session_id === session.id).map((frame) => frame.event)).toEqual([
       "run.started",
       "run.finished",
       "run.status",
     ]);
-    expect(replay.seen.at(-1)).toMatchObject({ event: "heartbeat", data: { seq: mine.at(-1)?.data.seq } });
+    expect(replay.seen.at(-1)?.event).toBe("heartbeat");
+    expect(replay.seen.at(-1)?.data.seq).toBeGreaterThanOrEqual(mine.at(-1)?.data.seq ?? Infinity);
     replay.stop();
   });
 

@@ -7,4 +7,5 @@ export * from "./orchestrator.ts";
 export * from "./runtimes/factory.ts";
 export { ClaudeAgentRuntime } from "./runtimes/claude-agent.ts";
 export { CodexRuntime } from "./runtimes/codex.ts";
+export { DeepAgentRuntime } from "./runtimes/deep-agent.ts";
 export { ValuzAgentRuntime } from "./runtimes/valuz-agent.ts";

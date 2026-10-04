@@ -66,18 +66,25 @@ export async function startModelGateway(): Promise<ModelGateway> {
       const reply = gateway.handler?.(request) ?? gateway.replies.shift() ?? { content: "ok" };
       res.writeHead(200, { "content-type": "text/event-stream" });
       if (reply.hang) return;
-      const send = (payload: unknown) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      // As real gateways do: every chunk names its completion, and the first says who is speaking.
+      const id = `chatcmpl-${gateway.requests.length}`;
+      const send = (payload: object) =>
+        res.write(
+          `data: ${JSON.stringify({ id, object: "chat.completion.chunk", model: parsed.model, ...payload })}\n\n`,
+        );
       setTimeout(() => {
+        send({ choices: [{ index: 0, delta: { role: "assistant", content: "" } }] });
         if (reply.tool) {
           const call = {
             index: 0,
             id: `call_${gateway.requests.length}`,
             function: { name: reply.tool.name, arguments: JSON.stringify(reply.tool.args) },
           };
-          send({ choices: [{ delta: { tool_calls: [call] } }] });
+          send({ choices: [{ index: 0, delta: { tool_calls: [call] } }] });
         }
-        if (reply.content) send({ choices: [{ delta: { content: reply.content } }] });
-        send({ choices: [], usage: { prompt_tokens: 50, completion_tokens: 5 } });
+        if (reply.content) send({ choices: [{ index: 0, delta: { content: reply.content } }] });
+        send({ choices: [{ index: 0, delta: {}, finish_reason: reply.tool ? "tool_calls" : "stop" }] });
+        send({ choices: [], usage: { prompt_tokens: 50, completion_tokens: 5, total_tokens: 55 } });
         res.end("data: [DONE]\n\n");
       }, reply.delayMs ?? 0);
     });

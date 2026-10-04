@@ -97,7 +97,12 @@ Deliberate differences in behaviour:
 - A session runs on a device (`device_id`); `POST /v1/sessions` picks the project's device or the caller's own
   when none is named. Deltas are stored as well as final messages, so history replays exactly what a live
   stream showed, and every frame carries the durable `seq`.
-- The native runtime (`deepagents`) speaks chat completions only for now.
+- The native runtime (`deepagents`) is built on the `deepagents` JS library (LangGraph), with MCP servers attached
+  through `@langchain/mcp-adapters`. It speaks chat completions or Anthropic messages, whichever the session's
+  channel does. Its file and shell tools are the library's (`read_file`, `write_file`, `edit_file`, `execute`, …),
+  acting on the session's folder; a session's thread is kept in one JSON file per session rather than in a database
+  checkpointer, because the library's durable savers are native modules and the desktop runs the host under
+  Electron's Node. The hand-written loop it replaced is still in the kernel as runtime `valuz_agent`.
 - Fork works for the native and Claude runtimes; Codex answers 422. The native runtime's anchors stop being valid
   once the thread is compacted (409) — fork the whole conversation instead. A forked quick chat gets a project of
   its own and shares the source's workspace folder. `regenerate`, `messages/sync` and per-session skills are not

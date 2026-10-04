@@ -22,7 +22,7 @@ packages/                                                                    │
   db                        Kysely schema, reversible migrations
   test-utils                Testcontainers helpers, stand-in model gateway
   protocol                  domain types + device-link wire protocol
-  kernel                    session orchestrator + runtimes (Claude Agent, Codex, native)
+  kernel                    session orchestrator + runtimes (Claude Agent, Codex, native on deepagents)
 e2e/                        Playwright specs
 deploy/                     the production image and stack, and the dev infra
 scripts/                    dev launcher, contract coverage, i18n tooling

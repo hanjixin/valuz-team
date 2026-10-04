@@ -46,12 +46,8 @@ export const ALLOWED_PROTOCOLS_BY_RUNTIME: Record<RuntimeProvider, readonly ApiP
   claude_agent: ["anthropic"],
   codex: ["openai_response"],
   valuz_agent: ["openai_completion"],
-  deepagents: ["openai_completion"],
+  deepagents: ["openai_completion", "anthropic"],
 };
-
-/** `deepagents` rows from the Python build run on the native Valuz runtime. */
-export const canonicalRuntime = (runtime: RuntimeProvider): RuntimeProvider =>
-  runtime === "deepagents" ? "valuz_agent" : runtime;
 
 export class RuntimeConfigError extends Error {}
 

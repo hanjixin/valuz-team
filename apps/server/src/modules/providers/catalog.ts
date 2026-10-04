@@ -108,8 +108,8 @@ export function compatibleProtocols(kind: string, protocol: string | null | unde
 export const RUNTIME_PROTOCOLS: readonly [RuntimeId, readonly ApiProtocol[]][] = [
   ["claude_agent", ["anthropic"]],
   ["codex", ["openai-response"]],
-  // The native runtime speaks chat completions only, for now.
-  ["deepagents", ["openai-completion"]],
+  // The native runtime speaks chat completions or Anthropic messages, whichever the channel does.
+  ["deepagents", ["openai-completion", "anthropic"]],
 ];
 
 /** The runtimes a model on these protocols can run on, in order of preference. */

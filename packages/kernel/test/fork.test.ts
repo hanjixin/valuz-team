@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ForkError, ValuzAgentRuntime, forkThread } from "../src/index.ts";
 
-describe("forking a thread", () => {
+describe("forking a thread (the hand-written runtime)", () => {
   let dir: string;
   const checkpoint = (id: string) => path.join(dir, "checkpoints", `${id}.json`);
   const thread = [
@@ -37,7 +37,7 @@ describe("forking a thread", () => {
     forkThread(dir, { runtime, sourceSessionId: "source", sessionId, anchor });
 
   it("copies the native runtime's thread, whole or up to an anchor, and hands the copy to the fork", async () => {
-    expect(await fork("deepagents", "whole")).toEqual({ runtime_session_id: "whole" });
+    expect(await fork("valuz_agent", "whole")).toEqual({ runtime_session_id: "whole" });
     expect(JSON.parse(await readFile(checkpoint("whole"), "utf8"))).toEqual(thread);
 
     const anchor = await anchorAt(2);

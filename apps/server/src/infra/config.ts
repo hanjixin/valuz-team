@@ -42,6 +42,8 @@ const Env = z.object({
     .int()
     .positive()
     .default(8 * 1024 * 1024),
+  /** The Feishu open platform's address. Empty = the public one; set for a private deployment (or Lark). */
+  FEISHU_API_BASE: z.string().default(""),
   /** The shortest interval an automation may repeat at. */
   AUTOMATION_MIN_INTERVAL_SECONDS: z.coerce.number().int().min(1).default(30),
   /** How long a conversation must be quiet before it is reviewed for what to remember. 0 turns the review off. */

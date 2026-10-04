@@ -96,7 +96,7 @@ export async function buildServer(config: Config): Promise<Server> {
   await app.register(websocket);
   await app.register(FastifySSEPlugin);
   await registerContract(app, handlers as Record<string, Handler>);
-  setupModules(app);
+  await setupModules(app);
   await hub.start();
 
   // Serve the web app from the same origin as the API when a build is present.

@@ -491,6 +491,25 @@ export interface MemoryReviewsTable {
   reviewed_until: number;
 }
 
+export interface ChannelBindingsTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  platform: string;
+  agent_slug: string;
+  app_id: string;
+  secret_enc: string;
+  enabled: ColumnType<boolean, boolean | undefined, boolean>;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface ChannelThreadsTable {
+  binding_id: string;
+  external_chat_id: string;
+  session_id: string;
+}
+
 export interface AutomationTrigger {
   kind: "cron" | "interval" | "manual";
   cron_expr?: string;
@@ -564,6 +583,8 @@ export interface Database {
   kb_chunks: KbChunksTable;
   kb_tasks: KbTasksTable;
   project_kb_bindings: ProjectKbBindingsTable;
+  channel_bindings: ChannelBindingsTable;
+  channel_threads: ChannelThreadsTable;
   automations: AutomationsTable;
   automation_runs: AutomationRunsTable;
   memories: MemoriesTable;

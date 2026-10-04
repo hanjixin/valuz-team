@@ -26,7 +26,7 @@ packages/                                                                    │
 e2e/                        Playwright specs
 deploy/                     the production image and stack, and the dev infra
 scripts/                    dev launcher, contract coverage, i18n tooling
-legacy/                     the working prototype being ported from (not in the workspace)
+legacy/                     what is left of the prototype: its pages and desktop shell (not in the workspace)
 ```
 
 Two TypeScript bases: `tsconfig.base.json` (bundler resolution, for the browser/Electron code) and
@@ -147,6 +147,14 @@ with several replicas each firing is delivered to exactly one. A firing runs as 
 device their sessions run on, and is recorded as a run; one that finds the previous run still going is noted and
 dropped. A conversation's turn ending is what tells its run how it went.
 
+## Channels
+
+A Feishu bot can be bound to an agent (`modules/channels`). The server dials the open platform's long connection
+with the app's credentials — no public URL is needed — and each chat the bot is in becomes a session with that
+agent, owned by whoever made the binding and run on their device; a turn ending sends the answer back to the
+chat. Every replica holds a connection, the platform delivers an event to one of them, and an event id is taken
+once (Redis), so redelivery is harmless. The platform side is the official SDK.
+
 ## Calling out on a member's behalf
 
 A model channel's endpoint is a URL a member typed. Before the server calls one, `infra/outbound.ts` checks it
@@ -160,10 +168,10 @@ returned by the API.
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events, fork), and the collaboration UI (Settings → Organization,
-Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations.
-Not yet: regenerate, channels (Feishu, WeCom), playbooks, plugins.
+Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations, the Feishu channel.
+Not yet: regenerate, the WeCom channel, playbooks, plugins.
 
-The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),
-module by module. `make contract` reports how much of the contract is implemented.
+The repository was rebuilt from a prototype (tag `prototype-v0`), module by module; its server is fully ported and
+gone, and what is left under `legacy/` is the prototype's own desktop shell and pages, kept for reference. `make contract` reports how much of the contract is implemented.
 The plan and its phases are in the project plan; the prototype's feature list and
 known limits are in `legacy/README.md`.

@@ -1,1 +1,0 @@
-DROP TABLE IF EXISTS document_chunks, documents CASCADE;

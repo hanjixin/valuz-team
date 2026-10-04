@@ -66,7 +66,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Feishu bot event callback */
+        /**
+         * Feishu bot event callback
+         * @description Called by the Feishu open platform, not by a signed-in member: the request is
+         *     authenticated by the binding's Verification Token or Encrypt Key signature.
+         */
         post: operations["feishuChannelCallback"];
         delete?: never;
         options?: never;
@@ -9373,26 +9377,25 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
-            /** @description Feishu URL verification challenge or success acknowledgement */
+            /** @description The URL verification challenge, or an acknowledgement */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        challenge: string;
-                    } | {
-                        /** @enum {integer} */
-                        code: 0;
+                        [key: string]: unknown;
                     };
                 };
             };
             /** @description Signature or token rejected */
-            401: {
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

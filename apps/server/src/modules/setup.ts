@@ -5,6 +5,7 @@
 import type { FastifyInstance } from "fastify";
 import { mountToolkit, toolkitServer } from "../infra/toolkit.ts";
 import * as automations from "./automations/runner.ts";
+import * as feishu from "./channels/feishu.ts";
 import { registerDeviceLink } from "./devices/link.ts";
 import * as parser from "./knowledge/parse.ts";
 import * as knowledge from "./knowledge/service.ts";
@@ -25,7 +26,7 @@ import { TASK_TOOLKIT } from "./tasks/prompts.ts";
 import * as tasks from "./tasks/service.ts";
 import { LEAD_TOOLS } from "./tasks/tools.ts";
 
-export function setupModules(app: FastifyInstance): void {
+export async function setupModules(app: FastifyInstance): Promise<void> {
   devices.attach(app.ctx);
   sessions.attach(app.ctx);
 
@@ -94,5 +95,9 @@ export function setupModules(app: FastifyInstance): void {
   // Automations: the clock starts runs, and a turn ending tells a run how it went.
   automations.start(app);
   onTurnEnd(app.ctx, (turn) => automations.handleTurnEnd(app.ctx, turn));
+
+  // Chat-app bots: a message in becomes a turn, and a turn ending answers in the chat.
+  onTurnEnd(app.ctx, (turn) => feishu.handleTurnEnd(app.ctx, turn));
+  await feishu.start(app);
   registerDeviceLink(app);
 }

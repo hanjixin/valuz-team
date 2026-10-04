@@ -119,4 +119,10 @@ Deliberate differences in behaviour:
   project sees it, and its owner or the project's editors change it. A run that starts a task succeeds once the
   task is handed over; `task_status` follows the task. Proposals made by an agent in chat are not implemented.
   The shortest interval is `AUTOMATION_MIN_INTERVAL_SECONDS` (30).
+- Channels: Feishu only (the WeCom operations stay unimplemented). A bot is bound to an agent by whoever may edit
+  the agent, one binding per agent in the organization; `channel_instance_id` is the binding's id and the last
+  segment of its callback URL. The conversations people have with the bot are the binder's own sessions (a quick
+  chat per Feishu chat), on the binder's device. Events arrive over the long connection the server dials; the HTTP
+  callback is accepted only for a binding given a Verification Token or an Encrypt Key. Text messages only. The
+  connection status shown is the answering replica's view. Binding chats to projects is not implemented.
 - `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

@@ -14,7 +14,9 @@
     "@modelcontextprotocol/sdk": "^1.32.0",
     "@testcontainers/postgresql": "^11.0.0",
     "@testcontainers/redis": "^11.0.0",
+    "@types/ws": "^8.18.2",
     "testcontainers": "^11.0.0",
+    "ws": "^8.22.0",
     "zod": "^3.25.76"
   }
 }

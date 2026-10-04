@@ -158,7 +158,7 @@ export async function create(
   auth: Auth,
   input: Schema<"SessionCreateRequest">,
   /** Set when something other than a person starts the session, and says what for. */
-  started?: { origin: "automation"; metadata: Record<string, unknown> },
+  started?: { origin: "automation" | "user"; metadata: Record<string, unknown> },
 ): Promise<Detail> {
   const quickChat = input.project_id === CHAT_PROJECT;
   const existing = quickChat ? null : await projects.require(ctx, auth, input.project_id, "use");

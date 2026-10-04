@@ -116,6 +116,10 @@ paths:
       summary: Feishu bot event callback
       operationId: feishuChannelCallback
       tags: [channels]
+      description: |
+        Called by the Feishu open platform, not by a signed-in member: the request is
+        authenticated by the binding's Verification Token or Encrypt Key signature.
+      security: []
       parameters:
         - name: channel_instance_id
           in: path
@@ -125,25 +129,15 @@ paths:
         required: true
         content:
           application/json:
-            schema: {type: object}
+            schema: {type: object, additionalProperties: true}
       responses:
         "200":
-          description: Feishu URL verification challenge or success acknowledgement
+          description: The URL verification challenge, or an acknowledgement
           content:
             application/json:
-              schema:
-                oneOf:
-                  - type: object
-                    required: [challenge]
-                    properties:
-                      challenge: {type: string}
-                  - type: object
-                    required: [code]
-                    properties:
-                      code: {type: integer, enum: [0]}
-        "401":
+              schema: {type: object, additionalProperties: true}
+        "403":
           description: Signature or token rejected
-
   /v1/channels/wecom/{channel_instance_id}/callback:
     get:
       summary: WeCom channel URL verification

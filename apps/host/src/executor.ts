@@ -14,6 +14,7 @@ import {
   type Actor,
   type DeviceInfo,
   type FsEntry,
+  type FsTreeNode,
   type HostFrame,
   MANAGED_CWD_PREFIX,
   RpcMethods,
@@ -43,6 +44,33 @@ async function canonical(target: string): Promise<string> {
       current = parent;
     }
   }
+}
+
+const MAX_TREE_ENTRIES = 2000;
+/** Never worth walking, and often enormous. */
+const SKIPPED_DIRS = new Set(["node_modules", ".git"]);
+
+/** A folder's contents as a tree: directories first, then files, each by name. */
+async function tree(dir: string, depth: number, hidden: boolean, budget: { left: number }): Promise<FsTreeNode[]> {
+  const entries = (await readdir(dir, { withFileTypes: true }).catch(() => []))
+    .filter((entry) => hidden || !entry.name.startsWith("."))
+    .sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name));
+  const nodes: FsTreeNode[] = [];
+  for (const entry of entries) {
+    if (budget.left-- <= 0) break;
+    const full = path.join(dir, entry.name);
+    const info = await stat(full).catch(() => null);
+    const modified = info ? info.mtime.toISOString() : null;
+    if (!entry.isDirectory()) {
+      nodes.push({ name: entry.name, type: "file", size: info?.size ?? null, modified });
+    } else if (depth > 1 && !SKIPPED_DIRS.has(entry.name)) {
+      const children = await tree(full, depth - 1, hidden, budget);
+      nodes.push({ name: entry.name, type: "directory", size: null, modified, children, truncated: budget.left <= 0 });
+    } else {
+      nodes.push({ name: entry.name, type: "directory", size: null, modified, truncated: true });
+    }
+  }
+  return nodes;
 }
 
 export interface HostOptions {
@@ -110,8 +138,27 @@ export class Host {
     return actor.user_id === this.config.owner_user_id;
   }
 
-  /** The canonical path, after checking a non-owner stays inside a shared root. */
+  /** Where a managed workspace lives on this machine. */
+  private managedDir(name: string): string {
+    return path.join(this.options.dataDir, "workspaces", name);
+  }
+
+  /**
+   * The canonical path, after checking a non-owner stays inside a shared root.
+   * A path inside a managed workspace (`@managed/<name>/…`) is open to whoever
+   * the server lets reach that session or project: the workspace exists for
+   * them, and it holds nothing of the owner's own.
+   */
   private async authorizePath(actor: Actor, target: string): Promise<string> {
+    if (target.startsWith(MANAGED_CWD_PREFIX)) {
+      const [name = "", ...rest] = target.slice(MANAGED_CWD_PREFIX.length).split("/");
+      const root = managedWorkspace(`${MANAGED_CWD_PREFIX}${name}`) ? this.managedDir(name) : null;
+      const inside = root ? await canonical(path.join(root, ...rest)) : null;
+      const realRoot = root ? await canonical(root) : null;
+      if (!inside || !realRoot || (inside !== realRoot && !inside.startsWith(realRoot + path.sep)))
+        throw new RpcError("bad_request", "malformed managed workspace path");
+      return inside;
+    }
     if (!path.isAbsolute(target)) throw new RpcError("bad_request", "paths must be absolute");
     const real = await canonical(target);
     if (this.isOwner(actor)) return real;
@@ -131,7 +178,7 @@ export class Host {
     if (cwd.startsWith(MANAGED_CWD_PREFIX)) {
       const name = managedWorkspace(cwd);
       if (!name) throw new RpcError("bad_request", "malformed managed workspace");
-      const dir = path.join(this.options.dataDir, "workspaces", name);
+      const dir = this.managedDir(name);
       await mkdir(dir, { recursive: true });
       return dir;
     }
@@ -241,6 +288,17 @@ export class Host {
         const target = await this.authorizePath(actor, (parsed.data as { path: string }).path);
         await mkdir(target, { recursive: true });
         return { path: target };
+      }
+      case "fs.tree": {
+        const p = parsed.data as { path: string; depth: number; include_hidden: boolean };
+        const root = await this.authorizePath(actor, p.path);
+        const budget = { left: MAX_TREE_ENTRIES };
+        // A workspace nobody has used yet is an empty folder, not an error.
+        const exists = await stat(root).then(
+          (s) => s.isDirectory(),
+          () => false,
+        );
+        return { path: root, files: exists ? await tree(root, p.depth, p.include_hidden, budget) : [] };
       }
       case "exec.run": {
         const p = parsed.data as { command: string; cwd: string; timeout_ms: number };

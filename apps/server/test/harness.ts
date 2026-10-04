@@ -1,5 +1,7 @@
 import { migrateToLatest } from "@agent-base/db";
 import { type StartedRedis, startRedis } from "@agent-base/test-utils";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Redis } from "ioredis";
 import pg from "pg";
 import { inject } from "vitest";
@@ -75,6 +77,8 @@ export async function startTestServer(
     REDIS_URL: redisUrl,
     APP_SECRET: "test-secret-test-secret-test-secret-0123",
     LOG_LEVEL: "silent",
+    // Uploads are staged outside the repository.
+    STORAGE_DIR: path.join(tmpdir(), `ab-storage-${crypto.randomUUID()}`),
     ...env,
   };
   const server = await buildServer(loadConfig(fullEnv));

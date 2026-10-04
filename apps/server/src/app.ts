@@ -5,6 +5,7 @@ import { createDb } from "@agent-base/db";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import websocket from "@fastify/websocket";
 import { FastifySSEPlugin } from "fastify-sse-v2";
@@ -17,6 +18,7 @@ import { DeviceHub } from "./infra/device-hub.ts";
 import { HttpError, errorBody } from "./infra/errors.ts";
 import { PubSub } from "./infra/pubsub.ts";
 import { SecretBox } from "./infra/secret-box.ts";
+import { createStorage } from "./infra/storage.ts";
 import * as handlers from "./modules/index.ts";
 import { setupModules } from "./modules/setup.ts";
 
@@ -40,6 +42,8 @@ export async function buildServer(config: Config): Promise<Server> {
     ajv: { customOptions: { strict: false } },
     // Remote file writes carry the file in the request body.
     bodyLimit: 16 * 1024 * 1024,
+    // A file token travels as a path segment and is longer than the router's default allowance.
+    maxParamLength: 2048,
   });
   const pubsub = new PubSub(redis, (err) => app.log.error({ err }, "redis subscriber"));
   const log = (err: unknown, message: string): void => app.log.error({ err }, message);
@@ -51,6 +55,7 @@ export async function buildServer(config: Config): Promise<Server> {
     pubsub,
     hub,
     box: new SecretBox(config.APP_SECRET),
+    storage: createStorage(config),
     log,
     startedAt: Date.now(),
   };
@@ -82,6 +87,12 @@ export async function buildServer(config: Config): Promise<Server> {
     return reply.code(500).send(errorBody("internal_error", "something went wrong on the server"));
   });
 
+  // One file at a time is held in memory on its way to storage or a device; the limit keeps that small.
+  await app.register(multipart, {
+    limits: { fileSize: config.MAX_UPLOAD_BYTES, files: 20 },
+    // A file uploaded into a project names where it goes ("docs/notes.md"); handlers check the path.
+    preservePath: true,
+  });
   await app.register(websocket);
   await app.register(FastifySSEPlugin);
   await registerContract(app, handlers as Record<string, Handler>);

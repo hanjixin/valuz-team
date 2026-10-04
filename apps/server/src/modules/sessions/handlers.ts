@@ -1,6 +1,7 @@
 import type { Schema } from "@agent-base/contract";
 import { requireAuth } from "../../infra/auth.ts";
 import type { Handler } from "../../infra/context.ts";
+import * as files from "../files/service.ts";
 import * as dispatch from "./dispatch.ts";
 import * as events from "./events.ts";
 import * as service from "./service.ts";
@@ -44,7 +45,8 @@ export const deleteSession: Handler = async (req, reply) => {
 
 export const sendMessage: Handler = async (req) => {
   const { ctx, auth, id } = await caller(req);
-  return dispatch.send(ctx, auth, id, (req.body as Schema<"SessionMessageRequest">).prompt);
+  const { prompt, attachment_ids } = req.body as Schema<"SessionMessageRequest">;
+  return dispatch.send(ctx, auth, id, prompt, (session) => files.deliver(ctx, auth, session, attachment_ids ?? []));
 };
 
 export const interruptSession: Handler = async (req) => {

@@ -5,6 +5,7 @@
  */
 import {
   type Actor,
+  type Attachment,
   type ApiProtocol as KernelProtocol,
   type McpServerConfig,
   Session,
@@ -29,6 +30,8 @@ import type { StoredEventRow } from "./translate.ts";
 
 const QUEUE_LIMIT = 20;
 type Row = NonNullable<Awaited<ReturnType<typeof repo.byId>>>;
+/** Delivers a message's files to the session's device and says where each landed. */
+export type AttachmentSource = (session: Row) => Promise<Attachment[]>;
 
 /** What another module adds to a session's turn: more to its instructions, more tool servers. */
 export interface TurnExtras {
@@ -157,12 +160,20 @@ const titleFrom = (text: string): string => {
  * before the device accepts it leaves nothing behind: the turn's row is removed
  * and the session goes back to the status it had.
  */
-async function startClaimed(ctx: Ctx, row: Row, previous: string, text: string, actor: Actor): Promise<string> {
+async function startClaimed(
+  ctx: Ctx,
+  row: Row,
+  previous: string,
+  text: string,
+  actor: Actor,
+  attach: AttachmentSource = async () => [],
+): Promise<string> {
   const messageId = crypto.randomUUID();
-  const userMessage: UserMessage = { text, attachments: [], additional_context: "" };
   try {
     if (!row.device_id) throw conflict("the device this session ran on was removed", "device_removed");
     const { session, skillBundles } = await kernelSession(ctx, row);
+    // Files the message carries are put on the device first; the turn is told where they are.
+    const userMessage: UserMessage = { text, attachments: await attach(row), additional_context: "" };
     await repo.insertMessage(ctx.db, {
       id: messageId,
       session_id: row.id,
@@ -196,19 +207,31 @@ async function startClaimed(ctx: Ctx, row: Row, previous: string, text: string, 
  * `session_busy` when a turn is already running and 503 when the device is
  * offline.
  */
-export async function dispatchTurn(ctx: Ctx, sessionId: string, text: string, actor: Actor): Promise<string> {
+export async function dispatchTurn(
+  ctx: Ctx,
+  sessionId: string,
+  text: string,
+  actor: Actor,
+  attach?: AttachmentSource,
+): Promise<string> {
   const row = await repo.byId(ctx.db, sessionId);
   if (!row) throw notFound("session");
   const previous = await repo.claimForTurn(ctx.db, sessionId);
   if (!previous) throw conflict("this session is already running a turn", "session_busy");
-  return startClaimed(ctx, row, previous, text, actor);
+  return startClaimed(ctx, row, previous, text, actor, attach);
 }
 
-export async function send(ctx: Ctx, auth: Auth, id: string, prompt: string): Promise<Schema<"SessionDetail">> {
+export async function send(
+  ctx: Ctx,
+  auth: Auth,
+  id: string,
+  prompt: string,
+  attach?: AttachmentSource,
+): Promise<Schema<"SessionDetail">> {
   await sessions.drive(ctx, auth, id);
   // Sending by hand is the "go on" that resumes a queue paused by an interrupt.
   await repo.setQueuePaused(ctx.db, id, false);
-  await dispatchTurn(ctx, id, prompt, { user_id: auth.userId, name: auth.name });
+  await dispatchTurn(ctx, id, prompt, { user_id: auth.userId, name: auth.name }, attach);
   return sessions.get(ctx, auth, id);
 }
 

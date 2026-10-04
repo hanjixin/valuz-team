@@ -56,6 +56,28 @@ export function normalizeNullable(node: unknown): unknown {
   return { ...(description === undefined ? {} : { description }), anyOf: [schema, { type: "null" }] };
 }
 
+/**
+ * An upload arrives as a multipart stream that the handler reads file by file;
+ * there is no parsed body for the contract's schema to be checked against. Such
+ * request bodies are dropped — for routing only — so validation does not refuse them.
+ */
+export function withoutMultipartBodies<T extends { paths?: Record<string, unknown> }>(spec: T): T {
+  const paths = Object.fromEntries(
+    Object.entries(spec.paths ?? {}).map(([route, item]) => [
+      route,
+      Object.fromEntries(
+        Object.entries(item as Record<string, unknown>).map(([method, operation]) => {
+          const body = (operation as { requestBody?: { content?: Record<string, unknown> } } | null)?.requestBody;
+          if (!body?.content?.["multipart/form-data"]) return [method, operation];
+          const { requestBody: _dropped, ...rest } = operation as Record<string, unknown>;
+          return [method, rest];
+        }),
+      ),
+    ]),
+  );
+  return { ...spec, paths };
+}
+
 /** The configured file, else the copy the build puts next to the bundle, else the repository's. */
 function contractFile(configured: string | undefined): string {
   const bundled = path.join(path.dirname(fileURLToPath(import.meta.url)), "openapi.yaml");
@@ -63,10 +85,12 @@ function contractFile(configured: string | undefined): string {
 }
 
 export async function registerContract(app: FastifyInstance, handlers: Record<string, Handler>): Promise<void> {
-  const specification = routablePaths(
-    normalizeNullable(parse(readFileSync(contractFile(app.ctx.config.CONTRACT_FILE), "utf8"))) as {
-      paths?: Record<string, unknown>;
-    },
+  const specification = withoutMultipartBodies(
+    routablePaths(
+      normalizeNullable(parse(readFileSync(contractFile(app.ctx.config.CONTRACT_FILE), "utf8"))) as {
+        paths?: Record<string, unknown>;
+      },
+    ),
   );
 
   await app.register(openapiGlue, {

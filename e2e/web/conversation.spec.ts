@@ -56,6 +56,12 @@ test("a conversation typed in the browser is answered by an agent running on a l
       refresh_token: account.refresh_token,
       org_id: account.org_id,
     });
+    // The side panels read the session's files from the device; none of that may fail.
+    const failures: string[] = [];
+    page.on("response", (res) => {
+      if (res.status() >= 400 && /\/(files|attachments|artifacts)/.test(new URL(res.url()).pathname))
+        failures.push(`${res.status()} ${new URL(res.url()).pathname}`);
+    });
     await page.goto("/conversation/new");
     const composer = page.locator("textarea, [contenteditable=true]").first();
     await composer.click();
@@ -65,6 +71,7 @@ test("a conversation typed in the browser is answered by an agent running on a l
     // The conversation took its title from the first message, and the turn's usage is shown.
     await expect(page.getByText("What is six times seven?").first()).toBeVisible();
     await page.screenshot({ path: "test-results/conversation.png", fullPage: true });
+    expect(failures).toEqual([]);
 
     // It was really run on the device: the server recorded the turn's events from the host.
     const sessions = await (await request.get("/v1/sessions", { headers })).json();

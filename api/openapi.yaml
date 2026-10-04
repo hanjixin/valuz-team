@@ -6476,6 +6476,202 @@ paths:
               schema:
                 $ref: "#/components/schemas/TestConnectorResponse"
 
+  # ── Files: what a member attaches, and what is on the device (agent-base) ──
+  /v1/attachments:
+    get:
+      summary: The caller's attachments that are not yet part of a message
+      operationId: listStagedAttachments
+      tags: [files]
+      responses:
+        "200":
+          description: Staged attachments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionAttachmentList"
+    post:
+      summary: Upload a file to attach to a message
+      operationId: uploadAttachment
+      tags: [files]
+      description: |
+        The file is kept in the server's storage until a message claims it
+        (`attachment_ids` on send); it is then written to the session's workspace on
+        the device, where the agent reads it.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionAttachmentItem"
+  /v1/attachments/{attachment_id}:
+    delete:
+      summary: Discard an attachment
+      operationId: deleteAttachment
+      tags: [files]
+      parameters:
+        - name: attachment_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "204":
+          description: Discarded
+  /v1/sessions/{session_id}/attachments:
+    get:
+      summary: The files attached to a session's messages
+      operationId: listSessionAttachments
+      tags: [files]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Attachments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionAttachmentList"
+  /v1/sessions/{session_id}/artifacts:
+    get:
+      summary: The deliverables a session produced
+      operationId: listSessionArtifacts
+      tags: [files]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Artifacts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionArtifactList"
+  /v1/artifacts:
+    get:
+      summary: The deliverables produced in a project
+      operationId: listArtifacts
+      tags: [files]
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema: {type: string}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 500}
+      responses:
+        "200":
+          description: Artifacts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactList"
+  /v1/projects/{project_id}/files:
+    get:
+      summary: The project's folder on its device, as a tree
+      operationId: listProjectFiles
+      tags: [files]
+      description: |
+        Read from the device when it is asked for. An offline device yields an empty
+        tree with `device_online: false`, not an error.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: depth
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 5, default: 2}
+        - name: path
+          in: query
+          required: false
+          schema: {type: string}
+          description: A folder inside the project, relative to its root, to list instead of the root.
+        - name: include_hidden
+          in: query
+          required: false
+          schema: {type: boolean, default: false}
+        - name: worktree
+          in: query
+          required: false
+          schema: {type: string}
+      responses:
+        "200":
+          description: File tree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectFileTree"
+    post:
+      summary: Upload files into the project's folder on its device
+      operationId: uploadProjectFiles
+      tags: [files]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items: {type: string, format: binary}
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Written
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectFilesWritten"
+  /v1/files/raw/{token}:
+    get:
+      summary: The bytes of a file on a device
+      operationId: readFileBytes
+      tags: [files]
+      security: []
+      description: |
+        `token` comes from `POST /v1/files/resolve` and names one file for a few
+        minutes; holding it is the authorization, so it works as an image or
+        download address. The server fetches the bytes from the device.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: {type: string}
+        - name: download
+          in: query
+          required: false
+          schema: {type: string}
+          description: Present to receive the file as a download rather than inline.
+      responses:
+        "200":
+          description: The file
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+
 components:
   securitySchemes:
     bearerAuth:
@@ -10238,6 +10434,11 @@ components:
       type: object
       required: [prompt]
       properties:
+        attachment_ids:
+          type: array
+          maxItems: 20
+          description: Staged attachments (`POST /v1/attachments`) this message carries.
+          items: {type: string}
         prompt:
           type: string
         provider_id:
@@ -12632,3 +12833,77 @@ components:
               name: {type: string}
               description: {type: string, nullable: true}
         error: {type: string, nullable: true}
+    SessionAttachmentItem:
+      type: object
+      required: [id, file_name, size_bytes, mime_type, created_at]
+      properties:
+        id: {type: string}
+        session_id: {type: string, nullable: true}
+        file_name: {type: string}
+        ref:
+          type: string
+          description: The file's address on the device once it has been delivered there; empty before.
+        parsed_ref: {type: string, nullable: true}
+        parse_status: {type: string}
+        size_bytes: {type: integer}
+        mime_type: {type: string, nullable: true}
+        created_at: {type: integer, format: int64}
+        source_kind: {type: string, enum: [local, kb_doc]}
+        consumed_at: {type: integer, format: int64, nullable: true}
+    SessionAttachmentList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionAttachmentItem"
+    SessionArtifactList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {type: object, additionalProperties: true}
+    ArtifactList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: {type: object, additionalProperties: true}
+        total: {type: integer}
+    ProjectFileNode:
+      type: object
+      required: [name, type]
+      properties:
+        name: {type: string}
+        type: {type: string, enum: [file, directory]}
+        size: {type: integer, nullable: true}
+        modified: {type: string, nullable: true}
+        children:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectFileNode"
+        truncated: {type: boolean}
+    ProjectFileTree:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectFileNode"
+        root:
+          type: string
+          nullable: true
+          description: The absolute folder on the device that the tree is of.
+        device_online: {type: boolean}
+    ProjectFilesWritten:
+      type: object
+      required: [project_id, written]
+      properties:
+        project_id: {type: string}
+        written:
+          type: array
+          items: {type: string}

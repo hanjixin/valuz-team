@@ -80,6 +80,12 @@ export const RpcMethods = {
     encoding: z.enum(["utf8", "base64"]).default("utf8"),
   }),
   "fs.mkdir": z.object({ path: z.string() }),
+  /** A folder as a tree, to `depth` levels. Capped: a tree cut short says so with `truncated`. */
+  "fs.tree": z.object({
+    path: z.string(),
+    depth: z.number().int().min(1).max(5).default(2),
+    include_hidden: z.boolean().default(false),
+  }),
   "exec.run": z.object({
     command: z.string(),
     cwd: z.string(),
@@ -98,6 +104,17 @@ export const FsEntry = z.object({
   mtime_ms: z.number().default(0),
 });
 export type FsEntry = z.infer<typeof FsEntry>;
+
+export interface FsTreeNode {
+  name: string;
+  type: "file" | "directory";
+  size: number | null;
+  /** ISO time of last modification. */
+  modified: string | null;
+  children?: FsTreeNode[];
+  /** Set on a directory whose contents were cut short (depth or entry cap). */
+  truncated?: boolean;
+}
 
 export const ServerFrame = z.discriminatedUnion("t", [
   z.object({ t: z.literal("welcome"), device_id: z.string(), server_time: z.number() }),

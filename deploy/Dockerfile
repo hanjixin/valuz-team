@@ -45,6 +45,8 @@ COPY --from=build /out/node_modules node_modules
 COPY --from=build /out/package.json package.json
 COPY --from=build /repo/apps/server/dist dist
 COPY --from=build /repo/apps/webui/dist dist/web
+# Where uploads are staged; a volume is mounted here in the compose stack.
+RUN mkdir -p /data/storage && chown -R node:node /data
 USER node
 EXPOSE 8787
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=6 \

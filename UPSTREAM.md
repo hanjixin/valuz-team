@@ -91,4 +91,9 @@ Deliberate differences in behaviour:
 - Connectors: only servers that take a key or nothing — OAuth-protected MCP servers are not supported yet
   (`discover` always answers "no OAuth"), and there is no directory of ready-made connectors. A `stdio` connector
   runs on the device, so it cannot be tested from the server.
+- Files: a project's files are read from and written to its device on request; nothing is copied to the server.
+  `POST /v1/files/resolve` always answers `kind: "remote"` with a tokenised address on this server, which fetches
+  the bytes from the device. Attachments are staged on the server only until their message is sent. Agents do
+  not register deliverables yet, so the artifact lists are empty. Knowledge-base attachments (`/v1/attachments/kb`)
+  are not implemented.
 - `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

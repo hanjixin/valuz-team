@@ -4304,6 +4304,141 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's attachments that are not yet part of a message */
+        get: operations["listStagedAttachments"];
+        put?: never;
+        /**
+         * Upload a file to attach to a message
+         * @description The file is kept in the server's storage until a message claims it
+         *     (`attachment_ids` on send); it is then written to the session's workspace on
+         *     the device, where the agent reads it.
+         */
+        post: operations["uploadAttachment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Discard an attachment */
+        delete: operations["deleteAttachment"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{session_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The files attached to a session's messages */
+        get: operations["listSessionAttachments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{session_id}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The deliverables a session produced */
+        get: operations["listSessionArtifacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The deliverables produced in a project */
+        get: operations["listArtifacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The project's folder on its device, as a tree
+         * @description Read from the device when it is asked for. An offline device yields an empty
+         *     tree with `device_online: false`, not an error.
+         */
+        get: operations["listProjectFiles"];
+        put?: never;
+        /** Upload files into the project's folder on its device */
+        post: operations["uploadProjectFiles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/files/raw/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The bytes of a file on a device
+         * @description `token` comes from `POST /v1/files/resolve` and names one file for a few
+         *     minutes; holding it is the authorization, so it works as an image or
+         *     download address. The server fetches the bytes from the device.
+         */
+        get: operations["readFileBytes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6861,6 +6996,8 @@ export interface components {
             items: components["schemas"]["FeedbackRecord"][];
         };
         SessionMessageRequest: {
+            /** @description Staged attachments (`POST /v1/attachments`) this message carries. */
+            attachment_ids?: string[];
             prompt: string;
             /**
              * @description Optional provider override for back-compat with older clients.
@@ -8385,6 +8522,56 @@ export interface components {
                 description: string | null;
             }[];
             error: string | null;
+        };
+        SessionAttachmentItem: {
+            id: string;
+            session_id?: string | null;
+            file_name: string;
+            /** @description The file's address on the device once it has been delivered there; empty before. */
+            ref?: string;
+            parsed_ref?: string | null;
+            parse_status?: string;
+            size_bytes: number;
+            mime_type: string | null;
+            /** Format: int64 */
+            created_at: number;
+            /** @enum {string} */
+            source_kind?: "local" | "kb_doc";
+            /** Format: int64 */
+            consumed_at?: number | null;
+        };
+        SessionAttachmentList: {
+            items: components["schemas"]["SessionAttachmentItem"][];
+        };
+        SessionArtifactList: {
+            items: {
+                [key: string]: unknown;
+            }[];
+        };
+        ArtifactList: {
+            items: {
+                [key: string]: unknown;
+            }[];
+            total: number;
+        };
+        ProjectFileNode: {
+            name: string;
+            /** @enum {string} */
+            type: "file" | "directory";
+            size?: number | null;
+            modified?: string | null;
+            children?: components["schemas"]["ProjectFileNode"][];
+            truncated?: boolean;
+        };
+        ProjectFileTree: {
+            files: components["schemas"]["ProjectFileNode"][];
+            /** @description The absolute folder on the device that the tree is of. */
+            root?: string | null;
+            device_online?: boolean;
+        };
+        ProjectFilesWritten: {
+            project_id: string;
+            written: string[];
         };
     };
     responses: never;
@@ -16073,6 +16260,221 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TestConnectorResponse"];
+                };
+            };
+        };
+    };
+    listStagedAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Staged attachments */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionAttachmentList"];
+                };
+            };
+        };
+    };
+    uploadAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionAttachmentItem"];
+                };
+            };
+        };
+    };
+    deleteAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discarded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listSessionAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attachments */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionAttachmentList"];
+                };
+            };
+        };
+    };
+    listSessionArtifacts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artifacts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionArtifactList"];
+                };
+            };
+        };
+    };
+    listArtifacts: {
+        parameters: {
+            query: {
+                project_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artifacts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactList"];
+                };
+            };
+        };
+    };
+    listProjectFiles: {
+        parameters: {
+            query?: {
+                depth?: number;
+                /** @description A folder inside the project, relative to its root, to list instead of the root. */
+                path?: string;
+                include_hidden?: boolean;
+                worktree?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description File tree */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectFileTree"];
+                };
+            };
+        };
+    };
+    uploadProjectFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    files?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectFilesWritten"];
+                };
+            };
+        };
+    };
+    readFileBytes: {
+        parameters: {
+            query?: {
+                /** @description Present to receive the file as a download rather than inline. */
+                download?: string;
+            };
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
                 };
             };
         };

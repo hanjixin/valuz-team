@@ -5,6 +5,7 @@ import type { Config } from "./config.ts";
 import type { DeviceHub } from "./device-hub.ts";
 import type { PubSub } from "./pubsub.ts";
 import type { SecretBox } from "./secret-box.ts";
+import type { Storage } from "./storage.ts";
 
 /** What every module is handed: configuration and the shared infrastructure clients. */
 export interface Ctx {
@@ -14,6 +15,8 @@ export interface Ctx {
   pubsub: PubSub;
   /** Encrypts credentials at rest. */
   box: SecretBox;
+  /** Where uploaded files are kept. */
+  storage: Storage;
   /** The links to desktop hosts connected to this replica. */
   hub: DeviceHub;
   /** Report a failure in work nobody is waiting on (it cannot be returned to a caller). */

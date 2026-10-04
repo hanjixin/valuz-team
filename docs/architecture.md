@@ -98,6 +98,18 @@ a lead or member that is mid-turn wait in a mailbox and become its next turn.
 Tasks ride on sessions without sessions knowing about them: `sessions/dispatch.ts` lets other modules add to a
 turn (`registerTurnExtras`) and hear when a turn ends or a session falls idle.
 
+## Files stay on the device
+
+Projects are local. A project's folder and a session's workspace live on a device; the server holds no copy and
+gives remote access to them: a folder listing (`fs.tree`), an upload into the project, the bytes of one file —
+each asked of the device when it is wanted, as the caller, so the device's owner's sharing policy applies.
+A file's bytes are fetched through a short-lived token naming that one file (`POST /v1/files/resolve`).
+
+The one thing the server stores is an upload on its way: a member attaches a file before the message — and
+sometimes the session — exists, so it waits in storage (`infra/storage.ts`: a directory, or an S3-compatible
+store when replicas must share it) until the message is sent, is then written into the session's workspace on
+the device, and is removed from the server.
+
 ## Calling out on a member's behalf
 
 A model channel's endpoint is a URL a member typed. Before the server calls one, `infra/outbound.ts` checks it
@@ -111,7 +123,7 @@ returned by the API.
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events), and the collaboration UI (Settings → Organization,
-Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, and multi-agent tasks. Not yet: fork, regenerate,
+Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access. Not yet: fork, regenerate,
 knowledge base, automations, channels, storage.
 
 The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),

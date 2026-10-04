@@ -409,6 +409,20 @@ export interface TaskMailboxTable {
   created_at: Timestamp;
 }
 
+export interface AttachmentsTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  session_id: string | null;
+  file_name: string;
+  size_bytes: number;
+  mime_type: string | null;
+  storage_key: string;
+  device_path: string | null;
+  created_at: Timestamp;
+  consumed_at: NullableTime;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -436,6 +450,7 @@ export interface Database {
   task_runs: TaskRunsTable;
   task_events: TaskEventsTable;
   task_mailbox: TaskMailboxTable;
+  attachments: AttachmentsTable;
   message_feedback: MessageFeedbackTable;
   user_settings: UserSettingsTable;
 }

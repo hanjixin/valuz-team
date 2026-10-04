@@ -15,6 +15,7 @@
     "@testcontainers/postgresql": "^11.0.0",
     "@testcontainers/redis": "^11.0.0",
     "@types/ws": "^8.18.2",
+    "fflate": "^0.8.3",
     "testcontainers": "^11.0.0",
     "ws": "^8.22.0",
     "zod": "^3.25.76"

@@ -203,7 +203,9 @@ describe("agent templates and the first-run tour", () => {
     const again = (await call(bob, "POST", "/v1/agent-packs/import/confirm", { preview_id: second.body.preview_id }))
       .body;
     expect(again).toMatchObject({ created: 0, skipped: 1 });
-    expect((await call(bob, "GET", "/v1/skills")).body.skills).toHaveLength(1);
+    expect(
+      (await call(bob, "GET", "/v1/skills")).body.skills.filter((s: { source: string }) => s.source !== "builtin"),
+    ).toHaveLength(1);
   });
   it("works for a member whose default is a subscription: the roles run on the device's own login", async () => {
     const dana = await joinOrg(t, alice, "dana");

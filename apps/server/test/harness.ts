@@ -79,6 +79,8 @@ export async function startTestServer(
     LOG_LEVEL: "silent",
     // No background memory review unless a test asks for one.
     MEMORY_REVIEW_IDLE_SECONDS: "0",
+    // Tests never reach the public market index; one that needs a marketplace points this at a stand-in.
+    MARKETPLACE_INDEX_URLS: "",
     // Uploads are staged outside the repository.
     STORAGE_DIR: path.join(tmpdir(), `ab-storage-${crypto.randomUUID()}`),
     ...env,

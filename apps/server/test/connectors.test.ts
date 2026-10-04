@@ -207,7 +207,10 @@ describe("connectors", () => {
       .where("resource_id", "=", id)
       .execute();
     expect(shares).toEqual([]);
-    expect((await call(alice, "GET", "/v1/connectors/recommended")).body).toEqual({ items: [] });
+    // The directory lists what works without an OAuth sign-in, and says what the member already has.
+    const recommended = (await call(alice, "GET", "/v1/connectors/recommended")).body.items;
+    expect(recommended).toMatchObject([{ slug: "firecrawl", transport: "http", auth_type: "none", installed: false }]);
+    expect(recommended[0].description).toContain("网页抓取");
   });
 });
 

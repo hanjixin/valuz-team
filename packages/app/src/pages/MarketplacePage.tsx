@@ -14,7 +14,7 @@ import type {
   MarketplaceItem,
   MarketplacePluginComposition,
 } from "@valuz/core";
-import { marketplaceApi, useTranslation } from "@valuz/core";
+import { UNAVAILABLE, marketplaceApi, useTranslation } from "@valuz/core";
 import { useProjectOutlet } from "@valuz/app/layout";
 import { MarketplaceImportDialog } from "../components/MarketplaceImportDialog";
 import { MarketplaceConnectorDialog } from "../components/MarketplaceConnectorDialog";
@@ -39,8 +39,13 @@ const MARKET_TABS: readonly MarketTab[] = [
   "connectors",
 ];
 
+// agent-base: plugin bundles are not provided, so their tab (and the skill
+// "suites" shelf, which lists the same bundles) is left out.
+const marketTabs = (): readonly MarketTab[] =>
+  UNAVAILABLE.plugins ? MARKET_TABS.filter((key) => key !== "plugins") : MARKET_TABS;
+
 const isMarketTab = (value: string | null): value is MarketTab =>
-  value !== null && (MARKET_TABS as readonly string[]).includes(value);
+  value !== null && (marketTabs() as readonly string[]).includes(value);
 
 /** Header sub-tabs (D7): agents 单智能体 → 团队; skills 技能 → 套件;
  * plugins 全部 → 技能套件 → 含连接器. */
@@ -221,7 +226,7 @@ export function MarketplacePage() {
 
         <div className="flex items-center gap-2 border-b border-surface-border px-5">
           <nav className="flex items-center" role="tablist">
-            {MARKET_TABS.map((key) => {
+            {marketTabs().map((key) => {
               const active = tab === key;
               return (
                 <button
@@ -770,7 +775,9 @@ function SkillsTab({ q, tr, onOpen, withInstalled }: TabProps) {
           onChange={switchSubtab}
           options={[
             { value: "skills", label: tr("marketplace.skillsSubtabSkills") },
-            { value: "suites", label: tr("marketplace.skillsSubtabSuites") },
+            ...(UNAVAILABLE.plugins
+              ? []
+              : [{ value: "suites" as const, label: tr("marketplace.skillsSubtabSuites") }]),
           ]}
         />
         <SectionHead

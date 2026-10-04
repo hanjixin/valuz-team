@@ -13,7 +13,8 @@ export const UNAVAILABLE: {
 } = {
   /** Plugin bundles. Skills and connectors, which share the page, are provided. */
   plugins: true,
-  marketplace: true,
+  /** The marketplace is provided (skills, connectors, agents, teams) — without its plugin bundles. */
+  marketplace: false,
   playbooks: true,
   /** The automation template library (it is filled from the marketplace). */
   automationTemplates: true,

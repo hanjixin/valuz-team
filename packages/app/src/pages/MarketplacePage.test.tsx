@@ -10,7 +10,7 @@ import {
 } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { initI18n } from "@valuz/shared/i18n";
-import { marketplaceApi } from "@valuz/core";
+import { UNAVAILABLE, marketplaceApi } from "@valuz/core";
 import type {
   MarketplaceItem,
   MarketplaceItemList,
@@ -67,6 +67,11 @@ function renderPage(initialPath = "/marketplace") {
     </MemoryRouter>,
   );
 }
+
+// agent-base leaves plugin bundles out of the marketplace; these tests are of the page with them present.
+const hidden = { ...UNAVAILABLE };
+beforeEach(() => Object.assign(UNAVAILABLE, { plugins: false }));
+afterEach(() => Object.assign(UNAVAILABLE, hidden));
 
 describe("MarketplacePage", () => {
   let listSpy: MockInstance<typeof marketplaceApi.list>;

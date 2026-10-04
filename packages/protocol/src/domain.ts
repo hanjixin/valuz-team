@@ -153,6 +153,11 @@ export const SkillBundle = z.object({
   slug: z.string(),
   version: z.number().int().default(1),
   files: z.array(z.object({ path: z.string(), content: z.string() })),
+  /**
+   * A digest of the files. A device keeps packages by it, so a package it
+   * already holds is named (no files) rather than sent again each turn.
+   */
+  hash: z.string().optional(),
 });
 export type SkillBundle = z.infer<typeof SkillBundle>;
 

@@ -44,6 +44,13 @@ const Env = z.object({
     .default(8 * 1024 * 1024),
   /** The Feishu open platform's address. Empty = the public one; set for a private deployment (or Lark). */
   FEISHU_API_BASE: z.string().default(""),
+  /**
+   * The market index the marketplace reads, as a comma-separated list of addresses tried in order.
+   * Empty switches the marketplace off.
+   */
+  MARKETPLACE_INDEX_URLS: z.string().default("https://api.valuz.cn/cloud,https://api.valuz.io/cloud"),
+  /** Sent with every index request, so an index can scope what it offers. */
+  MARKETPLACE_INDEX_CHANNEL: z.string().default("oss"),
   /** WeCom's long-connection gateway for smart bots. Empty = the public one. */
   WECOM_WS_URL: z.string().default(""),
   /** The shortest interval an automation may repeat at. */

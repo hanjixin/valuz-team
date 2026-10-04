@@ -25,7 +25,8 @@ export const projectSkillsCatalog: Handler = (req) => catalog(req, (req.params a
 /** Skills live in the database, so there is nothing on disk to rescan; this reports how many there are. */
 export const rescanSkills: Handler = async (req) => {
   const { ctx, auth } = await caller(req);
-  return { indexed: (await service.list(ctx, auth)).length };
+  // The library's own skills; the built-in ones ship with the server and are not indexed.
+  return { indexed: (await service.list(ctx, auth)).filter((skill) => skill.source !== "builtin").length };
 };
 
 export const listSkillTags: Handler = async (req) => {

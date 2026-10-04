@@ -8,11 +8,15 @@ test("the app shows no door to what this server does not provide", async ({ page
     if (res.status() === 501) failures.push(new URL(res.url()).pathname);
   });
 
-  // The resource page opens on skills; plugin bundles and the marketplace are not offered.
+  // The resource page opens on skills, with the built-in ones already there; plugin bundles are not offered.
   await page.goto("/plugins");
   const tabs = page.getByRole("tablist").first().getByRole("tab");
   await expect(tabs).toHaveText(["技能", "连接器"]);
-  await expect(page.getByRole("button", { name: "市场" })).toHaveCount(0);
+  await expect(page.getByText("skill-creator").first()).toBeVisible();
+
+  // The marketplace is: agents, skills and connectors — without plugin bundles.
+  await page.goto("/marketplace");
+  await expect(page.getByRole("tablist").first().getByRole("tab")).toHaveText(["智能体", "技能", "连接器"]);
 
   // Automations stand alone: no playbooks beside them, no template library.
   await page.goto("/automations");
@@ -28,7 +32,6 @@ test("the app shows no door to what this server does not provide", async ({ page
 
   await page.goto("/agents");
   await expect(page.getByRole("button", { name: "添加智能体" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "市场" })).toHaveCount(0);
   await page.screenshot({ path: "test-results/navigation.png", fullPage: true });
   // None of these pages asked the server for something it answers "not implemented" to.
   expect(failures).toEqual([]);

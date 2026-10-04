@@ -3,6 +3,7 @@
  * credential, the agent's current instructions and the project's context are
  * resolved every time a turn is dispatched, then handed to the device.
  */
+import { createHash } from "node:crypto";
 import {
   type Actor,
   type Attachment,
@@ -81,6 +82,26 @@ export const onTurnEnd = (ctx: Ctx, listener: TurnEndListener): void => void hoo
 export function turnEnded(ctx: Ctx, turn: TurnEnd): void {
   for (const listener of hooksOf(ctx).turnEnd)
     void listener(turn).catch((err: unknown) => ctx.log(err, `turn ${turn.id}: a turn-end listener failed`));
+}
+
+/**
+ * Skill packages as they travel: a device keeps what it was sent, so a package
+ * it already holds goes by its digest alone. An agent with many skills would
+ * otherwise carry megabytes on every turn.
+ */
+async function unsent(ctx: Ctx, deviceId: string, bundles: SkillBundle[], actor: Actor): Promise<SkillBundle[]> {
+  if (bundles.length === 0) return bundles;
+  const hashed = bundles.map((bundle) => ({
+    ...bundle,
+    hash: createHash("sha256").update(JSON.stringify(bundle.files)).digest("hex"),
+  }));
+  const { missing } = (await ctx.hub.call(
+    deviceId,
+    "skills.missing",
+    { hashes: hashed.map((bundle) => bundle.hash) },
+    actor,
+  )) as { missing: string[] };
+  return hashed.map((bundle) => (missing.includes(bundle.hash) ? bundle : { ...bundle, files: [] }));
 }
 
 /** The session as the kernel on the device needs it for this turn, and the skill packages its agent carries. */
@@ -256,7 +277,12 @@ async function startClaimed(
     await ctx.hub.call(
       row.device_id,
       "session.run",
-      { session, message_id: messageId, user_message: userMessage, skill_bundles: skillBundles },
+      {
+        session,
+        message_id: messageId,
+        user_message: userMessage,
+        skill_bundles: await unsent(ctx, row.device_id, skillBundles, actor),
+      },
       actor,
     );
   } catch (err) {

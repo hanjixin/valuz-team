@@ -14,6 +14,7 @@ import { deriveSlug, ensureUniqueSlug } from "../agents/slug.ts";
 import * as audit from "../audit/service.ts";
 import * as settings from "../settings/service.ts";
 import * as sharing from "../sharing/service.ts";
+import * as builtin from "./builtin.ts";
 import * as repo from "./repo.ts";
 
 sharing.registerShareable("skill", "skills");
@@ -42,7 +43,34 @@ const instructionsOf = (files: SkillFile[]): string => matter(manifestOf(files))
 const writeManifest = (name: string, description: string, instructions: string): string =>
   matter.stringify(instructions.endsWith("\n") ? instructions : `${instructions}\n`, { name, description });
 
+/** A built-in skill in the shape of a library row, so everything that reads one reads it the same way. */
+const builtinRow = (skill: builtin.BuiltinSkill, auth: Auth): repo.SkillRow => ({
+  id: skill.id,
+  org_id: auth.orgId,
+  owner_id: "",
+  slug: skill.slug,
+  name: skill.name,
+  description: skill.description,
+  files: skill.files,
+  version: 1,
+  creation_origin: "builtin",
+  created_at: new Date(0),
+  updated_at: new Date(0),
+  permission: "view",
+});
+const isBuiltin = (row: { creation_origin: string }): boolean => row.creation_origin === "builtin";
+
 function present(row: repo.SkillRow, auth: Auth, off: Set<string>): View {
+  if (isBuiltin(row))
+    return {
+      ...present({ ...row, creation_origin: "imported" }, auth, off),
+      scope: "official",
+      source: "builtin",
+      readonly: true,
+      protected: true,
+      origin_label: "builtin",
+      creation_origin: "imported",
+    };
   const permission = row.permission ?? "view";
   const mine = row.owner_id === auth.userId;
   return {
@@ -69,6 +97,11 @@ function present(row: repo.SkillRow, auth: Auth, off: Set<string>): View {
 }
 
 async function mustFind(ctx: Ctx, auth: Auth, key: string, needed: sharing.Permission = "view") {
+  const shipped = builtin.find(key);
+  if (shipped) {
+    if (needed !== "view") throw forbidden("a built-in skill cannot be changed — take a copy and change that");
+    return builtinRow(shipped, auth);
+  }
   const row = await repo.find(ctx.db, auth, key, UUID.test(key));
   if (!row?.permission) throw notFound("skill");
   if (!sharing.permissionAtLeast(row.permission, needed))
@@ -96,7 +129,8 @@ function checkPackage(files: SkillFile[]): void {
 
 export async function list(ctx: Ctx, auth: Auth): Promise<View[]> {
   const [rows, off] = await Promise.all([repo.list(ctx.db, auth), switchedOff(ctx, auth)]);
-  return rows.map((row) => present(row, auth, off));
+  // The member's own first, then the ones every library starts with.
+  return [...rows, ...builtin.BUILTIN.map((skill) => builtinRow(skill, auth))].map((row) => present(row, auth, off));
 }
 
 export async function get(ctx: Ctx, auth: Auth, key: string): Promise<Schema<"SkillDetail">> {
@@ -120,7 +154,10 @@ const view = async (ctx: Ctx, auth: Auth, key: string): Promise<View> =>
 async function createWith(ctx: Ctx, auth: Auth, content: repo.Content, origin: string): Promise<View> {
   checkPackage(content.files);
   const id = crypto.randomUUID();
-  const slug = ensureUniqueSlug(deriveSlug(content.name).toLowerCase(), await repo.slugsInOrg(ctx.db, auth.orgId));
+  const slug = ensureUniqueSlug(
+    deriveSlug(content.name).toLowerCase(),
+    new Set([...(await repo.slugsInOrg(ctx.db, auth.orgId)), ...builtin.SLUGS]),
+  );
   await repo.insert(ctx.db, {
     ...content,
     id,
@@ -137,6 +174,30 @@ async function createWith(ctx: Ctx, auth: Auth, content: repo.Content, origin: s
 export async function packageOf(ctx: Ctx, auth: Auth, key: string): Promise<repo.Content & { slug: string }> {
   const row = await mustFind(ctx, auth, key);
   return { slug: row.slug, name: row.name, description: row.description, files: row.files };
+}
+
+/**
+ * Add a skill that arrived as files under a slug it must keep (a market skill:
+ * agents name it by that slug). Its name and description are its manifest's.
+ */
+export async function installPackage(ctx: Ctx, auth: Auth, slug: string, files: SkillFile[]): Promise<View> {
+  checkPackage(files);
+  const manifest = matter(manifestOf(files)).data as { name?: unknown; description?: unknown };
+  const taken = new Set([...(await repo.slugsInOrg(ctx.db, auth.orgId)), ...builtin.SLUGS]);
+  if (taken.has(slug)) throw conflict(`skill '${slug}' already exists`, "slug_taken");
+  const id = crypto.randomUUID();
+  await repo.insert(ctx.db, {
+    name: String(manifest.name ?? slug),
+    description: String(manifest.description ?? ""),
+    files,
+    id,
+    org_id: auth.orgId,
+    owner_id: auth.userId,
+    slug,
+    creation_origin: "imported",
+  });
+  await audit.record(ctx.db, auth, "skill.create", { type: "skill", id }, { slug, from: "marketplace" });
+  return view(ctx, auth, id);
 }
 
 /** Add a skill that arrived as a package (an imported agent pack). */
@@ -302,7 +363,8 @@ const presentVersion = (row: VersionRow, current: number): Schema<"SkillVersionI
 
 export async function listVersions(ctx: Ctx, auth: Auth, key: string): Promise<Schema<"SkillVersionListResponse">> {
   const row = await mustFind(ctx, auth, key);
-  const versions = await repo.listVersions(ctx.db, row.id);
+  // A built-in skill has the one version the server ships.
+  const versions = isBuiltin(row) ? [] : await repo.listVersions(ctx.db, row.id);
   return { skill_id: row.id, artifact_id: null, items: versions.map((v) => presentVersion(v, row.version)) };
 }
 
@@ -345,8 +407,11 @@ export async function restoreVersion(ctx: Ctx, auth: Auth, key: string, revision
  * A slug that names no skill any more is simply left out.
  */
 export const bundlesFor = async (ctx: Ctx, orgId: string, slugs: string[]) =>
-  (await repo.bundlesBySlug(ctx.db, orgId, slugs)).map((skill) => ({
-    slug: skill.slug,
-    version: skill.version,
-    files: skill.files,
-  }));
+  [
+    ...builtin.BUILTIN.filter((skill) => slugs.includes(skill.slug)).map((skill) => ({ ...skill, version: 1 })),
+    ...(await repo.bundlesBySlug(
+      ctx.db,
+      orgId,
+      slugs.filter((slug) => !builtin.SLUGS.has(slug)),
+    )),
+  ].map((skill) => ({ slug: skill.slug, version: skill.version, files: skill.files }));

@@ -1,6 +1,7 @@
 import type { Schema } from "@agent-base/contract";
 import { requireAuth } from "../../infra/auth.ts";
 import type { Handler } from "../../infra/context.ts";
+import * as settings from "../settings/service.ts";
 import * as service from "./service.ts";
 
 type Req = Parameters<Handler>[0];
@@ -62,8 +63,45 @@ export const discoverConnector: Handler = async (req) => {
   };
 };
 
-/** There is no directory of ready-made connectors yet. */
+/**
+ * Ready-made connectors to add with one click. Only ones that work here are
+ * listed: servers that need an OAuth sign-in are not supported yet, so of
+ * valuz-agent's catalogue the one that takes no credentials remains. The
+ * marketplace offers many more.
+ */
+const RECOMMENDED = [
+  {
+    kind: "connector",
+    slug: "firecrawl",
+    display_name: "Firecrawl",
+    description: {
+      "zh-CN": "网页抓取、爬取与搜索，提取结构化网页内容（免费匿名档，无需登录）",
+      "en-US": "Scrape, crawl and search the web; extract structured page content (free anonymous tier, no login)",
+    },
+    icon_url: "https://www.firecrawl.dev/favicon.ico",
+    categories: ["developer"],
+    url: "https://mcp.firecrawl.dev/v2/mcp",
+    auth_type: "none",
+    transport: "http",
+  },
+] as const;
+
 export const listRecommendedConnectors: Handler = async (req) => {
-  await caller(req);
-  return { items: [] };
+  const { ctx, auth } = await caller(req);
+  const [mine, preferences] = await Promise.all([
+    service.list(ctx, auth),
+    settings.getPreferences(ctx.db, { orgId: auth.orgId, userId: auth.userId }),
+  ]);
+  const have = new Set(mine.map((connector) => connector.slug));
+  const locale = preferences.default_locale === "en-US" ? "en-US" : "zh-CN";
+  return {
+    items: RECOMMENDED.map((entry) => ({
+      ...entry,
+      description: entry.description[locale],
+      installed: have.has(entry.slug),
+      oauth_credentials_schema: [],
+      header_schema: [],
+      param_schema: [],
+    })),
+  };
 };

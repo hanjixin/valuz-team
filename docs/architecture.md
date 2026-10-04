@@ -52,6 +52,24 @@ skills or connectors: each turn it is given everything its member can use at tha
 (`modules/agents/available.ts`). Because each member has one under the same slug, a slug is unique in the
 organization only among the agents people make.
 
+## Skills that ship, and the marketplace
+
+Every library starts with a few skills nobody made (`modules/skills/builtin.ts`: skill-creator, docx, xlsx, pptx).
+They ship with the server as one packed file (`scripts/bundle-builtin-skills.mjs` rebuilds it from a valuz-agent
+checkout) rather than living in a database row: everyone reads and uses them, nobody changes them — a member who
+wants a different one takes a copy.
+
+The marketplace (`modules/marketplace`) is a public market index seen against the member's own library: the index
+answers in the contract's own shapes, the server works out `installed`, and installing goes through the same doors
+as doing it by hand — a skill package is downloaded, checked against the index's digest, and put in the skill
+library under its market name; an agent or a team becomes agents in the library, with the skills they name fetched
+on the way. Connectors are created by the app from the item's configuration; plugin bundles are not provided. An
+index that is down yields an empty, `degraded` market, never an error page. `MARKETPLACE_INDEX_URLS` names the
+index (empty switches the marketplace off).
+
+A turn's skills travel to the device as packages. A device keeps each by the digest of its files, so the server
+asks what the device lacks (`skills.missing`) and sends only that; the rest go by digest alone.
+
 ## Access control
 
 Every shareable row carries `org_id` and `owner_id`. The caller's permission on it is `admin` for its owner
@@ -204,7 +222,7 @@ Ported so far: accounts, organizations, members, invites, teams, sharing, audit,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events, fork), and the collaboration UI (Settings → Organization,
 Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations, the Feishu and WeCom channels, the desktop app, agent templates and the first-run tour.
-Not provided: playbooks, plugins, the marketplace, backup.
+Not provided: playbooks, plugin bundles, backup.
 
 The repository was rebuilt from a prototype (tag `prototype-v0`), module by module; the prototype itself is no
 longer in the tree. `make contract` reports how much of the contract is implemented.

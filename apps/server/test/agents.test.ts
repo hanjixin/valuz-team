@@ -239,8 +239,11 @@ describe("agent library", () => {
     // It works with whatever its member can use right now.
     await call(bob, "POST", "/v1/skills", { name: "Bob's skill", description: "d", instructions: "Do it." });
     const resources = (await call(bob, "GET", "/v1/agents/valurion/effective-resources")).body;
-    expect(resources).toMatchObject({ policy: "all_available", counts: { skills: 1 } });
-    expect(resources.skills[0]).toMatchObject({ name: "Bob's skill", status: "available" });
+    // The built-in skills and his own.
+    expect(resources).toMatchObject({ policy: "all_available", counts: { skills: 5 } });
+    expect(resources.skills.map((skill: { slug: string }) => skill.slug)).toEqual(
+      expect.arrayContaining(["skill-creator", "docx", "bobs-skill"]),
+    );
   });
 
   it("has no 'all available' resource list for the agents people make: they use what they name", async () => {

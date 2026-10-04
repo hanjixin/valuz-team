@@ -20,6 +20,7 @@ import {
 } from "@agent-base/kernel";
 import {
   type Actor,
+  type SkillBundle,
   type DeviceInfo,
   type FsEntry,
   type FsTreeNode,
@@ -148,6 +149,35 @@ export class Host {
     return { t: "hello", v: 1, info: this.info(), running: [...running] };
   }
 
+  /** Where a skill package is kept, by the digest of its files. */
+  private skillFile(hash: string): string {
+    if (!/^[0-9a-f]{64}$/.test(hash)) throw new RpcError("bad_request", "not a skill package digest");
+    return path.join(this.options.dataDir, "skill-packages", `${hash}.json`);
+  }
+
+  /** Keep the packages that arrived whole, and fill in the ones the server only named. */
+  private async skillPackages(bundles: SkillBundle[]): Promise<SkillBundle[]> {
+    return Promise.all(
+      bundles.map(async (bundle) => {
+        if (!bundle.hash) return bundle;
+        const file = this.skillFile(bundle.hash);
+        if (bundle.files.length > 0) {
+          await mkdir(path.dirname(file), { recursive: true });
+          await writeFile(file, JSON.stringify(bundle.files));
+          return bundle;
+        }
+        try {
+          return { ...bundle, files: JSON.parse(await readFile(file, "utf8")) as SkillBundle["files"] };
+        } catch {
+          throw new RpcError(
+            "conflict",
+            `skill package "${bundle.slug}" is not on this device; send the message again`,
+          );
+        }
+      }),
+    );
+  }
+
   private isOwner(actor: Actor): boolean {
     return actor.user_id === this.config.owner_user_id;
   }
@@ -252,11 +282,12 @@ export class Host {
             : config;
         const session = { ...p.session, cwd, mcp_servers: p.session.mcp_servers.map(hosted) };
         this.store.adopt(session);
+        const skillBundles = await this.skillPackages(p.skill_bundles);
         // Answer "accepted" now; the turn streams back over the link.
         void this.orchestrator
           .runTurn(session.user_id, session.id, p.user_message, {
             messageId: p.message_id,
-            skillBundles: p.skill_bundles,
+            skillBundles,
           })
           .catch((err: unknown) => {
             // The turn never started (e.g. raced with another): put the server row back.
@@ -283,6 +314,18 @@ export class Host {
         await this.orchestrator.cleanup(p.session_id);
         this.store.forget(p.session_id);
         return { closed: true };
+      }
+      case "skills.missing": {
+        const { hashes } = parsed.data as ReturnType<(typeof RpcMethods)["skills.missing"]["parse"]>;
+        const held = await Promise.all(
+          hashes.map((hash) =>
+            stat(this.skillFile(hash)).then(
+              () => true,
+              () => false,
+            ),
+          ),
+        );
+        return { missing: hashes.filter((_, index) => !held[index]) };
       }
       case "channels.sync":
       case "channels.send":

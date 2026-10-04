@@ -27,3 +27,4 @@ eslint.config.js
 scripts/design-audit.mjs
 scripts/design-audit-baseline.json
 packages/contract/src/generated
+apps/server/src/modules/skills/builtin-skills.json

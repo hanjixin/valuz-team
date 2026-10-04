@@ -27,7 +27,11 @@ export function routablePaths<T extends { paths?: Record<string, unknown> }>(spe
     const rewritten = route
       .split("/")
       .map((segment) =>
-        segment.replace(/^(\{[A-Za-z_]+\}):([a-z-]+)$/, "$1(^[^:/]+)::$2").replace(/^([a-z-]+):([a-z-]+)$/, "$1::$2"),
+        segment
+          // A marketplace item's id has colons of its own (`market:skill:x`): its verb is whatever follows the last.
+          .replace(/^(\{item_id\}):([a-z-]+)$/, "$1(^[^/]+)::$2")
+          .replace(/^(\{[A-Za-z_]+\}):([a-z-]+)$/, "$1(^[^:/]+)::$2")
+          .replace(/^([a-z-]+):([a-z-]+)$/, "$1::$2"),
       )
       .join("/");
     paths[rewritten] = item;

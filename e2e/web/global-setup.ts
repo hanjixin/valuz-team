@@ -62,6 +62,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       LOG_LEVEL: "warn",
       // The stand-in vendor is on localhost.
       ALLOW_PRIVATE_UPSTREAMS: "1",
+      // Specs never reach the public market index.
+      MARKETPLACE_INDEX_URLS: "",
       // What specs upload stays out of the repository.
       STORAGE_DIR: path.join(tmpdir(), `ab-e2e-storage-${process.pid}`),
     },

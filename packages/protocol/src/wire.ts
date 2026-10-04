@@ -129,6 +129,8 @@ export const RpcMethods = {
   "channels.sync": z.object({ bots: z.array(ChannelBot) }),
   /** Post text to one of a bot's chats. */
   "channels.send": z.object({ bot_id: z.string(), chat_id: z.string(), text: z.string() }),
+  /** Which of these skill packages (by digest) the device does not hold yet. */
+  "skills.missing": z.object({ hashes: z.array(z.string()) }),
   /** How each bot's connection stands. */
   "channels.status": z.object({}),
 } as const;

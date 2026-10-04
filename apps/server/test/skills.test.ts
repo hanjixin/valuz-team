@@ -53,10 +53,44 @@ describe("skills", () => {
     });
     // The same name again gets the next free slug.
     expect((await call(alice, "POST", "/v1/skills", { name: "DCF Model" })).body.slug).toBe("dcf-model-2");
-    expect((await call(alice, "GET", "/v1/skills?project_id=chat-default")).body).toMatchObject({
-      project_id: "chat-default",
-      skills: [{ slug: "dcf-model" }, { slug: "dcf-model-2" }],
-    });
+    const listed = (await call(alice, "GET", "/v1/skills?project_id=chat-default")).body;
+    expect(listed.project_id).toBe("chat-default");
+    expect(listed.skills.filter((skill: { source: string }) => skill.source !== "builtin")).toMatchObject([
+      { slug: "dcf-model" },
+      { slug: "dcf-model-2" },
+    ]);
+  });
+
+  it("starts every library with the built-in skills: there to read, use and copy, not to change", async () => {
+    const builtin = (await call(bob, "GET", "/v1/skills")).body.skills.filter(
+      (skill: { source: string }) => skill.source === "builtin",
+    );
+    expect(builtin.map((skill: { slug: string }) => skill.slug).sort()).toEqual([
+      "docx",
+      "pptx",
+      "skill-creator",
+      "xlsx",
+    ]);
+    expect(builtin[0]).toMatchObject({ scope: "official", readonly: true, protected: true, library_enabled: true });
+    const detail = (await call(bob, "GET", "/v1/skills/skill-creator")).body;
+    expect(detail.instructions_markdown.length).toBeGreaterThan(1000);
+    expect(detail.file_count).toBeGreaterThan(10);
+    const manifest = (await call(bob, "GET", "/v1/skills/builtin-skill-creator/files/SKILL.md")).body;
+    expect(manifest.content).toContain("name: skill-creator");
+    expect((await call(bob, "GET", "/v1/skills/skill-creator/versions")).body.items).toEqual([]);
+
+    // Nobody changes or removes one, and its name cannot be taken…
+    expect((await call(bob, "PATCH", "/v1/skills/skill-creator", { description: "mine" })).status).toBe(403);
+    expect((await call(alice, "DELETE", "/v1/skills/skill-creator?mode=confirm")).status).toBe(403);
+    expect((await call(bob, "POST", "/v1/skills", { name: "docx" })).body.slug).toBe("docx-2");
+    await call(bob, "DELETE", "/v1/skills/docx-2?mode=confirm");
+    // …but a member can switch it off for themselves, or take a copy that is theirs to change.
+    const off = await call(bob, "PUT", "/v1/skills/xlsx/library-state", { enabled: false });
+    expect(off.body).toMatchObject({ slug: "xlsx", library_enabled: false });
+    await call(bob, "PUT", "/v1/skills/xlsx/library-state", { enabled: true });
+    const copy = await call(bob, "POST", "/v1/skills/skill-creator/copy", { new_name: "My creator" });
+    expect(copy.body).toMatchObject({ readonly: false, source: "user" });
+    await call(bob, "DELETE", `/v1/skills/${copy.body.id}?mode=confirm`);
   });
 
   it("holds files in a tree, keeps them inside the package, and never loses its SKILL.md", async () => {
@@ -137,7 +171,9 @@ describe("skills", () => {
   });
 
   it("is private until shared; `edit` lets a colleague change it, and a copy is their own", async () => {
-    expect((await call(bob, "GET", "/v1/skills")).body.skills).toEqual([]);
+    expect(
+      (await call(bob, "GET", "/v1/skills")).body.skills.filter((s: { source: string }) => s.source !== "builtin"),
+    ).toEqual([]);
     expect((await call(bob, "GET", `/v1/skills/${skillId}`)).status).toBe(404);
     const share = (permission: string) =>
       call(alice, "PUT", `/v1/shares/skill/${skillId}`, {

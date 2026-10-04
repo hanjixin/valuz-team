@@ -28,7 +28,8 @@ function present(row: repo.AgentRow): Agent {
     instructions: row.instructions,
     runtime: row.runtime,
     model: row.model,
-    provider_id: row.provider_id,
+    // With no channel of its own, a Claude or Codex agent runs on the device's login: the subscription channel.
+    provider_id: row.provider_id ?? providers.subscriptionFor(row.runtime)?.id ?? null,
     effort: row.effort as Agent["effort"],
     skills: row.skills,
     connector_types: row.connector_types,
@@ -79,15 +80,27 @@ async function chooseSlug(ctx: Ctx, auth: Auth, wanted: string | null | undefine
 export const slugTaken = async (ctx: Ctx, auth: Auth, slug: string): Promise<boolean> =>
   (await repo.slugsInOrg(ctx.db, auth.orgId)).has(slug);
 
-/** An agent's channel must be one its author can actually run models through. */
-const checkChannel = async (ctx: Ctx, auth: Auth, providerId: string | null | undefined): Promise<void> => {
-  if (providerId) await providers.assertUsable(ctx, auth, providerId);
-};
+/**
+ * The channel an agent is given, as it is stored. It must be one its author can
+ * run models through. A subscription channel is not stored at all: it means
+ * "this runtime, on the device's own login", so the agent keeps the runtime and
+ * no channel.
+ */
+export async function storedChannel<T extends { provider_id?: string | null; runtime?: string | null }>(
+  ctx: Ctx,
+  auth: Auth,
+  input: T,
+): Promise<T> {
+  const subscription = providers.subscriptionOf(input.provider_id);
+  if (subscription) return { ...input, provider_id: null, runtime: subscription.runtime };
+  if (input.provider_id) await providers.assertUsable(ctx, auth, input.provider_id);
+  return input;
+}
 
-export async function create(ctx: Ctx, auth: Auth, input: Schema<"CreateAgentRequest">): Promise<Agent> {
-  const name = input.name.trim();
+export async function create(ctx: Ctx, auth: Auth, given: Schema<"CreateAgentRequest">): Promise<Agent> {
+  const name = given.name.trim();
   if (!name) throw badRequest("an agent needs a name");
-  await checkChannel(ctx, auth, input.provider_id);
+  const input = await storedChannel(ctx, auth, given);
   const defaults = await providers.getDefaults(ctx, auth);
   const id = crypto.randomUUID();
   const slug = await chooseSlug(ctx, auth, input.slug, name);
@@ -115,13 +128,16 @@ export async function create(ctx: Ctx, auth: Auth, input: Schema<"CreateAgentReq
   return get(ctx, auth, slug);
 }
 
-export async function update(ctx: Ctx, auth: Auth, slug: string, input: Schema<"UpdateAgentRequest">): Promise<Agent> {
+export async function update(ctx: Ctx, auth: Auth, slug: string, given: Schema<"UpdateAgentRequest">): Promise<Agent> {
   const existing = await require(ctx, auth, slug, "edit");
-  await checkChannel(ctx, auth, input.provider_id);
+  const toSubscription = providers.subscriptionOf(given.provider_id) !== null;
+  const input = await storedChannel(ctx, auth, given);
   // In this request null means "leave it"; only what was actually sent changes.
   const changes = Object.fromEntries(
     Object.entries(input).filter(([, value]) => value !== null && value !== undefined),
   ) as Partial<repo.AgentValues>;
+  // Moving to a subscription is the one change that sets the channel to nothing.
+  if (toSubscription) changes.provider_id = null;
   if (typeof changes.name === "string" && !changes.name.trim()) throw badRequest("an agent needs a name");
   if (Object.keys(changes).length > 0) {
     await repo.update(ctx.db, existing.id, changes);

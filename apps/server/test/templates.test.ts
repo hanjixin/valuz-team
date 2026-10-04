@@ -204,4 +204,23 @@ describe("agent templates and the first-run tour", () => {
     expect(again).toMatchObject({ created: 0, skipped: 1 });
     expect((await call(bob, "GET", "/v1/skills")).body.skills).toHaveLength(1);
   });
+  it("works for a member whose default is a subscription: the roles run on the device's own login", async () => {
+    const dana = await joinOrg(t, alice, "dana");
+    await call(dana, "POST", "/v1/providers/default", { provider_id: "ch-claude-subscription" });
+    const project = await call(dana, "POST", "/v1/onboarding/example-project", { team_id: "content" });
+    expect(project.status).toBe(200);
+    const added = (await call(dana, "POST", "/v1/agent-templates/content:add")).body;
+    expect(added).toMatchObject({ created: 0, skipped: 4 });
+    expect(added.roles[0]).toMatchObject({
+      runtime: "claude_agent",
+      provider_id: "ch-claude-subscription",
+      model: "claude-sonnet-4-6",
+    });
+    expect((await call(dana, "POST", "/v1/onboarding/assistant")).body).toEqual({ agent_slug: expect.any(String) });
+    // Editing an agent onto the other subscription moves its runtime with it.
+    const moved = await call(dana, "PATCH", `/v1/agents/${added.roles[0].slug}`, {
+      provider_id: "ch-codex-subscription",
+    });
+    expect(moved.body).toMatchObject({ runtime: "codex", provider_id: "ch-codex-subscription" });
+  });
 });

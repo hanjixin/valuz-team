@@ -68,7 +68,8 @@ describe("agent library", () => {
       instructions: "",
       runtime: "claude_agent",
       model: "claude-sonnet-4-6",
-      provider_id: null,
+      // No channel of its own on the Claude runtime: it runs on the device's login.
+      provider_id: "ch-claude-subscription",
       effort: null,
       skills: [],
       connector_types: [],

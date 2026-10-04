@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startModelGateway, startPostgres, startProviderUpstream, startRedis } from "@agent-base/test-utils";
@@ -61,6 +62,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       LOG_LEVEL: "warn",
       // The stand-in vendor is on localhost.
       ALLOW_PRIVATE_UPSTREAMS: "1",
+      // What specs upload stays out of the repository.
+      STORAGE_DIR: path.join(tmpdir(), `ab-e2e-storage-${process.pid}`),
     },
     stdio: ["ignore", "inherit", "inherit"],
   });

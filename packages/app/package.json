@@ -15,7 +15,8 @@
     "./hooks": "./src/hooks/index.ts",
     "./layout": "./src/layout/index.ts",
     "./routes": "./src/routes/index.ts",
-    "./lib/*": "./src/lib/*.ts"
+    "./lib/*": "./src/lib/*.ts",
+    "./team": "./src/team/index.ts"
   },
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",

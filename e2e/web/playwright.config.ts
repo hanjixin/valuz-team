@@ -12,5 +12,6 @@ export default defineConfig({
   timeout: 60_000,
   workers: 1,
   globalSetup: "./global-setup.ts",
-  use: { baseURL: "http://127.0.0.1:18790", channel: "chrome", trace: "retain-on-failure" },
+  // An action that cannot happen fails in seconds and says which one, instead of running out the test's clock.
+  use: { baseURL: "http://127.0.0.1:18790", channel: "chrome", trace: "retain-on-failure", actionTimeout: 10_000 },
 });

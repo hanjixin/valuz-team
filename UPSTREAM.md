@@ -53,7 +53,12 @@ The server is multi-user, which the frontend never had to know about. The additi
 - `packages/core/src/api/auth-session.ts` (new) — the session store and the `/v1/auth/*` client; registers the provider.
 - `packages/app/src/auth/AuthGate.tsx` (new, exported as `@valuz/app/auth`) — the sign-in page, wrapped around the
   router in `apps/webui/src/App.tsx`.
-- `i18n/locales/*.json` — an `auth` namespace.
+- `i18n/locales/*.json` — an `auth` namespace and a `team` namespace.
+- `packages/core/src/api/team-api.ts` (new) — client for the organization, devices and shares.
+- `packages/app/src/team/` (new, exported as `@valuz/app/team`) — the collaboration UI: three settings sections
+  (Organization, Devices, Sharing) and the share dialog. They are contributed through the frontend's own plugin
+  mechanism (`registerPlugin` with `settingsSections`), registered in `apps/webui/src/main.tsx`, so no upstream
+  page is edited to make room for them. Sharing lists everything the member owns in one place for the same reason.
 - `e2e/web/` (new) — browser tests against the built server and web app (`pnpm test:e2e`). The upstream Electron
   specs in `e2e/` still expect the Python backend and run separately as `pnpm test:e2e:desktop`.
 

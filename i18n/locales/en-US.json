@@ -3493,5 +3493,116 @@
     "submitRegister": "Create account",
     "signOut": "Sign out",
     "subtitle": "Sign in to your team's workspace"
+  },
+  "team": {
+    "nav": {
+      "group": "Collaboration",
+      "org": {
+        "label": "Organization",
+        "desc": "Members, roles, invites and teams"
+      },
+      "devices": {
+        "label": "Devices",
+        "desc": "Linked computers and remote access"
+      },
+      "sharing": {
+        "label": "Sharing",
+        "desc": "Share agents, projects, model channels and devices with colleagues"
+      }
+    },
+    "common": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "remove": "Remove",
+      "add": "Add",
+      "loading": "Loading…",
+      "you": "you",
+      "copy": "Copy",
+      "copied": "Copied",
+      "close": "Close",
+      "empty": "Nothing yet"
+    },
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "member": "Member"
+    },
+    "permission": {
+      "view": "Can view",
+      "use": "Can use",
+      "edit": "Can edit",
+      "control": "Can control",
+      "admin": "Full control",
+      "viewHint": "Sees it",
+      "useHint": "Runs work with it",
+      "editHint": "Changes it",
+      "controlHint": "Drives it remotely (a device's files and commands, a session's messages)"
+    },
+    "org": {
+      "title": "Organization",
+      "name": "Organization name",
+      "members": "Members",
+      "membersDesc": "The people in this organization. Owners and admins manage members and sharing.",
+      "email": "Email",
+      "role": "Role",
+      "joined": "Joined",
+      "leave": "Leave organization",
+      "removeConfirm": "Remove {name} from the organization? What was shared with them, and the devices they linked, stop working.",
+      "invites": "Invites",
+      "invitesDesc": "Invite a colleague by email. The link is shown once, lasts 7 days, and only works for the invited address.",
+      "inviteEmail": "Colleague's email",
+      "invite": "Invite",
+      "inviteCreated": "Send them this link (shown only this once):",
+      "revoke": "Revoke",
+      "expires": "Expires",
+      "teams": "Teams",
+      "teamsDesc": "Group members into teams, then share with a whole team at once.",
+      "teamName": "Team name",
+      "createTeam": "New team",
+      "teamMembers": "{count} members",
+      "deleteTeam": "Delete team"
+    },
+    "devices": {
+      "title": "Devices",
+      "desc": "Sessions run on devices. Link a computer to this server and you — and anyone you share it with — can put agents to work on it.",
+      "online": "Online",
+      "offline": "Offline",
+      "owner": "Owner",
+      "runtimes": "Runtimes",
+      "shared": "Shared folders",
+      "noShared": "No folders shared",
+      "exec": "Remote commands",
+      "execOn": "On",
+      "execOff": "Off",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoking makes the device's token stop working at once; sessions on it cannot continue. Revoke {name}?",
+      "rename": "Rename",
+      "empty": "No devices linked yet",
+      "link": "Link this computer",
+      "linkDesc": "On the computer you want to link, run these two commands (your password is read from AGENT_BASE_PASSWORD):",
+      "browse": "Browse files",
+      "browseTitle": "Files on {name}",
+      "browsePath": "Folder path",
+      "browseGo": "Open",
+      "browseUp": "Up"
+    },
+    "sharing": {
+      "title": "Sharing",
+      "desc": "What you own is yours alone until you share it — with the whole organization, a team, or one member — and you decide how far they can go.",
+      "agents": "Agents",
+      "projects": "Projects",
+      "providers": "Model channels",
+      "devices": "Devices",
+      "share": "Share",
+      "noneOwned": "You have no {type} to share yet",
+      "dialogTitle": "Share “{name}”",
+      "with": "Share with",
+      "everyone": "Whole organization",
+      "team": "Team",
+      "member": "Member",
+      "current": "Shared with",
+      "notShared": "Not shared with anyone yet",
+      "pick": "Choose"
+    }
   }
 }

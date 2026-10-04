@@ -3493,5 +3493,116 @@
     "submitRegister": "创建账号",
     "signOut": "退出登录",
     "subtitle": "登录到团队的工作区"
+  },
+  "team": {
+    "nav": {
+      "group": "团队协作",
+      "org": {
+        "label": "组织与成员",
+        "desc": "成员、角色、邀请与分组"
+      },
+      "devices": {
+        "label": "设备",
+        "desc": "已链接的电脑与远程访问"
+      },
+      "sharing": {
+        "label": "共享",
+        "desc": "把智能体、项目、模型通道和设备共享给同事"
+      }
+    },
+    "common": {
+      "save": "保存",
+      "cancel": "取消",
+      "remove": "移除",
+      "add": "添加",
+      "loading": "加载中…",
+      "you": "你",
+      "copy": "复制",
+      "copied": "已复制",
+      "close": "关闭",
+      "empty": "暂无"
+    },
+    "role": {
+      "owner": "所有者",
+      "admin": "管理员",
+      "member": "成员"
+    },
+    "permission": {
+      "view": "可查看",
+      "use": "可使用",
+      "edit": "可编辑",
+      "control": "可远程控制",
+      "admin": "完全管理",
+      "viewHint": "能看到它",
+      "useHint": "能用它运行任务",
+      "editHint": "能修改它",
+      "controlHint": "能远程操作（设备的文件与命令、会话的发送与中断）"
+    },
+    "org": {
+      "title": "组织",
+      "name": "组织名称",
+      "members": "成员",
+      "membersDesc": "组织内的人。所有者和管理员可以管理成员与共享。",
+      "email": "邮箱",
+      "role": "角色",
+      "joined": "加入时间",
+      "leave": "退出组织",
+      "removeConfirm": "确定将 {name} 移出组织？给他的共享和他链接的设备会一并失效。",
+      "invites": "邀请",
+      "invitesDesc": "通过邮箱邀请同事。邀请链接只显示一次，7 天内有效，且只能由被邀请的邮箱使用。",
+      "inviteEmail": "同事的邮箱",
+      "invite": "发送邀请",
+      "inviteCreated": "把这个链接发给对方（只显示这一次）：",
+      "revoke": "撤销",
+      "expires": "过期时间",
+      "teams": "分组",
+      "teamsDesc": "把成员编成分组，共享时可以一次共享给整个分组。",
+      "teamName": "分组名称",
+      "createTeam": "新建分组",
+      "teamMembers": "{count} 人",
+      "deleteTeam": "删除分组"
+    },
+    "devices": {
+      "title": "设备",
+      "desc": "会话在设备上运行。把电脑链接到这个服务器后，你和被共享的同事就能让智能体在它上面工作。",
+      "online": "在线",
+      "offline": "离线",
+      "owner": "所有者",
+      "runtimes": "运行时",
+      "shared": "共享目录",
+      "noShared": "未共享任何目录",
+      "exec": "远程命令",
+      "execOn": "已开启",
+      "execOff": "未开启",
+      "revoke": "撤销链接",
+      "revokeConfirm": "撤销后该设备的令牌立即失效，正在使用它的会话将无法继续。确定撤销 {name}？",
+      "rename": "重命名",
+      "empty": "还没有链接任何设备",
+      "link": "链接这台电脑",
+      "linkDesc": "在要链接的电脑上运行下面两条命令（密码通过环境变量 AGENT_BASE_PASSWORD 提供）：",
+      "browse": "浏览文件",
+      "browseTitle": "{name} 上的文件",
+      "browsePath": "目录路径",
+      "browseGo": "打开",
+      "browseUp": "上一级"
+    },
+    "sharing": {
+      "title": "共享",
+      "desc": "你拥有的资源默认只有你自己能用。共享给整个组织、某个分组或某位成员，并决定对方能做到哪一步。",
+      "agents": "智能体",
+      "projects": "项目",
+      "providers": "模型通道",
+      "devices": "设备",
+      "share": "共享",
+      "noneOwned": "你还没有可以共享的{type}",
+      "dialogTitle": "共享「{name}」",
+      "with": "共享给",
+      "everyone": "整个组织",
+      "team": "分组",
+      "member": "成员",
+      "current": "当前共享",
+      "notShared": "还没有共享给任何人",
+      "pick": "请选择"
+    }
   }
 }

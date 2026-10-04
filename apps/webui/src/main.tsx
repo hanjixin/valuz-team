@@ -14,6 +14,7 @@ import "@fontsource/newsreader/400-italic.css";
 import "@fontsource/noto-serif-sc/500.css";
 import "@fontsource/noto-serif-sc/600.css";
 import "./index.css";
+import { registerTeamPlugin } from "@valuz/app/team";
 import { App } from "./App";
 
 const storedLocale = localStorage.getItem("valuz-locale") as LocaleCode | null;
@@ -33,6 +34,11 @@ hydrateOverlayIfPresent()
       "[boot] edition overlay hydration failed — continuing with the base profile",
       cause,
     );
+  })
+  // agent-base: the collaboration sections (organization, devices, sharing).
+  .then(() => registerTeamPlugin())
+  .catch((cause: unknown) => {
+    console.error("[boot] collaboration sections failed to register", cause);
   })
   .then(() => {
     createRoot(document.getElementById("root")!).render(

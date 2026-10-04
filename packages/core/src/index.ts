@@ -38,6 +38,7 @@ export * from "./api/projects-api";
 export * from "./api/queue-api";
 export * from "./api/request";
 export * from "./api/auth-session";
+export * from "./api/team-api";
 export * from "./api/worktrees-api";
 export * from "./config/features";
 export * from "./conversation";

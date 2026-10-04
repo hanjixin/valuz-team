@@ -43,6 +43,7 @@ import {
   type Agent,
   type MemberWithAgent,
   type ProjectListItem,
+  UNAVAILABLE,
 } from "@valuz/core";
 import type { ResourceCategory } from "@valuz/shared";
 import { useProjectOutlet } from "@valuz/app/layout";
@@ -568,6 +569,7 @@ export const AgentsPage = () => {
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {UNAVAILABLE.marketplace ? null : (
           <button
             type="button"
             className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-brand transition-colors hover:bg-brand-light/60 hover:text-brand"
@@ -576,6 +578,7 @@ export const AgentsPage = () => {
             <Store className="h-3.5 w-3.5" />
             {t("marketplace.title" as Parameters<typeof t>[0])}
           </button>
+          )}
           <input
             ref={importInputRef}
             type="file"
@@ -849,7 +852,8 @@ export const AgentsPage = () => {
               />
             )}
 
-            {visibleAgents.length <= AGENT_MARKETPLACE_GUIDE_MAX_COUNT && (
+            {!UNAVAILABLE.marketplace &&
+              visibleAgents.length <= AGENT_MARKETPLACE_GUIDE_MAX_COUNT && (
               <button
                 type="button"
                 onClick={() => navigate("/marketplace?tab=agents&from=agents")}

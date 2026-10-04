@@ -1,4 +1,5 @@
 export * from "./profile";
+export * from "./availability";
 export * from "./capabilities";
 export * from "./personal-profile";
 export * from "./registries";

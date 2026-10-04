@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { initI18n } from "@valuz/shared/i18n";
-import { pluginsApi } from "@valuz/core";
+import { UNAVAILABLE, pluginsApi } from "@valuz/core";
 import type { AgentPluginView } from "@valuz/core";
 import { PluginsPage } from "./PluginsPage";
 
@@ -77,6 +77,12 @@ function renderPage() {
     </MemoryRouter>,
   );
 }
+
+// agent-base hides plugin bundles and the marketplace (the server does not
+// provide them); these tests are of the page with both present.
+const hidden = { ...UNAVAILABLE };
+beforeEach(() => Object.assign(UNAVAILABLE, { plugins: false, marketplace: false }));
+afterEach(() => Object.assign(UNAVAILABLE, hidden));
 
 describe("PluginsPage", () => {
   beforeEach(() => {

@@ -55,6 +55,15 @@ Keep changes in those directories to the documented seams so upstream can be re-
 - Upstream's desktop end-to-end specs (`e2e/*.spec.ts`, `e2e/fixtures/`) drove the app against the Python backend
   and were removed; `e2e/desktop/` drives the new one.
 
+- **Entry points to what the server does not provide are left out**, by one list:
+  `packages/core/src/edition/availability.ts`. It hides the plugin-bundle tab and the marketplace buttons
+  (`PluginsPage.tsx`, which now opens on skills, and `AgentsPage.tsx`), the 执行手册 title switch
+  (`AutomationHubTitle.tsx`), the automation template library tab (`AutomationPage.tsx`), and the browser, parsing
+  and backup settings sections (`edition/registries/settings-sections.ts`). The routes themselves are untouched,
+  and the listings those pages still read on load (`/v1/plugins`, `/v1/plugins/memberships`,
+  `/v1/marketplace/categories`, `/v1/marketplace/items`) answer empty rather than "not implemented";
+  upstream's `PluginsPage` tests switch the entries back on.
+
 ## agent-base additions inside carried-over packages
 
 The server is multi-user, which the frontend never had to know about. The additions are confined to:

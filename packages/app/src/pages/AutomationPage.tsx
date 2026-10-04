@@ -40,6 +40,7 @@ import {
   type InputContract,
   type ResultContract,
   type Trigger,
+  UNAVAILABLE,
 } from "@valuz/core";
 import { useProjectOutlet } from "@valuz/app/layout";
 import {
@@ -403,11 +404,16 @@ export const AutomationPage = () => {
               label: t(k("templateLibrary.myAutomations")),
               icon: Clock3,
             },
-            {
-              value: "templates",
-              label: t(k("templateLibrary.templates")),
-              icon: LayoutTemplate,
-            },
+            // agent-base: the template library is filled from the marketplace, which is not provided.
+            ...(UNAVAILABLE.automationTemplates
+              ? []
+              : [
+                  {
+                    value: "templates" as const,
+                    label: t(k("templateLibrary.templates")),
+                    icon: LayoutTemplate,
+                  },
+                ]),
           ]}
           right={
             <>

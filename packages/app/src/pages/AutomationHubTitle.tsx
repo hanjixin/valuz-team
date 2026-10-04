@@ -6,13 +6,17 @@
  */
 import { useNavigate } from "react-router-dom";
 import { t } from "@valuz/shared/i18n";
+import { UNAVAILABLE } from "@valuz/core";
 import { cn } from "@valuz/ui";
 
 export type AutomationHubView = "automations" | "playbooks";
 
 const ITEMS: { view: AutomationHubView; href: string; labelKey: "automation.title" | "playbook.title" }[] = [
   { view: "automations", href: "/automations", labelKey: "automation.title" },
-  { view: "playbooks", href: "/playbooks", labelKey: "playbook.title" },
+  // agent-base: playbooks are not provided, so the title has nothing to switch to.
+  ...(UNAVAILABLE.playbooks
+    ? []
+    : [{ view: "playbooks" as const, href: "/playbooks", labelKey: "playbook.title" as const }]),
 ];
 
 export function AutomationHubTitle({ active }: { active: AutomationHubView }) {

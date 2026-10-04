@@ -7,6 +7,7 @@ export * from "./agents/handlers.ts";
 export * from "./audit/handlers.ts";
 export * from "./auth/handlers.ts";
 export * from "./automations/handlers.ts";
+export * from "./catalog/handlers.ts";
 export * from "./channels/handlers.ts";
 export * from "./connectors/handlers.ts";
 export * from "./devices/handlers.ts";

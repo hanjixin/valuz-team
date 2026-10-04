@@ -37,7 +37,12 @@ import type {
   AgentPluginUninstallResult,
   AgentPluginView,
 } from "@valuz/core";
-import { ApiError, pluginsApi, useTranslation } from "@valuz/core";
+import {
+  ApiError,
+  UNAVAILABLE,
+  pluginsApi,
+  useTranslation,
+} from "@valuz/core";
 import { useProjectOutlet } from "@valuz/app/layout";
 import { PluginConflictDialog } from "../components/plugins/PluginConflictDialog";
 import { PluginDetailPanel } from "../components/plugins/PluginDetailPanel";
@@ -55,8 +60,11 @@ type Busy = "update" | "uninstall" | "export" | "toggle" | null;
  *  connector are folded in over the next steps (their libraries stay put). */
 type ResourceType = "plugin" | "skill" | "connector";
 
-const RESOURCE_TABS: { id: ResourceType; labelKey: string }[] = [
-  { id: "plugin", labelKey: "resource.tabPlugin" },
+// agent-base: plugin bundles are not provided; the page then opens on skills.
+const resourceTabs = (): { id: ResourceType; labelKey: string }[] => [
+  ...(UNAVAILABLE.plugins
+    ? []
+    : [{ id: "plugin" as const, labelKey: "resource.tabPlugin" }]),
   { id: "skill", labelKey: "resource.tabSkill" },
   { id: "connector", labelKey: "resource.tabConnector" },
 ];
@@ -80,7 +88,9 @@ export const PluginsPage = () => {
   } = useProjectOutlet();
   const [searchParams] = useSearchParams();
 
-  const [resourceType, setResourceType] = useState<ResourceType>("plugin");
+  const [resourceType, setResourceType] = useState<ResourceType>(
+    UNAVAILABLE.plugins ? "skill" : "plugin",
+  );
   const [plugins, setPlugins] = useState<AgentPluginView[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(() =>
@@ -350,7 +360,7 @@ export const PluginsPage = () => {
             role="tablist"
             aria-label={t("plugin.title")}
           >
-            {RESOURCE_TABS.map((tab) => {
+            {resourceTabs().map((tab) => {
               const active = resourceType === tab.id;
               return (
                 <button
@@ -373,14 +383,16 @@ export const PluginsPage = () => {
           </nav>
 
           <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
+            {UNAVAILABLE.marketplace ? null : (
             <button
-              type="button"
-              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-brand transition-colors hover:bg-brand-light/60 hover:text-brand"
-              onClick={() => navigate(marketHref)}
-            >
-              <Store className="h-3.5 w-3.5" />
-              {t("marketplace.title")}
-            </button>
+                type="button"
+                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-brand transition-colors hover:bg-brand-light/60 hover:text-brand"
+                onClick={() => navigate(marketHref)}
+              >
+                <Store className="h-3.5 w-3.5" />
+                {t("marketplace.title")}
+              </button>
+            )}
             {searchOpen ? (
               <input
                 type="text"

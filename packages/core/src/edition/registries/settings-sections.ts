@@ -1,6 +1,7 @@
+import { UNAVAILABLE } from "../availability";
 import type { SettingsSectionModule } from "../profile";
 
-export const personalSettingsSections: SettingsSectionModule[] = [
+const allPersonalSettingsSections: SettingsSectionModule[] = [
   {
     id: "general",
     label: "settings.tab.general.label",
@@ -101,3 +102,8 @@ export const personalSettingsSections: SettingsSectionModule[] = [
     edition: "personal",
   },
 ];
+
+// agent-base: sections with no server behind them are left out (see ../availability.ts).
+export const personalSettingsSections = allPersonalSettingsSections.filter(
+  (section) => !UNAVAILABLE.settingsSections.includes(section.id),
+);

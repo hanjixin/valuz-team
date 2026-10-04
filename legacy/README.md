@@ -1,5 +1,5 @@
-> **Already ported and removed from here:** accounts, organizations, invites, teams, the share ladder and the audit trail
-> (`src/auth.ts`, `src/acl.ts`, `src/routes/{auth,orgs,shares}.ts`). What is left no longer runs on its own — it is reference for porting.
+> **Already ported and removed from here:** accounts, organizations, invites, teams, the share ladder, the audit trail,
+> devices and remote control, the host, and the `protocol` and `kernel` packages. What is left no longer runs on its own — it is reference for porting.
 
 # agent-base
 

@@ -5578,6 +5578,277 @@ paths:
         "204":
           description: Removed
 
+  # ── Devices: desktops linked to the server as execution nodes (agent-base) ─
+  /v1/devices:
+    get:
+      summary: List the devices the caller can see
+      operationId: listDevices
+      tags: [devices]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceList"
+    post:
+      summary: Register a device and get its link token
+      operationId: registerDevice
+      tags: [devices]
+      description: |
+        The host process connects to `link_path` over WebSocket with the token as a bearer credential.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceNameRequest"
+      responses:
+        "201":
+          description: Registered; the token is returned only here
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceRegistered"
+
+  /v1/devices/{device_id}:
+    get:
+      summary: One device
+      operationId: getDevice
+      tags: [devices]
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+    patch:
+      summary: Rename a device
+      operationId: updateDevice
+      tags: [devices]
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceNameRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+    delete:
+      summary: Revoke a device
+      operationId: revokeDevice
+      tags: [devices]
+      description: |
+        Its token stops working, its live link is dropped, and its shares end.
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Revoked
+
+  /v1/devices/{device_id}/info:
+    post:
+      summary: Ask the device what it is and what it exposes
+      operationId: getDeviceInfo
+      tags: [devices]
+      description: |
+        Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+        owner is confined to the folders the owner shared. Every call is written to the audit trail.
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceInfo"
+
+  /v1/devices/{device_id}/fs/list:
+    post:
+      summary: List a folder on the device
+      operationId: deviceFsList
+      tags: [devices]
+      description: |
+        Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+        owner is confined to the folders the owner shared. Every call is written to the audit trail.
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevicePathRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceFsListing"
+
+  /v1/devices/{device_id}/fs/stat:
+    post:
+      summary: Describe a path on the device
+      operationId: deviceFsStat
+      tags: [devices]
+      description: |
+        Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+        owner is confined to the folders the owner shared. Every call is written to the audit trail.
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevicePathRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceFsStat"
+
+  /v1/devices/{device_id}/fs/read:
+    post:
+      summary: Read a file on the device
+      operationId: deviceFsRead
+      tags: [devices]
+      description: |
+        Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+        owner is confined to the folders the owner shared. Every call is written to the audit trail.
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceFsReadRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceFsFile"
+
+  /v1/devices/{device_id}/fs/write:
+    post:
+      summary: Write a file on the device
+      operationId: deviceFsWrite
+      tags: [devices]
+      description: |
+        Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+        owner is confined to the folders the owner shared. Every call is written to the audit trail.
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceFsWriteRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceFsStat"
+
+  /v1/devices/{device_id}/fs/mkdir:
+    post:
+      summary: Create a folder on the device
+      operationId: deviceFsMkdir
+      tags: [devices]
+      description: |
+        Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+        owner is confined to the folders the owner shared. Every call is written to the audit trail.
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevicePathRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceFsStat"
+
+  /v1/devices/{device_id}/exec:
+    post:
+      summary: Run a shell command on the device
+      operationId: deviceExec
+      tags: [devices]
+      description: |
+        Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+        owner is confined to the folders the owner shared. Every call is written to the audit trail.
+        For anyone but the owner the device must also have remote commands switched on.
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceExecRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceExecResult"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -11005,3 +11276,140 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Share"
+    DeviceNameRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+    DeviceInfo:
+      type: object
+      description: What the host reported about itself when it last connected. Empty until it first links.
+      properties:
+        hostname: {type: string}
+        platform: {type: string}
+        arch: {type: string}
+        host_version: {type: string}
+        runtimes:
+          type: array
+          items:
+            type: object
+            required: [runtime, available]
+            properties:
+              runtime: {type: string}
+              available: {type: boolean}
+              detail: {type: string}
+        shared_roots:
+          type: array
+          description: Folders the owner lets other members work in.
+          items: {type: string}
+        allow_exec:
+          type: boolean
+          description: Whether other members may run commands on it.
+    Device:
+      type: object
+      required: [id, name, owner_id, owner_name, info, online, permission, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        owner_id: {type: string, format: uuid}
+        owner_name: {type: string}
+        info:
+          $ref: "#/components/schemas/DeviceInfo"
+        online: {type: boolean}
+        permission:
+          type: string
+          enum: [view, use, edit, control, admin]
+          description: What the caller may do with it.
+        last_seen_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+    DeviceList:
+      type: object
+      required: [devices]
+      properties:
+        devices:
+          type: array
+          items:
+            $ref: "#/components/schemas/Device"
+    DeviceRegistered:
+      type: object
+      required: [id, name, token, owner_id, link_path]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        token:
+          type: string
+          description: Shown once. Only its hash is stored.
+        owner_id: {type: string, format: uuid}
+        link_path: {type: string}
+    DevicePathRequest:
+      type: object
+      required: [path]
+      additionalProperties: false
+      properties:
+        path: {type: string, minLength: 1, maxLength: 4096}
+    DeviceFsReadRequest:
+      type: object
+      required: [path]
+      additionalProperties: false
+      properties:
+        path: {type: string, minLength: 1, maxLength: 4096}
+        max_bytes: {type: integer, minimum: 1, maximum: 8388608, default: 1048576}
+    DeviceFsWriteRequest:
+      type: object
+      required: [path, content]
+      additionalProperties: false
+      properties:
+        path: {type: string, minLength: 1, maxLength: 4096}
+        content: {type: string, maxLength: 11184812}
+        encoding: {type: string, enum: [utf8, base64], default: utf8}
+    DeviceExecRequest:
+      type: object
+      required: [command, cwd]
+      additionalProperties: false
+      properties:
+        command: {type: string, minLength: 1, maxLength: 8192}
+        cwd: {type: string, minLength: 1, maxLength: 4096}
+        timeout_ms: {type: integer, minimum: 1000, maximum: 600000, default: 60000}
+    DeviceFsEntry:
+      type: object
+      required: [name, path, kind]
+      properties:
+        name: {type: string}
+        path: {type: string}
+        kind: {type: string, enum: [file, dir, symlink, other]}
+        size: {type: integer}
+        mtime_ms: {type: number}
+    DeviceFsListing:
+      type: object
+      required: [path, entries]
+      properties:
+        path: {type: string}
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeviceFsEntry"
+    DeviceFsStat:
+      type: object
+      required: [path]
+      properties:
+        path: {type: string}
+        kind: {type: string, enum: [file, dir]}
+        size: {type: integer}
+        mtime_ms: {type: number}
+    DeviceFsFile:
+      type: object
+      required: [path, size, encoding, content]
+      properties:
+        path: {type: string}
+        size: {type: integer}
+        encoding: {type: string, enum: [utf8, base64]}
+        content: {type: string}
+    DeviceExecResult:
+      type: object
+      required: [output, timed_out, truncated]
+      properties:
+        exit_code: {type: integer, nullable: true}
+        output: {type: string}
+        timed_out: {type: boolean}
+        truncated: {type: boolean}

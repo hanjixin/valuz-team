@@ -10,6 +10,10 @@ type Json = any;
 export interface TestServer {
   server: Server;
   redis: StartedRedis;
+  /** The environment this server was configured with — start a second replica on the same stores with it. */
+  env: Record<string, string>;
+  /** Accept real connections (needed for WebSockets) and return the base URL. */
+  listen(): Promise<string>;
   /** Call an operation the way a client would. `token` adds the bearer header. */
   call(
     method: string,
@@ -22,20 +26,21 @@ export interface TestServer {
 /** A real server over real PostgreSQL and Redis, migrated and ready. */
 export async function startTestServer(env: Record<string, string> = {}): Promise<TestServer> {
   const [pg, redis]: [StartedPostgres, StartedRedis] = await Promise.all([startPostgres(), startRedis()]);
-  const server = await buildServer(
-    loadConfig({
-      DATABASE_URL: pg.url,
-      REDIS_URL: redis.url,
-      APP_SECRET: "test-secret-test-secret-test-secret-0123",
-      LOG_LEVEL: "silent",
-      ...env,
-    }),
-  );
+  const fullEnv = {
+    DATABASE_URL: pg.url,
+    REDIS_URL: redis.url,
+    APP_SECRET: "test-secret-test-secret-test-secret-0123",
+    LOG_LEVEL: "silent",
+    ...env,
+  };
+  const server = await buildServer(loadConfig(fullEnv));
   await migrateToLatest(server.ctx.db);
   await server.app.ready();
   return {
     server,
     redis,
+    env: fullEnv,
+    listen: () => server.app.listen({ port: 0, host: "127.0.0.1" }),
     async call(method, url, options = {}) {
       const res = await server.app.inject({
         method: method as "GET",
@@ -89,4 +94,18 @@ export async function joinOrg(
   });
   if (invite.status !== 201) throw new Error(`invite failed: ${invite.status} ${JSON.stringify(invite.body)}`);
   return signUp(t, name, invite.body.token);
+}
+
+/** Poll until `check` returns something truthy. */
+export async function eventually<T>(
+  check: () => Promise<T | false | null | undefined>,
+  timeoutMs = 10_000,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await check();
+    if (value) return value;
+    if (Date.now() > deadline) throw new Error("condition was not met in time");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }

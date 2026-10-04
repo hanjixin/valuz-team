@@ -2,6 +2,7 @@ import type { Migration } from "kysely";
 import * as baseline from "./0001_baseline.ts";
 import * as identity from "./0002_identity.ts";
 import * as collaboration from "./0003_collaboration.ts";
+import * as devices from "./0004_devices.ts";
 
 /**
  * Every migration, keyed by name; Kysely applies them in key order. Listed
@@ -12,4 +13,5 @@ export const migrations: Record<string, Migration> = {
   "0001_baseline": baseline,
   "0002_identity": identity,
   "0003_collaboration": collaboration,
+  "0004_devices": devices,
 };

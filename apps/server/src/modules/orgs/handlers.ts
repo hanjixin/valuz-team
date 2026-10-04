@@ -52,7 +52,7 @@ export const updateOrgMember: Handler = async (req) => {
 export const removeOrgMember: Handler = async (req, reply) => {
   const { ctx, auth } = await signedIn(req);
   if (userId(req) !== auth.userId) requireOrgAdmin(auth); // anyone may leave
-  await service.removeMember(ctx.db, auth, userId(req));
+  await service.removeMember(ctx, auth, userId(req));
   return reply.code(204).send();
 };
 

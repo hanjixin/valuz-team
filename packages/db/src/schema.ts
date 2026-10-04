@@ -88,6 +88,19 @@ export interface AuditLogsTable {
   created_at: Timestamp;
 }
 
+export interface DevicesTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  name: string;
+  token_hash: string;
+  /** What the host reported about itself on its last hello. */
+  info: ColumnType<Record<string, unknown>, string | undefined, string>;
+  last_seen_at: ColumnType<Date | null, Date | undefined, Date | null>;
+  revoked_at: ColumnType<Date | null, Date | undefined, Date | null>;
+  created_at: Timestamp;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -98,4 +111,5 @@ export interface Database {
   team_members: TeamMembersTable;
   resource_shares: ResourceSharesTable;
   audit_logs: AuditLogsTable;
+  devices: DevicesTable;
 }

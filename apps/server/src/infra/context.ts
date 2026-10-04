@@ -2,12 +2,17 @@ import type { Db, OrgRole } from "@agent-base/db";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Redis } from "ioredis";
 import type { Config } from "./config.ts";
+import type { DeviceHub } from "./device-hub.ts";
+import type { PubSub } from "./pubsub.ts";
 
 /** What every module is handed: configuration and the shared infrastructure clients. */
 export interface Ctx {
   config: Config;
   db: Db;
   redis: Redis;
+  pubsub: PubSub;
+  /** The links to desktop hosts connected to this replica. */
+  hub: DeviceHub;
   startedAt: number;
 }
 

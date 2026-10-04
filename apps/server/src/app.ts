@@ -6,13 +6,17 @@ import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
+import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 import { Redis } from "ioredis";
 import type { Config } from "./infra/config.ts";
 import { registerContract } from "./infra/contract.ts";
 import type { Ctx, Handler } from "./infra/context.ts";
+import { DeviceHub } from "./infra/device-hub.ts";
 import { HttpError, errorBody } from "./infra/errors.ts";
+import { PubSub } from "./infra/pubsub.ts";
 import * as handlers from "./modules/index.ts";
+import { setupModules } from "./modules/setup.ts";
 
 export interface Server {
   app: FastifyInstance;
@@ -25,7 +29,6 @@ export async function buildServer(config: Config): Promise<Server> {
   const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
   // A dropped connection is retried by ioredis; it must never take the process down.
   redis.on("error", (err: Error) => console.error(`[redis] ${err.message}`));
-  const ctx: Ctx = { config, db, redis, startedAt: Date.now() };
 
   const app = Fastify({
     logger: { level: config.LOG_LEVEL },
@@ -33,7 +36,12 @@ export async function buildServer(config: Config): Promise<Server> {
     forceCloseConnections: true,
     // The contract uses OpenAPI annotations (`example`, `int64`…) that are not JSON Schema keywords.
     ajv: { customOptions: { strict: false } },
+    // Remote file writes carry the file in the request body.
+    bodyLimit: 16 * 1024 * 1024,
   });
+  const pubsub = new PubSub(redis, (err) => app.log.error({ err }, "redis subscriber"));
+  const hub = new DeviceHub(redis, pubsub, crypto.randomUUID(), (err, message) => app.log.error({ err }, message));
+  const ctx: Ctx = { config, db, redis, pubsub, hub, startedAt: Date.now() };
   app.decorate("ctx", ctx);
 
   await app.register(cors, {
@@ -63,7 +71,10 @@ export async function buildServer(config: Config): Promise<Server> {
   });
   app.setNotFoundHandler((_req, reply) => reply.code(404).send(errorBody("not_found", "route not found")));
 
+  await app.register(websocket);
   await registerContract(app, handlers as Record<string, Handler>);
+  setupModules(app);
+  await hub.start();
 
   // Serve the web app from the same origin as the API when a build is present.
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -78,7 +89,9 @@ export async function buildServer(config: Config): Promise<Server> {
     app,
     ctx,
     async close() {
+      await hub.stop();
       await app.close();
+      pubsub.close();
       redis.disconnect();
       await db.destroy();
     },

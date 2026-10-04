@@ -1,9 +1,10 @@
 /** Organizations: the tenant boundary. Members, their roles, and invites. */
 import { createHash, randomBytes } from "node:crypto";
 import type { Db, OrgRole } from "@agent-base/db";
-import type { Auth } from "../../infra/context.ts";
+import type { Auth, Ctx } from "../../infra/context.ts";
 import { badRequest, conflict, forbidden, notFound } from "../../infra/errors.ts";
 import * as audit from "../audit/service.ts";
+import * as devices from "../devices/service.ts";
 import * as sharing from "../sharing/service.ts";
 import * as teams from "../teams/service.ts";
 import * as repo from "./repo.ts";
@@ -53,8 +54,8 @@ export async function changeRole(db: Db, auth: Auth, userId: string, role: OrgRo
 }
 
 /** Remove a member (or leave). Everything granted to them in this organization ends with it. */
-export async function removeMember(db: Db, auth: Auth, userId: string): Promise<void> {
-  await db.transaction().execute(async (tx) => {
+export async function removeMember(ctx: Ctx, auth: Auth, userId: string): Promise<void> {
+  await ctx.db.transaction().execute(async (tx) => {
     const target = await repo.findMember(tx, auth.orgId, userId);
     if (!target) throw notFound("member");
     if (target.role === "owner" && auth.role !== "owner") throw forbidden("only an owner can remove an owner");
@@ -62,6 +63,7 @@ export async function removeMember(db: Db, auth: Auth, userId: string): Promise<
     await repo.removeMember(tx, auth.orgId, userId);
     await sharing.revokeForPrincipal(tx, auth.orgId, "user", userId);
     await teams.removeUser(tx, auth.orgId, userId);
+    await devices.revokeOwnedBy(ctx, auth, userId, tx);
     await audit.record(tx, auth, userId === auth.userId ? "member.leave" : "member.remove", {
       type: "user",
       id: userId,

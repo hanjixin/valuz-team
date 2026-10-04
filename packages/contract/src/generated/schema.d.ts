@@ -3666,6 +3666,197 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the devices the caller can see */
+        get: operations["listDevices"];
+        put?: never;
+        /**
+         * Register a device and get its link token
+         * @description The host process connects to `link_path` over WebSocket with the token as a bearer credential.
+         */
+        post: operations["registerDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One device */
+        get: operations["getDevice"];
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a device
+         * @description Its token stops working, its live link is dropped, and its shares end.
+         */
+        delete: operations["revokeDevice"];
+        options?: never;
+        head?: never;
+        /** Rename a device */
+        patch: operations["updateDevice"];
+        trace?: never;
+    };
+    "/v1/devices/{device_id}/info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask the device what it is and what it exposes
+         * @description Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+         *     owner is confined to the folders the owner shared. Every call is written to the audit trail.
+         */
+        post: operations["getDeviceInfo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/devices/{device_id}/fs/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * List a folder on the device
+         * @description Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+         *     owner is confined to the folders the owner shared. Every call is written to the audit trail.
+         */
+        post: operations["deviceFsList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/devices/{device_id}/fs/stat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Describe a path on the device
+         * @description Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+         *     owner is confined to the folders the owner shared. Every call is written to the audit trail.
+         */
+        post: operations["deviceFsStat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/devices/{device_id}/fs/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read a file on the device
+         * @description Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+         *     owner is confined to the folders the owner shared. Every call is written to the audit trail.
+         */
+        post: operations["deviceFsRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/devices/{device_id}/fs/write": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write a file on the device
+         * @description Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+         *     owner is confined to the folders the owner shared. Every call is written to the audit trail.
+         */
+        post: operations["deviceFsWrite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/devices/{device_id}/fs/mkdir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a folder on the device
+         * @description Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+         *     owner is confined to the folders the owner shared. Every call is written to the audit trail.
+         */
+        post: operations["deviceFsMkdir"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/devices/{device_id}/exec": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run a shell command on the device
+         * @description Needs `control` on the device. The device applies its owner's policy on top: anyone but the
+         *     owner is confined to the folders the owner shared. Every call is written to the audit trail.
+         *     For anyone but the owner the device must also have remote commands switched on.
+         */
+        post: operations["deviceExec"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7218,6 +7409,112 @@ export interface components {
         };
         ShareList: {
             shares: components["schemas"]["Share"][];
+        };
+        DeviceNameRequest: {
+            name: string;
+        };
+        /** @description What the host reported about itself when it last connected. Empty until it first links. */
+        DeviceInfo: {
+            hostname?: string;
+            platform?: string;
+            arch?: string;
+            host_version?: string;
+            runtimes?: {
+                runtime: string;
+                available: boolean;
+                detail?: string;
+            }[];
+            /** @description Folders the owner lets other members work in. */
+            shared_roots?: string[];
+            /** @description Whether other members may run commands on it. */
+            allow_exec?: boolean;
+        };
+        Device: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: uuid */
+            owner_id: string;
+            owner_name: string;
+            info: components["schemas"]["DeviceInfo"];
+            online: boolean;
+            /**
+             * @description What the caller may do with it.
+             * @enum {string}
+             */
+            permission: "view" | "use" | "edit" | "control" | "admin";
+            /** Format: date-time */
+            last_seen_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        DeviceList: {
+            devices: components["schemas"]["Device"][];
+        };
+        DeviceRegistered: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description Shown once. Only its hash is stored. */
+            token: string;
+            /** Format: uuid */
+            owner_id: string;
+            link_path: string;
+        };
+        DevicePathRequest: {
+            path: string;
+        };
+        DeviceFsReadRequest: {
+            path: string;
+            /** @default 1048576 */
+            max_bytes: number;
+        };
+        DeviceFsWriteRequest: {
+            path: string;
+            content: string;
+            /**
+             * @default utf8
+             * @enum {string}
+             */
+            encoding: "utf8" | "base64";
+        };
+        DeviceExecRequest: {
+            command: string;
+            cwd: string;
+            /** @default 60000 */
+            timeout_ms: number;
+        };
+        DeviceFsEntry: {
+            name: string;
+            path: string;
+            /** @enum {string} */
+            kind: "file" | "dir" | "symlink" | "other";
+            size?: number;
+            mtime_ms?: number;
+        };
+        DeviceFsListing: {
+            path: string;
+            entries: components["schemas"]["DeviceFsEntry"][];
+        };
+        DeviceFsStat: {
+            path: string;
+            /** @enum {string} */
+            kind?: "file" | "dir";
+            size?: number;
+            mtime_ms?: number;
+        };
+        DeviceFsFile: {
+            path: string;
+            size: number;
+            /** @enum {string} */
+            encoding: "utf8" | "base64";
+            content: string;
+        };
+        DeviceExecResult: {
+            exit_code?: number | null;
+            output: string;
+            timed_out: boolean;
+            truncated: boolean;
         };
     };
     responses: never;
@@ -13827,6 +14124,296 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceList"];
+                };
+            };
+        };
+    };
+    registerDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceNameRequest"];
+            };
+        };
+        responses: {
+            /** @description Registered; the token is returned only here */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceRegistered"];
+                };
+            };
+        };
+    };
+    getDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+        };
+    };
+    revokeDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceNameRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Device"];
+                };
+            };
+        };
+    };
+    getDeviceInfo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceInfo"];
+                };
+            };
+        };
+    };
+    deviceFsList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevicePathRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceFsListing"];
+                };
+            };
+        };
+    };
+    deviceFsStat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevicePathRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceFsStat"];
+                };
+            };
+        };
+    };
+    deviceFsRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceFsReadRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceFsFile"];
+                };
+            };
+        };
+    };
+    deviceFsWrite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceFsWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceFsStat"];
+                };
+            };
+        };
+    };
+    deviceFsMkdir: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevicePathRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceFsStat"];
+                };
+            };
+        };
+    };
+    deviceExec: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceExecRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceExecResult"];
+                };
             };
         };
     };

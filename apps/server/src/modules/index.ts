@@ -4,6 +4,7 @@
  */
 export * from "./audit/handlers.ts";
 export * from "./auth/handlers.ts";
+export * from "./devices/handlers.ts";
 export * from "./orgs/handlers.ts";
 export * from "./sharing/handlers.ts";
 export * from "./system/handlers.ts";

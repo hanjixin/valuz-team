@@ -20,6 +20,9 @@ beforeEach(() => {
   __resetHeavyPluginCache();
 });
 
+// The plugins are real dynamic imports; the first one is slow when the suite runs under load.
+const LOAD = { timeout: 10_000 };
+
 describe("useHeavyMarkdownPlugins", () => {
   it("loads nothing for ordinary prose", async () => {
     const { result } = renderHook(() =>
@@ -54,7 +57,7 @@ describe("useHeavyMarkdownPlugins", () => {
     const { result } = renderHook(() =>
       useHeavyMarkdownPlugins("```mermaid\ngraph TD; A-->B;\n```"),
     );
-    await waitFor(() => expect(result.current.mermaid).toBeDefined());
+    await waitFor(() => expect(result.current.mermaid).toBeDefined(), LOAD);
     expect(result.current.math).toBeUndefined();
   });
 
@@ -64,14 +67,14 @@ describe("useHeavyMarkdownPlugins", () => {
     const { result } = renderHook(() =>
       useHeavyMarkdownPlugins("Here you go:\n\n```mermaid\ngraph TD;"),
     );
-    await waitFor(() => expect(result.current.mermaid).toBeDefined());
+    await waitFor(() => expect(result.current.mermaid).toBeDefined(), LOAD);
   });
 
   it("loads math for display math", async () => {
     const { result } = renderHook(() =>
       useHeavyMarkdownPlugins("计算如下：\n\n$$\n增长率 = 15.71\\%\n$$"),
     );
-    await waitFor(() => expect(result.current.math).toBeDefined());
+    await waitFor(() => expect(result.current.math).toBeDefined(), LOAD);
     expect(result.current.mermaid).toBeUndefined();
   });
 
@@ -79,14 +82,14 @@ describe("useHeavyMarkdownPlugins", () => {
     const { result } = renderHook(() =>
       useHeavyMarkdownPlugins("The area is $\\pi r^2$ exactly."),
     );
-    await waitFor(() => expect(result.current.math).toBeDefined());
+    await waitFor(() => expect(result.current.math).toBeDefined(), LOAD);
   });
 
   it("loads math for backslash delimiters", async () => {
     const { result } = renderHook(() =>
       useHeavyMarkdownPlugins("Given \\(x > 0\\) the result holds."),
     );
-    await waitFor(() => expect(result.current.math).toBeDefined());
+    await waitFor(() => expect(result.current.math).toBeDefined(), LOAD);
   });
 
   it("does not treat a lone currency amount as math", async () => {

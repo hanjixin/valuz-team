@@ -4,7 +4,7 @@ import pg from "pg";
 import { migrations } from "./migrations/index.ts";
 import type { Database } from "./schema.ts";
 
-export type { Database, OrgRole, PrincipalType, SharePermission } from "./schema.ts";
+export type { Database, OrgRole, PrincipalType, SharePermission, StoredModel } from "./schema.ts";
 export type Db = Kysely<Database>;
 
 // bigint columns (event cursors, token counts, epoch ms) all fit in a JS number.

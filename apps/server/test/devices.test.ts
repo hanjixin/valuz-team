@@ -79,6 +79,22 @@ describe("devices", () => {
     expect((await t.call("GET", "/v1/devices", { token: owner.token })).body.devices).toHaveLength(1);
   });
 
+  it("offers the runtimes of the devices a member can start sessions on — a runtime lives on a device", async () => {
+    const runtimes = async (account: Account) =>
+      (await t.call("GET", "/v1/runtimes", { token: account.token })).body.runtimes.map(
+        (r: { id: string; available: boolean }) => [r.id, r.available],
+      );
+    await eventually(async () => (await runtimes(owner)).every(([, available]: [string, boolean]) => available));
+    expect(await runtimes(owner)).toEqual([
+      ["claude_agent", true],
+      ["codex", true],
+      ["deepagents", true],
+    ]);
+    const forMate = (await t.call("GET", "/v1/runtimes", { token: mate.token })).body.runtimes;
+    expect(forMate.every((r: { available: boolean }) => !r.available)).toBe(true);
+    expect(forMate[0]).toMatchObject({ supported_protocols: ["anthropic"], unavailable_reason: expect.any(String) });
+  });
+
   it("refuses a link that does not present a valid device token", async () => {
     const before = hostLog.length;
     const impostor = await startHost({ device_token: "dev_wrong" });

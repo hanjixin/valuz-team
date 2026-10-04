@@ -66,10 +66,19 @@ and the host streams state back; every state frame is retried until the server a
   folders the owner shared, and may run commands only if the owner switched that on.
 - The link is a WebSocket, so it is not in the HTTP contract; routes like it are registered in `modules/setup.ts`.
 
+## Calling out on a member's behalf
+
+A model channel's endpoint is a URL a member typed. Before the server calls one, `infra/outbound.ts` checks it
+resolves only to public addresses and redirects are not followed — otherwise any member could make the server
+probe its own network. `ALLOW_PRIVATE_UPSTREAMS=1` lifts this for self-hosted setups with a gateway on the LAN.
+Credentials are sealed at rest with `infra/secret-box.ts` (keyed from `APP_SECRET`, per purpose) and are never
+returned by the API.
+
 ## Status
 
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
-the host, and the kernel (not yet driven by the server — sessions come next).
+the host, the kernel (not yet driven by the server — sessions come next), model channels, model defaults and
+preferences.
 
 The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),
 module by module. `make contract` reports how much of the contract is implemented.

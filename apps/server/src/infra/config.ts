@@ -17,6 +17,11 @@ const Env = z.object({
     .int()
     .positive()
     .default(30 * 86_400),
+  /**
+   * 1 = let the server call endpoints on private networks (a model gateway on the same LAN).
+   * Off by default: a member-supplied URL must not reach the server's own network.
+   */
+  ALLOW_PRIVATE_UPSTREAMS: flag.default("0"),
   /** Override where api/openapi.yaml is read from (the bundled server ships a copy). */
   CONTRACT_FILE: z.string().optional(),
   /** A built web app to serve at `/` (same origin as the API). Empty = look for the workspace's own build. */

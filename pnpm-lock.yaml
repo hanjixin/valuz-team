@@ -223,6 +223,9 @@ importers:
       '@agent-base/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@anthropic-ai/sdk':
+        specifier: ^0.131.0
+        version: 0.131.0(zod@3.25.76)
       '@fastify/cors':
         specifier: ^11.3.0
         version: 11.3.0
@@ -250,9 +253,15 @@ importers:
       ioredis:
         specifier: ^5.4.2
         version: 5.11.1
+      ipaddr.js:
+        specifier: ^2.5.0
+        version: 2.5.0
       kysely:
         specifier: ^0.28.0
         version: 0.28.17
+      openai:
+        specifier: ^7.27.0
+        version: 7.27.0(undici@7.30.0)(ws@8.22.0)(zod@3.25.76)
       pg:
         specifier: ^8.23.1
         version: 8.23.1
@@ -6056,6 +6065,30 @@ packages:
 
   oniguruma-to-es@4.3.6:
     resolution: {integrity: sha512-csuQ9x3Yr0cEIs/Zgx/OEt9iBw9vqIunAPQkx19R/fiMq2oGVTgcMqO/V3Ybqefr1TBvosI6jU539ksaBULJyA==}
+
+  openai@7.27.0:
+    resolution: {integrity: sha512-QDo1FvnRDZn15YwGVOhT9vpyypDiLphkd/7a4mcURWf5upMoEetgA6o4DJeII+ZZkC6m6DvlilCwii3+ynDcTw==}
+    engines: {node: '>=22.0.0'}
+    peerDependencies:
+      '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
+      '@smithy/hash-node': '>=4.3.0 <5'
+      '@smithy/signature-v4': '>=5.4.0 <6'
+      undici: '>=5 <9'
+      ws: ^8.21.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@aws-sdk/credential-provider-node':
+        optional: true
+      '@smithy/hash-node':
+        optional: true
+      '@smithy/signature-v4':
+        optional: true
+      undici:
+        optional: true
+      ws:
+        optional: true
+      zod:
+        optional: true
 
   openapi-typescript@7.13.0:
     resolution: {integrity: sha512-EFP392gcqXS7ntPvbhBzbF8TyBA+baIYEm791Hy5YkjDYKTnk/Tn5OQeKm5BIZvJihpp8Zzr4hzx0Irde1LNGQ==}
@@ -13770,6 +13803,12 @@ snapshots:
       oniguruma-parser: 0.12.2
       regex: 6.1.0
       regex-recursion: 6.0.2
+
+  openai@7.27.0(undici@7.30.0)(ws@8.22.0)(zod@3.25.76):
+    optionalDependencies:
+      undici: 7.30.0
+      ws: 8.22.0
+      zod: 3.25.76
 
   openapi-typescript@7.13.0(typescript@5.9.3):
     dependencies:

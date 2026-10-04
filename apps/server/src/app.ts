@@ -15,6 +15,7 @@ import type { Ctx, Handler } from "./infra/context.ts";
 import { DeviceHub } from "./infra/device-hub.ts";
 import { HttpError, errorBody } from "./infra/errors.ts";
 import { PubSub } from "./infra/pubsub.ts";
+import { SecretBox } from "./infra/secret-box.ts";
 import * as handlers from "./modules/index.ts";
 import { setupModules } from "./modules/setup.ts";
 
@@ -41,7 +42,7 @@ export async function buildServer(config: Config): Promise<Server> {
   });
   const pubsub = new PubSub(redis, (err) => app.log.error({ err }, "redis subscriber"));
   const hub = new DeviceHub(redis, pubsub, crypto.randomUUID(), (err, message) => app.log.error({ err }, message));
-  const ctx: Ctx = { config, db, redis, pubsub, hub, startedAt: Date.now() };
+  const ctx: Ctx = { config, db, redis, pubsub, hub, box: new SecretBox(config.APP_SECRET), startedAt: Date.now() };
   app.decorate("ctx", ctx);
 
   await app.register(cors, {
@@ -69,7 +70,6 @@ export async function buildServer(config: Config): Promise<Server> {
     req.log.error({ err }, "unhandled error");
     return reply.code(500).send(errorBody("internal_error", "something went wrong on the server"));
   });
-  app.setNotFoundHandler((_req, reply) => reply.code(404).send(errorBody("not_found", "route not found")));
 
   await app.register(websocket);
   await registerContract(app, handlers as Record<string, Handler>);
@@ -84,6 +84,12 @@ export async function buildServer(config: Config): Promise<Server> {
       existsSync(path.join(dir, "index.html")),
     );
   if (webDir) await app.register(fastifyStatic, { root: webDir });
+  app.setNotFoundHandler((req, reply) => {
+    // The web app routes in the browser: a deep link like /settings is the app, not a missing file.
+    const page = req.method === "GET" && !/^\/(v1|health)(\/|$)/.test(req.url) && req.headers.accept?.includes("html");
+    if (webDir && page) return reply.sendFile("index.html");
+    return reply.code(404).send(errorBody("not_found", "route not found"));
+  });
 
   return {
     app,

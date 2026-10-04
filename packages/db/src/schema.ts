@@ -101,6 +101,35 @@ export interface DevicesTable {
   created_at: Timestamp;
 }
 
+export interface StoredModel {
+  id: string;
+  label?: string;
+}
+
+export interface ProvidersTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  name: string;
+  provider_kind: string;
+  protocol: string | null;
+  base_url: string | null;
+  default_model: string | null;
+  models: ColumnType<StoredModel[], string | undefined, string>;
+  secret_enc: string | null;
+  test_status: ColumnType<string, string | undefined, string>;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface UserSettingsTable {
+  org_id: string;
+  user_id: string;
+  key: string;
+  value: ColumnType<unknown, string, string>;
+  updated_at: Timestamp;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -112,4 +141,6 @@ export interface Database {
   resource_shares: ResourceSharesTable;
   audit_logs: AuditLogsTable;
   devices: DevicesTable;
+  providers: ProvidersTable;
+  user_settings: UserSettingsTable;
 }

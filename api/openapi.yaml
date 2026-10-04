@@ -5849,6 +5849,267 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeviceExecResult"
 
+  # ── Model channels (providers) ─────────────────────────────────────────────
+  # agent-base: a channel belongs to the member who added it and is private until
+  # shared (`/v1/shares/provider/{id}`). Its API key is stored encrypted and never returned.
+  /v1/providers/config:
+    get:
+      summary: The kinds of channel that can be added
+      operationId: listProviderDescriptors
+      tags: [providers]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderDescriptorList"
+
+  /v1/providers:
+    get:
+      summary: List the model channels the caller can use
+      operationId: listProviders
+      tags: [providers]
+      parameters:
+        - name: gated
+          in: query
+          required: false
+          schema: {type: boolean, default: false}
+          description: Accepted for compatibility; every listed channel is already usable from the server.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMChannelList"
+    post:
+      summary: Add a model channel
+      operationId: createProvider
+      tags: [providers]
+      description: |
+        With an API key the upstream is probed before anything is stored: a channel that cannot\nbe reached or authenticated is refused (422) rather than saved broken.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMChannelDetail"
+
+  /v1/providers/validate:
+    post:
+      summary: Check credentials without saving them
+      operationId: validateProviderCredentials
+      tags: [providers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderValidateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionTestResult"
+
+  /v1/providers/ping:
+    post:
+      summary: Check which model ids a custom endpoint answers for
+      operationId: pingProviderModels
+      tags: [providers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderPingRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProviderPingResponse"
+
+  /v1/providers/probe-models:
+    post:
+      summary: List the models an upstream offers, without saving anything
+      operationId: probeProviderModels
+      tags: [providers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProbeModelsRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeModelsResponse"
+
+  /v1/providers/default:
+    post:
+      summary: Choose the caller's default channel (and model)
+      operationId: setDefaultProvider
+      tags: [providers]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetDefaultProviderRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetDefaultProviderResponse"
+
+  /v1/providers/{provider_id}:
+    get:
+      summary: One model channel
+      operationId: getProvider
+      tags: [providers]
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMChannelDetail"
+    patch:
+      summary: Change a model channel
+      operationId: updateProvider
+      tags: [providers]
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMChannelDetail"
+    delete:
+      summary: Delete a model channel
+      operationId: deleteProvider
+      tags: [providers]
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "204":
+          description: Deleted
+
+  /v1/providers/{provider_id}/test:
+    post:
+      summary: Test a saved channel's connection
+      operationId: testProvider
+      tags: [providers]
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionTestResult"
+
+  /v1/providers/{provider_id}/discover-models:
+    post:
+      summary: Refresh a channel's model list from its upstream
+      operationId: discoverProviderModels
+      tags: [providers]
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverModelsResponse"
+
+  /v1/settings/model-defaults:
+    get:
+      summary: The caller's default runtime, channel, model and effort
+      operationId: getModelDefaults
+      tags: [settings]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelDefaults"
+    patch:
+      summary: Change the caller's model defaults
+      operationId: patchModelDefaults
+      tags: [settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModelDefaultsPatch"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelDefaults"
+
+  /v1/settings/model-options:
+    get:
+      summary: Every model the caller can pick, grouped and resolved for a picker
+      operationId: getModelOptions
+      tags: [settings]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelOptionsResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -11413,3 +11674,316 @@ components:
         output: {type: string}
         timed_out: {type: boolean}
         truncated: {type: boolean}
+    ProviderDescriptor:
+      type: object
+      required: [kind, display_name]
+      properties:
+        kind: {type: string}
+        display_name: {type: string}
+        supports_managed_provider: {type: boolean}
+        supports_custom_base_url: {type: boolean}
+        supports_connection_test: {type: boolean}
+        supports_protocol_selection: {type: boolean}
+        default_base_url: {type: string}
+        anthropic_base_url: {type: string}
+        default_model: {type: string}
+        model_options:
+          type: array
+          items: {type: string}
+        docs_url: {type: string}
+        auth_type: {type: string, enum: [api_key, oauth]}
+        oauth_login_command: {type: string}
+        default_protocol: {type: string}
+    ProviderDescriptorList:
+      type: object
+      required: [providers]
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderDescriptor"
+    LLMModel:
+      type: object
+      required: [id, label, runtimes]
+      properties:
+        id: {type: string}
+        label: {type: string, nullable: true}
+        selection_hint: {type: string, nullable: true}
+        input_modalities:
+          type: array
+          nullable: true
+          items: {type: string}
+        runtimes:
+          type: array
+          nullable: true
+          items: {type: string}
+    LLMChannel:
+      type: object
+      required: [id, name, provider_kind, source, enabled, is_default, deletable, default_model, test_status, credential_source, auth_type, protocol, effective_protocol, compatible_protocols, group, group_rank, models, unavailable_reason]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        provider_kind: {type: string}
+        source:
+          type: string
+          description: "`user` — the caller's own; `org` — shared with them by another member."
+        enabled: {type: boolean}
+        is_default: {type: boolean}
+        deletable: {type: boolean}
+        default_model: {type: string, nullable: true}
+        test_status: {type: string}
+        credential_source: {type: string}
+        auth_type: {type: string, enum: [api_key, oauth]}
+        protocol: {type: string, nullable: true}
+        effective_protocol: {type: string, enum: [anthropic, openai-completion, openai-response, gemini]}
+        compatible_protocols:
+          type: array
+          items: {type: string, enum: [anthropic, openai-completion, openai-response, gemini]}
+        group: {type: string}
+        group_rank: {type: integer}
+        models:
+          type: array
+          items:
+            $ref: "#/components/schemas/LLMModel"
+        unavailable_reason: {type: string, nullable: true}
+        permission:
+          type: string
+          enum: [view, use, edit, control, admin]
+          description: What the caller may do with it.
+        owner_id: {type: string, format: uuid}
+    LLMChannelList:
+      type: object
+      required: [providers]
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/LLMChannel"
+    LLMChannelDetail:
+      type: object
+      required: [id, name, provider_kind, source, enabled, is_default, deletable, default_model, test_status, credential_source, auth_type, protocol, effective_protocol, compatible_protocols, group, group_rank, models, unavailable_reason, base_url, supports_custom_base_url, supports_connection_test]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        provider_kind: {type: string}
+        source:
+          type: string
+          description: "`user` — the caller's own; `org` — shared with them by another member."
+        enabled: {type: boolean}
+        is_default: {type: boolean}
+        deletable: {type: boolean}
+        default_model: {type: string, nullable: true}
+        test_status: {type: string}
+        credential_source: {type: string}
+        auth_type: {type: string, enum: [api_key, oauth]}
+        protocol: {type: string, nullable: true}
+        effective_protocol: {type: string, enum: [anthropic, openai-completion, openai-response, gemini]}
+        compatible_protocols:
+          type: array
+          items: {type: string, enum: [anthropic, openai-completion, openai-response, gemini]}
+        group: {type: string}
+        group_rank: {type: integer}
+        models:
+          type: array
+          items:
+            $ref: "#/components/schemas/LLMModel"
+        unavailable_reason: {type: string, nullable: true}
+        permission:
+          type: string
+          enum: [view, use, edit, control, admin]
+          description: What the caller may do with it.
+        owner_id: {type: string, format: uuid}
+        base_url: {type: string, nullable: true}
+        supports_custom_base_url: {type: boolean}
+        supports_connection_test: {type: boolean}
+    ProviderCreateRequest:
+      type: object
+      required: [name, provider_kind]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        provider_kind: {type: string, minLength: 1, maxLength: 64}
+        base_url: {type: string, nullable: true}
+        api_key: {type: string, nullable: true}
+        default_model: {type: string, nullable: true}
+        protocol: {type: string, nullable: true}
+        models:
+          type: array
+          nullable: true
+          maxItems: 200
+          items: {type: string, minLength: 1, maxLength: 200}
+    ProviderUpdateRequest:
+      type: object
+      properties:
+        name: {type: string, nullable: true}
+        base_url: {type: string, nullable: true}
+        api_key: {type: string, nullable: true}
+        default_model: {type: string, nullable: true}
+        protocol: {type: string, nullable: true}
+        auth_type: {type: string, nullable: true}
+        models:
+          type: array
+          nullable: true
+          maxItems: 200
+          items: {type: string, minLength: 1, maxLength: 200}
+    ProviderValidateRequest:
+      type: object
+      required: [provider_kind]
+      properties:
+        provider_kind: {type: string}
+        api_key: {type: string, nullable: true}
+        base_url: {type: string, nullable: true}
+        default_model: {type: string, nullable: true}
+        protocol: {type: string, nullable: true}
+    ConnectionTestResult:
+      type: object
+      required: [success, latency_ms, error_message]
+      properties:
+        success: {type: boolean}
+        latency_ms: {type: integer, nullable: true}
+        error_message: {type: string, nullable: true}
+    ProviderPingRequest:
+      type: object
+      required: [base_url, models]
+      properties:
+        base_url: {type: string}
+        api_key: {type: string, nullable: true}
+        protocol: {type: string, nullable: true}
+        models:
+          type: array
+          maxItems: 50
+          items: {type: string}
+        provider_id:
+          type: string
+          nullable: true
+          description: Use this saved channel's key instead of sending one.
+    ProviderPingResponse:
+      type: object
+      required: [ok, failed]
+      properties:
+        ok:
+          type: array
+          items: {type: string}
+        failed:
+          type: array
+          items:
+            type: object
+            required: [model, reason]
+            properties:
+              model: {type: string}
+              reason: {type: string}
+    ProbeModelsRequest:
+      type: object
+      required: [provider_kind, api_key]
+      properties:
+        provider_kind: {type: string}
+        api_key: {type: string}
+        base_url: {type: string, nullable: true}
+        protocol: {type: string, nullable: true}
+    ProbeModelsResponse:
+      type: object
+      required: [models, model_labels, suggested_default]
+      properties:
+        models:
+          type: array
+          items: {type: string}
+        model_labels:
+          type: object
+          additionalProperties: {type: string}
+        suggested_default: {type: string, nullable: true}
+    DiscoverModelsResponse:
+      type: object
+      required: [provider_id, discovered, merged, model_labels]
+      properties:
+        provider_id: {type: string}
+        discovered:
+          type: array
+          items: {type: string}
+        merged:
+          type: array
+          items: {type: string}
+        model_labels:
+          type: object
+          additionalProperties: {type: string}
+    SetDefaultProviderRequest:
+      type: object
+      required: [provider_id]
+      properties:
+        provider_id: {type: string}
+        default_model: {type: string, nullable: true}
+    SetDefaultProviderResponse:
+      type: object
+      required: [provider_id, message]
+      properties:
+        provider_id: {type: string}
+        message: {type: string}
+    ModelDefaults:
+      type: object
+      required: [default_runtime, default_provider_id, default_model, default_effort]
+      properties:
+        default_runtime: {type: string}
+        default_provider_id: {type: string, nullable: true}
+        default_model: {type: string, nullable: true}
+        default_effort: {type: string, enum: [low, medium, high, xhigh, max]}
+    ModelDefaultsPatch:
+      type: object
+      properties:
+        default_runtime: {type: string, enum: [claude_agent, codex, deepagents]}
+        default_provider_id:
+          type: string
+          description: An empty string clears it.
+        default_model: {type: string}
+        default_effort: {type: string, enum: [low, medium, high, xhigh, max]}
+    ModelOption:
+      type: object
+      required: [model_id, provider_id, label, runtimes, default_runtime, is_current_default]
+      properties:
+        model_id: {type: string}
+        provider_id: {type: string}
+        label: {type: string}
+        selection_hint: {type: string, nullable: true}
+        input_modalities:
+          type: array
+          nullable: true
+          items: {type: string}
+        runtimes:
+          type: array
+          items: {type: string}
+        default_runtime: {type: string}
+        is_current_default: {type: boolean}
+    ModelOptionProvider:
+      type: object
+      required: [provider_id, label, kind, source, cli_tool, status, unavailable_reason, models]
+      properties:
+        provider_id: {type: string}
+        label: {type: string}
+        kind: {type: string}
+        source: {type: string}
+        cli_tool: {type: string, nullable: true}
+        status: {type: string, enum: [available, unavailable, client_resolved]}
+        unavailable_reason: {type: string, nullable: true}
+        models:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelOption"
+    ModelOptionsResponse:
+      type: object
+      required: [current, groups]
+      properties:
+        current:
+          type: object
+          required: [runtime, provider_id, model]
+          properties:
+            runtime: {type: string, nullable: true}
+            provider_id: {type: string, nullable: true}
+            model: {type: string, nullable: true}
+        groups:
+          type: array
+          items:
+            type: object
+            required: [key, providers]
+            properties:
+              key: {type: string}
+              providers:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ModelOptionProvider"

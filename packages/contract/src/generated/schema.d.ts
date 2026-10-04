@@ -3857,6 +3857,200 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/providers/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The kinds of channel that can be added */
+        get: operations["listProviderDescriptors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the model channels the caller can use */
+        get: operations["listProviders"];
+        put?: never;
+        /**
+         * Add a model channel
+         * @description With an API key the upstream is probed before anything is stored: a channel that cannot\nbe reached or authenticated is refused (422) rather than saved broken.
+         */
+        post: operations["createProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check credentials without saving them */
+        post: operations["validateProviderCredentials"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/ping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check which model ids a custom endpoint answers for */
+        post: operations["pingProviderModels"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/probe-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** List the models an upstream offers, without saving anything */
+        post: operations["probeProviderModels"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Choose the caller's default channel (and model) */
+        post: operations["setDefaultProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/{provider_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One model channel */
+        get: operations["getProvider"];
+        put?: never;
+        post?: never;
+        /** Delete a model channel */
+        delete: operations["deleteProvider"];
+        options?: never;
+        head?: never;
+        /** Change a model channel */
+        patch: operations["updateProvider"];
+        trace?: never;
+    };
+    "/v1/providers/{provider_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test a saved channel's connection */
+        post: operations["testProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/{provider_id}/discover-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh a channel's model list from its upstream */
+        post: operations["discoverProviderModels"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/settings/model-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's default runtime, channel, model and effort */
+        get: operations["getModelDefaults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change the caller's model defaults */
+        patch: operations["patchModelDefaults"];
+        trace?: never;
+    };
+    "/v1/settings/model-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every model the caller can pick, grouped and resolved for a picker */
+        get: operations["getModelOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -7515,6 +7709,221 @@ export interface components {
             output: string;
             timed_out: boolean;
             truncated: boolean;
+        };
+        ProviderDescriptor: {
+            kind: string;
+            display_name: string;
+            supports_managed_provider?: boolean;
+            supports_custom_base_url?: boolean;
+            supports_connection_test?: boolean;
+            supports_protocol_selection?: boolean;
+            default_base_url?: string;
+            anthropic_base_url?: string;
+            default_model?: string;
+            model_options?: string[];
+            docs_url?: string;
+            /** @enum {string} */
+            auth_type?: "api_key" | "oauth";
+            oauth_login_command?: string;
+            default_protocol?: string;
+        };
+        ProviderDescriptorList: {
+            providers: components["schemas"]["ProviderDescriptor"][];
+        };
+        LLMModel: {
+            id: string;
+            label: string | null;
+            selection_hint?: string | null;
+            input_modalities?: string[] | null;
+            runtimes: string[] | null;
+        };
+        LLMChannel: {
+            id: string;
+            name: string;
+            provider_kind: string;
+            /** @description `user` — the caller's own; `org` — shared with them by another member. */
+            source: string;
+            enabled: boolean;
+            is_default: boolean;
+            deletable: boolean;
+            default_model: string | null;
+            test_status: string;
+            credential_source: string;
+            /** @enum {string} */
+            auth_type: "api_key" | "oauth";
+            protocol: string | null;
+            /** @enum {string} */
+            effective_protocol: "anthropic" | "openai-completion" | "openai-response" | "gemini";
+            compatible_protocols: ("anthropic" | "openai-completion" | "openai-response" | "gemini")[];
+            group: string;
+            group_rank: number;
+            models: components["schemas"]["LLMModel"][];
+            unavailable_reason: string | null;
+            /**
+             * @description What the caller may do with it.
+             * @enum {string}
+             */
+            permission?: "view" | "use" | "edit" | "control" | "admin";
+            /** Format: uuid */
+            owner_id?: string;
+        };
+        LLMChannelList: {
+            providers: components["schemas"]["LLMChannel"][];
+        };
+        LLMChannelDetail: {
+            id: string;
+            name: string;
+            provider_kind: string;
+            /** @description `user` — the caller's own; `org` — shared with them by another member. */
+            source: string;
+            enabled: boolean;
+            is_default: boolean;
+            deletable: boolean;
+            default_model: string | null;
+            test_status: string;
+            credential_source: string;
+            /** @enum {string} */
+            auth_type: "api_key" | "oauth";
+            protocol: string | null;
+            /** @enum {string} */
+            effective_protocol: "anthropic" | "openai-completion" | "openai-response" | "gemini";
+            compatible_protocols: ("anthropic" | "openai-completion" | "openai-response" | "gemini")[];
+            group: string;
+            group_rank: number;
+            models: components["schemas"]["LLMModel"][];
+            unavailable_reason: string | null;
+            /**
+             * @description What the caller may do with it.
+             * @enum {string}
+             */
+            permission?: "view" | "use" | "edit" | "control" | "admin";
+            /** Format: uuid */
+            owner_id?: string;
+            base_url: string | null;
+            supports_custom_base_url: boolean;
+            supports_connection_test: boolean;
+        };
+        ProviderCreateRequest: {
+            name: string;
+            provider_kind: string;
+            base_url?: string | null;
+            api_key?: string | null;
+            default_model?: string | null;
+            protocol?: string | null;
+            models?: string[] | null;
+        };
+        ProviderUpdateRequest: {
+            name?: string | null;
+            base_url?: string | null;
+            api_key?: string | null;
+            default_model?: string | null;
+            protocol?: string | null;
+            auth_type?: string | null;
+            models?: string[] | null;
+        };
+        ProviderValidateRequest: {
+            provider_kind: string;
+            api_key?: string | null;
+            base_url?: string | null;
+            default_model?: string | null;
+            protocol?: string | null;
+        };
+        ConnectionTestResult: {
+            success: boolean;
+            latency_ms: number | null;
+            error_message: string | null;
+        };
+        ProviderPingRequest: {
+            base_url: string;
+            api_key?: string | null;
+            protocol?: string | null;
+            models: string[];
+            /** @description Use this saved channel's key instead of sending one. */
+            provider_id?: string | null;
+        };
+        ProviderPingResponse: {
+            ok: string[];
+            failed: {
+                model: string;
+                reason: string;
+            }[];
+        };
+        ProbeModelsRequest: {
+            provider_kind: string;
+            api_key: string;
+            base_url?: string | null;
+            protocol?: string | null;
+        };
+        ProbeModelsResponse: {
+            models: string[];
+            model_labels: {
+                [key: string]: string;
+            };
+            suggested_default: string | null;
+        };
+        DiscoverModelsResponse: {
+            provider_id: string;
+            discovered: string[];
+            merged: string[];
+            model_labels: {
+                [key: string]: string;
+            };
+        };
+        SetDefaultProviderRequest: {
+            provider_id: string;
+            default_model?: string | null;
+        };
+        SetDefaultProviderResponse: {
+            provider_id: string;
+            message: string;
+        };
+        ModelDefaults: {
+            default_runtime: string;
+            default_provider_id: string | null;
+            default_model: string | null;
+            /** @enum {string} */
+            default_effort: "low" | "medium" | "high" | "xhigh" | "max";
+        };
+        ModelDefaultsPatch: {
+            /** @enum {string} */
+            default_runtime?: "claude_agent" | "codex" | "deepagents";
+            /** @description An empty string clears it. */
+            default_provider_id?: string;
+            default_model?: string;
+            /** @enum {string} */
+            default_effort?: "low" | "medium" | "high" | "xhigh" | "max";
+        };
+        ModelOption: {
+            model_id: string;
+            provider_id: string;
+            label: string;
+            selection_hint?: string | null;
+            input_modalities?: string[] | null;
+            runtimes: string[];
+            default_runtime: string;
+            is_current_default: boolean;
+        };
+        ModelOptionProvider: {
+            provider_id: string;
+            label: string;
+            kind: string;
+            source: string;
+            cli_tool: string | null;
+            /** @enum {string} */
+            status: "available" | "unavailable" | "client_resolved";
+            unavailable_reason: string | null;
+            models: components["schemas"]["ModelOption"][];
+        };
+        ModelOptionsResponse: {
+            current: {
+                runtime: string | null;
+                provider_id: string | null;
+                model: string | null;
+            };
+            groups: {
+                key: string;
+                providers: components["schemas"]["ModelOptionProvider"][];
+            }[];
         };
     };
     responses: never;
@@ -14413,6 +14822,345 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceExecResult"];
+                };
+            };
+        };
+    };
+    listProviderDescriptors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderDescriptorList"];
+                };
+            };
+        };
+    };
+    listProviders: {
+        parameters: {
+            query?: {
+                /** @description Accepted for compatibility; every listed channel is already usable from the server. */
+                gated?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LLMChannelList"];
+                };
+            };
+        };
+    };
+    createProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LLMChannelDetail"];
+                };
+            };
+        };
+    };
+    validateProviderCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderValidateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionTestResult"];
+                };
+            };
+        };
+    };
+    pingProviderModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderPingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderPingResponse"];
+                };
+            };
+        };
+    };
+    probeProviderModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProbeModelsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeModelsResponse"];
+                };
+            };
+        };
+    };
+    setDefaultProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetDefaultProviderRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetDefaultProviderResponse"];
+                };
+            };
+        };
+    };
+    getProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LLMChannelDetail"];
+                };
+            };
+        };
+    };
+    deleteProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LLMChannelDetail"];
+                };
+            };
+        };
+    };
+    testProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionTestResult"];
+                };
+            };
+        };
+    };
+    discoverProviderModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscoverModelsResponse"];
+                };
+            };
+        };
+    };
+    getModelDefaults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelDefaults"];
+                };
+            };
+        };
+    };
+    patchModelDefaults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelDefaultsPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelDefaults"];
+                };
+            };
+        };
+    };
+    getModelOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelOptionsResponse"];
                 };
             };
         };

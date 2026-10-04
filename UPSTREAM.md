@@ -30,6 +30,9 @@ Keep changes in those directories to the documented seams so upstream can be re-
 - `packages/ui/src/components/connectors/ConnectorDetailPanel.test.tsx`: "places edit after the overlay actions…"
   failed upstream as written — Edit is an icon-only button and the test looked for it by text. It now reads the
   accessible name. Worth sending upstream.
+- `packages/ui/src/components/conversation/markdown-heavy-plugins.test.tsx`: waited the default 1s for a cold
+  dynamic import of mermaid/katex, which fails intermittently when the whole suite runs. The waits now allow 10s.
+  Worth sending upstream.
 - `packages/app/src/components/TemplatePrefillDialogs.test.tsx`: the test still asserted the old `border-brand`
   selected style after the action-kind picker became a `SegmentedControl`. It now asserts that control's selected
   style. Worth sending upstream.
@@ -47,3 +50,19 @@ The server is multi-user, which the frontend never had to know about. The additi
 - `i18n/locales/*.json` — an `auth` namespace.
 - `e2e/web/` (new) — browser tests against the built server and web app (`pnpm test:e2e`). The upstream Electron
   specs in `e2e/` still expect the Python backend and run separately as `pnpm test:e2e:desktop`.
+
+## Contract additions
+
+valuz-agent's `api/openapi.yaml` does not describe everything its frontend calls: about sixty paths (model channels,
+connectors, projects, automations, knowledge base…) are reached by hand-written clients in `packages/core/src/api`.
+As each of those modules is ported, its operations are added to the contract here, with shapes taken from the
+frontend's types and the Python routes. Added so far: `auth`, `orgs`, `teams`, `shares`, `devices` (new in
+agent-base), and `providers` plus `settings/model-defaults` and `settings/model-options` (existing frontend calls).
+
+Deliberate differences in behaviour:
+
+- Model channels belong to a member and are shared through the ladder; one shared by someone else is listed with
+  `source: "org"`. The default channel and model are per member.
+- Subscription channels (Claude Pro/Max, Codex · ChatGPT) are not offered by the server: they sign in through a CLI
+  on the machine that runs the agent, so they will belong to a device.
+- `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

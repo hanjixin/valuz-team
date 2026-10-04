@@ -4,6 +4,7 @@ import type { Redis } from "ioredis";
 import type { Config } from "./config.ts";
 import type { DeviceHub } from "./device-hub.ts";
 import type { PubSub } from "./pubsub.ts";
+import type { SecretBox } from "./secret-box.ts";
 
 /** What every module is handed: configuration and the shared infrastructure clients. */
 export interface Ctx {
@@ -11,6 +12,8 @@ export interface Ctx {
   db: Db;
   redis: Redis;
   pubsub: PubSub;
+  /** Encrypts credentials at rest. */
+  box: SecretBox;
   /** The links to desktop hosts connected to this replica. */
   hub: DeviceHub;
   startedAt: number;

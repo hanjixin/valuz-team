@@ -4304,6 +4304,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/attachments/kb": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach knowledge-base documents to the next message
+         * @description Stages a reference to each document — nothing is copied. When the message is
+         *     sent, the document's parsed text is written into the session's workspace on
+         *     the device, where the agent reads it. A document already staged is not added twice.
+         */
+        post: operations["addKbAttachments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/attachments": {
         parameters: {
             query?: never;
@@ -16901,6 +16923,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TestConnectorResponse"];
+                };
+            };
+        };
+    };
+    addKbAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    doc_ids: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description The attachments staged by this call */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionAttachmentList"];
                 };
             };
         };

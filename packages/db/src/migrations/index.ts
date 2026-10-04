@@ -15,6 +15,7 @@ import * as attachments from "./0013_attachments.ts";
 import * as knowledge from "./0014_knowledge.ts";
 import * as memory from "./0015_memory.ts";
 import * as automations from "./0016_automations.ts";
+import * as kbAttachments from "./0017_kb_attachments.ts";
 
 /**
  * Every migration, keyed by name; Kysely applies them in key order. Listed
@@ -38,4 +39,5 @@ export const migrations: Record<string, Migration> = {
   "0014_knowledge": knowledge,
   "0015_memory": memory,
   "0016_automations": automations,
+  "0017_kb_attachments": kbAttachments,
 };

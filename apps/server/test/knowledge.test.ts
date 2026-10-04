@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Host } from "@agent-base/host";
@@ -302,6 +302,55 @@ describe("knowledge base", () => {
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
     });
     expect(forged.status).toBe(401);
+  });
+
+  it("attaches a document to a message by reference: its text reaches the device when the message is sent", async () => {
+    const attach = (account: Account, ids: string[]) => call(account, "POST", "/v1/attachments/kb", { doc_ids: ids });
+    const staged = await attach(alice, [docs["报销制度.docx"] as string, docs["leave.txt"] as string]);
+    expect(staged.status).toBe(200);
+    expect(staged.body.items.map((item: Json) => [item.file_name, item.source_kind, item.session_id])).toEqual([
+      ["报销制度.docx", "kb_doc", null],
+      ["leave.txt", "kb_doc", null],
+    ]);
+    // Staging the same document again adds nothing; one that is not there is refused.
+    expect((await attach(alice, [docs["leave.txt"] as string])).body.items).toEqual([]);
+    expect((await attach(alice, [crypto.randomUUID()])).body.code).toBe("document_unavailable");
+    expect((await attach(mallory, [docs["leave.txt"] as string])).body.code).toBe("document_unavailable");
+    expect((await call(alice, "GET", "/v1/attachments")).body.items).toHaveLength(2);
+    // Nothing was copied into storage for them.
+    expect(await stored()).toHaveLength(3);
+
+    const [policy, leave] = staged.body.items;
+    expect((await call(alice, "DELETE", `/v1/attachments/${leave.id}`)).status).toBe(204);
+    const devices = (await call(alice, "GET", "/v1/devices")).body.devices;
+    const session = (
+      await call(alice, "POST", "/v1/sessions", { project_id: "chat-default", device_id: devices[0].id })
+    ).body;
+    model.replies.push({ content: "Thirty days." });
+    const sent = await call(alice, "POST", `/v1/sessions/${session.id}/messages`, {
+      prompt: "When must expenses be filed?",
+      attachment_ids: [policy.id],
+    });
+    expect(sent.status).toBe(200);
+    await eventually(async () => (await call(alice, "GET", `/v1/sessions/${session.id}`)).body.status === "idle");
+    // The agent was handed the parsed text, as a file in its workspace.
+    const landed = path.join(
+      dir,
+      "data",
+      "workspaces",
+      `chat-${session.id}`,
+      ".attachments",
+      `${policy.id.slice(0, 8)}-报销制度.docx.md`,
+    );
+    expect(await readFile(landed, "utf8")).toBe("# 报销制度\n\n差旅报销需在三十日内提交。");
+    expect(model.requests.at(-1)?.messages.at(-1)?.content).toContain("报销制度.docx.md");
+    const attached = (await call(alice, "GET", `/v1/sessions/${session.id}/attachments`)).body.items;
+    expect(attached).toEqual([
+      expect.objectContaining({ id: policy.id, source_kind: "kb_doc", session_id: session.id }),
+    ]);
+    expect((await call(alice, "GET", "/v1/attachments")).body.items).toEqual([]);
+    // The document itself is untouched.
+    expect((await call(alice, "GET", `/v1/docs/${docs["报销制度.docx"]}`)).body.status).toBe("ready");
   });
 
   it("deletes a knowledge base with its documents and their stored files", async () => {

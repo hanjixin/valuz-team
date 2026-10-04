@@ -16,7 +16,8 @@ export const insert = (
     file_name: string;
     size_bytes: number;
     mime_type: string | null;
-    storage_key: string;
+    storage_key: string | null;
+    kb_document_id?: string;
   },
 ) => db.insertInto("attachments").values(row).returningAll().executeTakeFirstOrThrow();
 

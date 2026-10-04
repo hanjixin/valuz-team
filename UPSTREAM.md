@@ -99,8 +99,8 @@ Deliberate differences in behaviour:
 - Files: a project's files are read from and written to its device on request; nothing is copied to the server.
   `POST /v1/files/resolve` always answers `kind: "remote"` with a tokenised address on this server, which fetches
   the bytes from the device. Attachments are staged on the server only until their message is sent. Agents do
-  not register deliverables yet, so the artifact lists are empty. Knowledge-base attachments (`/v1/attachments/kb`)
-  are not implemented.
+  not register deliverables yet, so the artifact lists are empty. A knowledge-base document attached to a message
+  (`/v1/attachments/kb`) is a reference until the message is sent, when its parsed text is written to the device.
 - Knowledge bases are the one kind of content the server keeps: they belong to the organization, not to a folder
   on a device, so `root_path` is empty and there is nothing to auto-discover. Documents arrive by upload
   (`POST /v1/kb/{id}/files`); `docs/import` and `docs/import-folder` stay unimplemented. Every member reads; the

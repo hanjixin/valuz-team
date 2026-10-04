@@ -13,6 +13,12 @@ export const uploadAttachment: Handler = async (req) => {
   return service.upload(ctx, auth, file as NonNullable<typeof file>);
 };
 
+export const addKbAttachments: Handler = async (req) => {
+  const ctx = req.server.ctx;
+  const { doc_ids } = req.body as { doc_ids: string[] };
+  return { items: await service.attachDocuments(ctx, await requireAuth(ctx, req), doc_ids) };
+};
+
 export const listStagedAttachments: Handler = async (req) => {
   const ctx = req.server.ctx;
   return { items: await service.listStaged(ctx, await requireAuth(ctx, req)) };

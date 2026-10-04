@@ -6489,6 +6489,35 @@ paths:
                 $ref: "#/components/schemas/TestConnectorResponse"
 
   # ── Files: what a member attaches, and what is on the device (agent-base) ──
+  /v1/attachments/kb:
+    post:
+      summary: Attach knowledge-base documents to the next message
+      operationId: addKbAttachments
+      tags: [files]
+      description: |
+        Stages a reference to each document — nothing is copied. When the message is
+        sent, the document's parsed text is written into the session's workspace on
+        the device, where the agent reads it. A document already staged is not added twice.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [doc_ids]
+              properties:
+                doc_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: {type: string}
+      responses:
+        "200":
+          description: The attachments staged by this call
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionAttachmentList"
   /v1/attachments:
     get:
       summary: The caller's attachments that are not yet part of a message

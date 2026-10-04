@@ -253,6 +253,22 @@ export async function getDocument(ctx: Ctx, auth: Auth, id: string): Promise<Sch
   };
 }
 
+/** A document's parsed text, for handing to an agent. 404 unless it is this organization's and ready. */
+export async function textOf(
+  ctx: Ctx,
+  orgId: string,
+  id: string,
+): Promise<{ id: string; filename: string; mimeType: string | null; text: string }> {
+  const row = UUID.test(id) ? await repo.findDocument(ctx.db, orgId, id) : undefined;
+  if (!row || row.status !== "ready") throw notFound("document");
+  return {
+    id: row.id,
+    filename: row.filename,
+    mimeType: row.mime_type,
+    text: (await repo.content(ctx.db, orgId, id)) ?? "",
+  };
+}
+
 export async function removeDocument(ctx: Ctx, auth: Auth, id: string): Promise<void> {
   const row = await requireDocument(ctx, auth, id);
   await requireBase(ctx, auth, row.kb_id, true);

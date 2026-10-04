@@ -417,7 +417,9 @@ export interface AttachmentsTable {
   file_name: string;
   size_bytes: number;
   mime_type: string | null;
-  storage_key: string;
+  /** Where an upload waits in storage; null for a reference to a knowledge-base document. */
+  storage_key: string | null;
+  kb_document_id: ColumnType<string | null, string | null | undefined, string | null>;
   device_path: string | null;
   created_at: Timestamp;
   consumed_at: NullableTime;

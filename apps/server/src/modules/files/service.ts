@@ -17,6 +17,7 @@ import mime from "mime";
 import type { Auth, Ctx } from "../../infra/context.ts";
 import { DeviceOfflineError } from "../../infra/device-hub.ts";
 import { HttpError, badRequest, notFound } from "../../infra/errors.ts";
+import * as knowledge from "../knowledge/service.ts";
 import * as devices from "../devices/service.ts";
 import * as projects from "../projects/service.ts";
 import * as sharing from "../sharing/service.ts";
@@ -42,11 +43,11 @@ const present = (row: repo.AttachmentRow): Item => ({
   file_name: row.file_name,
   ref: row.device_path ? `valuz-file://${row.device_path}` : "",
   parsed_ref: null,
-  parse_status: "skipped",
+  parse_status: row.kb_document_id ? "ready" : "skipped",
   size_bytes: row.size_bytes,
   mime_type: row.mime_type,
   created_at: row.created_at.getTime(),
-  source_kind: "local",
+  source_kind: row.kb_document_id ? "kb_doc" : "local",
   consumed_at: row.consumed_at?.getTime() ?? null,
 });
 
@@ -76,6 +77,33 @@ export async function upload(
   return present(row);
 }
 
+/**
+ * Stage knowledge-base documents for the caller's next message. A reference,
+ * not a copy: the document's text is fetched when the message is sent.
+ */
+export async function attachDocuments(ctx: Ctx, auth: Auth, documentIds: string[]): Promise<Item[]> {
+  const staged = new Set((await repo.listStaged(ctx.db, auth)).map((row) => row.kb_document_id));
+  const added: Item[] = [];
+  for (const documentId of new Set(documentIds)) {
+    const doc = await knowledge.textOf(ctx, auth.orgId, documentId).catch(() => {
+      throw badRequest(`knowledge-base document "${documentId}" is not available`, "document_unavailable");
+    });
+    if (staged.has(doc.id)) continue;
+    const row = await repo.insert(ctx.db, {
+      id: crypto.randomUUID(),
+      org_id: auth.orgId,
+      owner_id: auth.userId,
+      file_name: safeName(doc.filename),
+      size_bytes: Buffer.byteLength(doc.text),
+      mime_type: doc.mimeType,
+      storage_key: null,
+      kb_document_id: doc.id,
+    });
+    added.push(present(row));
+  }
+  return added;
+}
+
 export const listStaged = async (ctx: Ctx, auth: Auth): Promise<Item[]> =>
   (await repo.listStaged(ctx.db, auth)).map(present);
 
@@ -85,7 +113,10 @@ export const listForSession = async (ctx: Ctx, sessionId: string): Promise<Item[
 export async function discard(ctx: Ctx, auth: Auth, id: string): Promise<void> {
   const removed = UUID.test(id) ? await repo.remove(ctx.db, auth, id) : undefined;
   if (!removed) throw notFound("attachment");
-  await ctx.storage.remove(removed.storage_key).catch((err: unknown) => ctx.log(err, "could not remove a stored file"));
+  if (removed.storage_key)
+    await ctx.storage
+      .remove(removed.storage_key)
+      .catch((err: unknown) => ctx.log(err, "could not remove a stored file"));
 }
 
 /**
@@ -108,22 +139,27 @@ export async function deliver(
 
   const delivered: Attachment[] = [];
   for (const row of rows) {
-    const bytes = await ctx.storage.get(row.storage_key);
+    // An upload is delivered as it is; a knowledge-base document as the text parsed from it,
+    // which an agent can read whatever the original's format.
+    const document = row.kb_document_id ? await knowledge.textOf(ctx, auth.orgId, row.kb_document_id) : null;
+    const bytes = document ? Buffer.from(document.text, "utf8") : await ctx.storage.get(row.storage_key ?? "");
+    const name = document && !/\.(md|markdown|txt)$/i.test(row.file_name) ? `${row.file_name}.md` : row.file_name;
     const written = (await ctx.hub.call(
       session.device_id,
       "fs.write",
       // The id keeps two files of the same name apart.
       {
-        path: `${session.cwd}/.attachments/${row.id.slice(0, 8)}-${row.file_name}`,
+        path: `${session.cwd}/.attachments/${row.id.slice(0, 8)}-${name}`,
         content: bytes.toString("base64"),
         encoding: "base64",
       },
       actorOf(auth),
     )) as { path: string };
     await repo.markDelivered(ctx.db, row.id, session.id, written.path);
-    // The device's copy is the file now; the server was only holding it on the way.
-    await ctx.storage.remove(row.storage_key).catch((err: unknown) => ctx.log(err, "could not remove a staged file"));
-    delivered.push({ source_path: written.path, parsed_path: null });
+    // The device's copy is the file now; the server was only holding an upload on its way.
+    if (row.storage_key)
+      await ctx.storage.remove(row.storage_key).catch((err: unknown) => ctx.log(err, "could not remove a staged file"));
+    delivered.push({ source_path: written.path, parsed_path: document ? written.path : null });
   }
   return delivered;
 }

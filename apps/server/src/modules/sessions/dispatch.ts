@@ -15,6 +15,7 @@ import { type ApiProtocol, protocolFor } from "../providers/catalog.ts";
 import * as providers from "../providers/service.ts";
 import * as repo from "./repo.ts";
 import * as sessions from "./service.ts";
+import type { StoredEventRow } from "./translate.ts";
 
 const QUEUE_LIMIT = 20;
 type Row = NonNullable<Awaited<ReturnType<typeof repo.byId>>>;
@@ -153,7 +154,7 @@ export async function closeStrandedTurn(ctx: Ctx, sessionId: string, reason: str
         ts: Date.now(),
         event_uid: crypto.randomUUID(),
       });
-      if (stored) await ctx.pubsub.publish(sessionChannel(sessionId), stored);
+      if (stored) await announce(ctx, row.org_id, sessionId, stored);
     }
   }
   if (row.device_id) await repo.applyPatch(ctx.db, row.device_id, sessionId, { status: "idle", stop_reason: error });
@@ -161,6 +162,17 @@ export async function closeStrandedTurn(ctx: Ctx, sessionId: string, reason: str
 }
 
 export const sessionChannel = (sessionId: string): string => `sess:${sessionId}`;
+
+/**
+ * Tell everyone following: the session's own stream gets every event; the
+ * organization's channel gets the ones that mark a run starting or ending,
+ * which is what keeps lists of running work current.
+ */
+export async function announce(ctx: Ctx, orgId: string, sessionId: string, stored: StoredEventRow): Promise<void> {
+  await ctx.pubsub.publish(sessionChannel(sessionId), stored);
+  if ((repo.LIFECYCLE_TYPES as readonly string[]).includes(stored.type))
+    await ctx.pubsub.publish(orgChannel(orgId), { type: "session.event", session_id: sessionId, event: stored });
+}
 
 /** Stop the running turn. Queued input then waits until someone sends or resumes. */
 export async function interrupt(ctx: Ctx, auth: Auth, id: string): Promise<Schema<"SessionDetail">> {

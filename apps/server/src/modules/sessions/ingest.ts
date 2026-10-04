@@ -5,7 +5,7 @@
  */
 import type { Ctx } from "../../infra/context.ts";
 import { orgChannel } from "../../infra/pubsub.ts";
-import { closeStrandedTurn, drain, sessionChannel } from "./dispatch.ts";
+import { announce, closeStrandedTurn, drain } from "./dispatch.ts";
 import * as repo from "./repo.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -24,7 +24,8 @@ export function attach(ctx: Ctx): void {
       switch (frame.t) {
         case "event": {
           // A device may only write state for sessions that run on it.
-          if (!(await repo.runsOnDevice(ctx.db, device.id, frame.session_id))) return;
+          const orgId = await repo.orgOfSessionOn(ctx.db, device.id, frame.session_id);
+          if (!orgId) return;
           const stored = await repo.appendEvent(ctx.db, {
             session_id: frame.session_id,
             message_id: frame.message_id,
@@ -33,7 +34,7 @@ export function attach(ctx: Ctx): void {
             ts: frame.timestamp,
             event_uid: frame.uid,
           });
-          if (stored) await ctx.pubsub.publish(sessionChannel(frame.session_id), stored);
+          if (stored) await announce(ctx, orgId, frame.session_id, stored);
           return;
         }
         case "session.patch": {
@@ -48,7 +49,7 @@ export function attach(ctx: Ctx): void {
         }
         case "message.upsert": {
           const { message } = frame;
-          if (!(await repo.runsOnDevice(ctx.db, device.id, message.session_id))) return;
+          if (!(await repo.orgOfSessionOn(ctx.db, device.id, message.session_id))) return;
           await repo.upsertMessage(ctx.db, message);
           // A finished turn makes room for the next queued input. Never hold the
           // device's frames up for it: the next turn is a dispatch of its own.

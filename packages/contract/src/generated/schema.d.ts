@@ -4156,6 +4156,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Follow the lifecycle of every session the caller can see
+         * @description Server-sent events, one per lifecycle change: `run.started`, `run.finished`,
+         *     `run.status`. No prompt text and no deltas — this is what keeps lists of running
+         *     and finished work current. Each frame names its `session_id`. `heartbeat` events
+         *     carry the cursor to resume from.
+         */
+        get: operations["streamUserEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -15567,6 +15590,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LastSessionPick"];
+                };
+            };
+        };
+    };
+    streamUserEvents: {
+        parameters: {
+            query?: {
+                after_seq?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Event stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
                 };
             };
         };

@@ -14,7 +14,7 @@
 - Migrations: `make migrate` / `make migrate-down`
 - Contract coverage: `make contract` (add `-- --missing` to `pnpm contract:coverage` to list gaps)
 
-Integration tests start PostgreSQL and Redis with Testcontainers — Docker must be running. Node-side tests live in `test/` (not `src/`): the shared root Vitest config, which is the frontend's, collects `src/**/*.test.*` in a browser environment.
+Integration tests start PostgreSQL and Redis with Testcontainers — Docker must be running. The server's suite starts one of each for the whole run (`apps/server/test/global-setup.ts`) and gives every test file its own database and Redis keyspace — use `startTestServer()` from `test/harness.ts`, never a container per file. Node-side tests live in `test/` (not `src/`): the shared root Vitest config, which is the frontend's, collects `src/**/*.test.*` in a browser environment.
 
 ## Verification
 

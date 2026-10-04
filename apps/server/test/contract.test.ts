@@ -9,7 +9,7 @@ import { type TestServer, signUp, startTestServer } from "./harness.ts";
 describe("contract-driven server", () => {
   let t: TestServer;
   beforeAll(async () => {
-    t = await startTestServer();
+    t = await startTestServer({}, { ownRedis: true });
   });
   afterAll(() => t?.stop());
 
@@ -77,7 +77,7 @@ describe("contract-driven server", () => {
     expect(status.body).toMatchObject({ status: "running", version: "0.1.0", warnings: [], runtimes_available: [] });
     expect(status.body.uptime_seconds).toBeGreaterThanOrEqual(0);
 
-    await t.redis.stop();
+    await t.redis?.stop();
     const down = await t.call("GET", "/health");
     expect(down.status).toBe(503);
     expect(down.body).toEqual({ status: "degraded", checks: { database: true, redis: false } });

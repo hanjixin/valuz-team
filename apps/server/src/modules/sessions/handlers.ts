@@ -74,6 +74,12 @@ export const streamSessionEvents: Handler = async (req, reply) => {
   return reply;
 };
 
+export const streamUserEvents: Handler = async (req, reply) => {
+  const { ctx, auth } = await caller(req);
+  await events.streamForUser(ctx, auth, req, reply, (req.query as { after_seq?: number }).after_seq ?? 0);
+  return reply;
+};
+
 // -- Queue --
 
 export const listSessionQueue: Handler = async (req) => {

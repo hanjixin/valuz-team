@@ -6276,6 +6276,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/LastSessionPick"
 
+  # ── The caller's own stream: what is running, across every session they can see ──
+  /v1/stream:
+    get:
+      summary: Follow the lifecycle of every session the caller can see
+      operationId: streamUserEvents
+      tags: [sessions]
+      description: |
+        Server-sent events, one per lifecycle change: `run.started`, `run.finished`,
+        `run.status`. No prompt text and no deltas — this is what keeps lists of running
+        and finished work current. Each frame names its `session_id`. `heartbeat` events
+        carry the cursor to resume from.
+      parameters:
+        - name: after_seq
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0, default: 0}
+      responses:
+        "200":
+          description: Event stream
+          content:
+            text/event-stream:
+              schema: {type: string}
+
 components:
   securitySchemes:
     bearerAuth:

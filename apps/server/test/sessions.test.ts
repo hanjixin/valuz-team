@@ -388,6 +388,73 @@ describe("sessions", () => {
     await say(alice, session.id, "still there?");
   });
 
+  it("tells each member, on one stream, when the sessions they can see start and finish — and nothing else", async () => {
+    const follow = async (account: Account, afterSeq = 0) => {
+      const controller = new AbortController();
+      const res = await fetch(`${url}/v1/stream?after_seq=${afterSeq}`, {
+        headers: { authorization: `Bearer ${account.token}` },
+        signal: controller.signal,
+      });
+      const seen: { event: string; data: { seq: number; session_id?: string; payload?: Record<string, string> } }[] =
+        [];
+      const reader = res.body?.getReader() as ReadableStreamDefaultReader<Uint8Array>;
+      void (async () => {
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let event = "";
+        for (;;) {
+          const { done, value } = await reader.read().catch(() => ({ done: true, value: undefined }));
+          if (done) return;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            if (line.startsWith("event:")) event = line.slice(6).trim();
+            else if (line.startsWith("data:")) seen.push({ event, data: JSON.parse(line.slice(5)) });
+          }
+        }
+      })();
+      // Everything stored so far has been replayed once the first heartbeat arrives.
+      await eventually(async () => seen.some((frame) => frame.event === "heartbeat"));
+      return { seen, stop: () => controller.abort() };
+    };
+
+    const cursor = Number(
+      (
+        await t.server.ctx.db
+          .selectFrom("events")
+          .select((eb) => eb.fn.max("seq").as("seq"))
+          .executeTakeFirst()
+      )?.seq ?? 0,
+    );
+    const [forAlice, forBob] = await Promise.all([follow(alice, cursor), follow(bob, cursor)]);
+    const session = await newChat(alice);
+    model.replies.push({ content: "Noted." });
+    await say(alice, session.id, "a private thought");
+    await eventually(async () => forAlice.seen.some((frame) => frame.event === "run.finished"));
+
+    const mine = forAlice.seen.filter((frame) => frame.event !== "heartbeat");
+    expect(mine.map((frame) => frame.event)).toEqual(["run.started", "run.finished", "run.status"]);
+    expect(mine.every((frame) => frame.data.session_id === session.id)).toBe(true);
+    expect(mine[1]?.data.payload).toMatchObject({ status: "idle" });
+    // Lifecycle only: what was said never travels on this stream.
+    expect(JSON.stringify(forAlice.seen)).not.toContain("a private thought");
+    // bob cannot see alice's chat, so his stream stays quiet.
+    expect(forBob.seen.filter((frame) => frame.event !== "heartbeat")).toEqual([]);
+    forAlice.stop();
+    forBob.stop();
+
+    // Reconnecting from an earlier cursor replays what was missed.
+    const replay = await follow(alice, cursor);
+    expect(replay.seen.filter((frame) => frame.event !== "heartbeat").map((frame) => frame.event)).toEqual([
+      "run.started",
+      "run.finished",
+      "run.status",
+    ]);
+    expect(replay.seen.at(-1)).toMatchObject({ event: "heartbeat", data: { seq: mine.at(-1)?.data.seq } });
+    replay.stop();
+  });
+
   it("renames, and deletes with everything it held — but not mid-turn", async () => {
     const session = await newChat(alice);
     const renamed = await call(

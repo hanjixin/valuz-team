@@ -138,3 +138,31 @@ export const toEnvelope = (frame: Schema<"SessionEventFrame">): Schema<"SessionE
   timestamp: frame.timestamp ?? null,
   event_uid: frame.event_uid ?? null,
 });
+
+/**
+ * The lean projection for the caller's own stream: that a run started, changed
+ * status or ended — never what was said.
+ */
+export function toControlFrame(row: StoredEventRow & { session_id: string }) {
+  const data = row.data;
+  const projected: [string, Payload] | null =
+    row.type === "user_message"
+      ? ["run.started", {}]
+      : row.type === "session_idle"
+        ? ["run.finished", { status: "idle", stop_reason: stringify(data["stop_reason"] ?? "") }]
+        : row.type === "session_error"
+          ? ["run.finished", { status: "failed", message: text(data, "message", "category") || "agent run failed" }]
+          : row.type === "session_update"
+            ? ["run.status", { status: text(data, "status") }]
+            : null;
+  if (!projected) return null;
+  const [event_type, payload] = projected;
+  return {
+    seq: row.seq,
+    event_type,
+    session_id: row.session_id,
+    payload,
+    timestamp: row.ts,
+    event_uid: row.event_uid,
+  };
+}

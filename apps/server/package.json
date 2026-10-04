@@ -38,6 +38,7 @@
   "devDependencies": {
     "@agent-base/host": "workspace:*",
     "@agent-base/test-utils": "workspace:*",
+    "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.2"
   }
 }

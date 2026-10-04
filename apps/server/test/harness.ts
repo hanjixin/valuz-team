@@ -1,5 +1,8 @@
 import { migrateToLatest } from "@agent-base/db";
-import { type StartedPostgres, type StartedRedis, startPostgres, startRedis } from "@agent-base/test-utils";
+import { type StartedRedis, startRedis } from "@agent-base/test-utils";
+import { Redis } from "ioredis";
+import pg from "pg";
+import { inject } from "vitest";
 import { type Server, buildServer } from "../src/app.ts";
 import { loadConfig } from "../src/infra/config.ts";
 
@@ -9,7 +12,8 @@ type Json = any;
 
 export interface TestServer {
   server: Server;
-  redis: StartedRedis;
+  /** Only with `ownRedis`: a Redis container this server alone uses, so a test can take it down. */
+  redis?: StartedRedis;
   /** The environment this server was configured with — start a second replica on the same stores with it. */
   env: Record<string, string>;
   /** Accept real connections (needed for WebSockets) and return the base URL. */
@@ -23,12 +27,52 @@ export interface TestServer {
   stop(): Promise<void>;
 }
 
-/** A real server over real PostgreSQL and Redis, migrated and ready. */
-export async function startTestServer(env: Record<string, string> = {}): Promise<TestServer> {
-  const [pg, redis]: [StartedPostgres, StartedRedis] = await Promise.all([startPostgres(), startRedis()]);
+/** A database of this file's own in the shared PostgreSQL. */
+async function freshDatabase(): Promise<string> {
+  const admin = new URL(inject("pgUrl"));
+  const name = `t_${crypto.randomUUID().replaceAll("-", "")}`;
+  const client = new pg.Client({ connectionString: admin.toString() });
+  await client.connect();
+  try {
+    await client.query(`CREATE DATABASE ${name}`);
+  } finally {
+    await client.end();
+  }
+  admin.pathname = `/${name}`;
+  return admin.toString();
+}
+
+/**
+ * A Redis keyspace of this file's own in the shared Redis: the next logical
+ * database, emptied. Fifteen rotate, far more than ever run at once.
+ */
+async function freshKeyspace(): Promise<string> {
+  const shared = new URL(inject("redisUrl"));
+  const client = new Redis(shared.toString());
+  try {
+    const index = ((await client.incr("test:keyspace")) % 15) + 1;
+    await client.select(index);
+    await client.flushdb();
+    shared.pathname = `/${index}`;
+    return shared.toString();
+  } finally {
+    client.disconnect();
+  }
+}
+
+/**
+ * A real server over real PostgreSQL and Redis, migrated and ready.
+ * `ownRedis` gives it a Redis container to itself, for tests that stop Redis.
+ */
+export async function startTestServer(
+  env: Record<string, string> = {},
+  options: { ownRedis?: boolean } = {},
+): Promise<TestServer> {
+  const redis = options.ownRedis ? await startRedis() : undefined;
+  const [databaseUrl, redisUrl] = await Promise.all([freshDatabase(), redis?.url ?? freshKeyspace()]);
   const fullEnv = {
-    DATABASE_URL: pg.url,
-    REDIS_URL: redis.url,
+    DATABASE_URL: databaseUrl,
+    REDIS_URL: redisUrl,
     APP_SECRET: "test-secret-test-secret-test-secret-0123",
     LOG_LEVEL: "silent",
     ...env,
@@ -38,7 +82,7 @@ export async function startTestServer(env: Record<string, string> = {}): Promise
   await server.app.ready();
   return {
     server,
-    redis,
+    ...(redis ? { redis } : {}),
     env: fullEnv,
     listen: () => server.app.listen({ port: 0, host: "127.0.0.1" }),
     async call(method, url, options = {}) {
@@ -52,7 +96,7 @@ export async function startTestServer(env: Record<string, string> = {}): Promise
     },
     async stop() {
       await server.close();
-      await Promise.all([pg.stop(), redis.stop().catch(() => undefined)]);
+      await redis?.stop().catch(() => undefined);
     },
   };
 }

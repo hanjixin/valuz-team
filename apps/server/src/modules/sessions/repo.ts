@@ -113,13 +113,16 @@ export async function applyPatch(db: Db, deviceId: string, id: string, patch: Se
   return row?.org_id ?? null;
 }
 
-export const runsOnDevice = async (db: Db, deviceId: string, sessionId: string): Promise<boolean> =>
-  (await db
-    .selectFrom("sessions")
-    .select("id")
-    .where("id", "=", sessionId)
-    .where("device_id", "=", deviceId)
-    .executeTakeFirst()) !== undefined;
+/** The organization of a session that runs on this device — undefined when it does not. */
+export const orgOfSessionOn = async (db: Db, deviceId: string, sessionId: string): Promise<string | undefined> =>
+  (
+    await db
+      .selectFrom("sessions")
+      .select("org_id")
+      .where("id", "=", sessionId)
+      .where("device_id", "=", deviceId)
+      .executeTakeFirst()
+  )?.org_id;
 
 /** Sessions the server believes are running on a device, other than the ones it says it still has. */
 export const strandedOn = async (db: Db, deviceId: string, stillRunning: string[]): Promise<string[]> =>
@@ -348,3 +351,26 @@ export const restoreQueued = async (
 
 export const userName = async (db: Db, userId: string): Promise<string> =>
   (await db.selectFrom("users").select("name").where("id", "=", userId).executeTakeFirst())?.name ?? "";
+
+/** The event types that mark a run starting, changing status, or ending. */
+export const LIFECYCLE_TYPES = ["user_message", "session_idle", "session_error", "session_update"] as const;
+
+/** Lifecycle events, after a cursor, across the sessions the caller owns, was given, or can see through a project. */
+export function lifecycleAfter(db: Db, auth: Auth, projectIds: string[], afterSeq: number, limit: number) {
+  return db
+    .selectFrom("events as e")
+    .innerJoin("sessions as r", "r.id", "e.session_id")
+    .select(["e.seq", "e.session_id", "e.message_id", "e.type", "e.data", "e.ts", "e.event_uid"])
+    .where("r.org_id", "=", auth.orgId)
+    .where("e.seq", ">", afterSeq)
+    .where("e.type", "in", [...LIFECYCLE_TYPES])
+    .where((eb) =>
+      eb.or([
+        sql<boolean>`${permissionOf(auth, "session", "r")} IS NOT NULL`,
+        ...(projectIds.length ? [eb("r.project_id", "in", projectIds)] : []),
+      ]),
+    )
+    .orderBy("e.seq")
+    .limit(limit)
+    .execute();
+}

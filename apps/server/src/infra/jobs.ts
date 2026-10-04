@@ -6,8 +6,20 @@
 import { Queue, Worker } from "bullmq";
 import type { FastifyInstance } from "fastify";
 
+/** When a repeating job fires: by a cron pattern in a timezone, or every so many milliseconds. */
+export type Repeat = { pattern: string; tz: string } | { everyMs: number };
+
 export interface JobQueue<T> {
   add(jobs: T[], options?: { delayMs?: number }): Promise<void>;
+  /**
+   * Have `job` done repeatedly, under a name of the caller's choosing; calling
+   * again with the same name replaces the schedule. With several replicas each
+   * firing is still delivered to exactly one of them.
+   */
+  schedule(id: string, repeat: Repeat, job: T): Promise<void>;
+  unschedule(id: string): Promise<void>;
+  /** When `id` fires next (epoch ms), or null when it is not scheduled. */
+  nextRun(id: string): Promise<number | null>;
 }
 
 /**
@@ -41,13 +53,26 @@ export function startJobs<T>(
     connection.disconnect();
   });
 
+  const opts = { removeOnComplete: true, removeOnFail: 100 };
   return {
+    async schedule(id, repeat, job) {
+      await queue.upsertJobScheduler(
+        id,
+        "pattern" in repeat
+          ? { pattern: repeat.pattern, tz: repeat.tz }
+          : // Left to itself an interval fires at once; the first firing belongs one interval from now.
+            { every: repeat.everyMs, startDate: new Date(Date.now() + repeat.everyMs) },
+        { name, data: job as object, opts },
+      );
+    },
+    unschedule: async (id) => void (await queue.removeJobScheduler(id)),
+    nextRun: async (id) => (await queue.getJobScheduler(id))?.next ?? null,
     async add(jobs, { delayMs } = {}) {
       await queue.addBulk(
         jobs.map((data) => ({
           name,
           data,
-          opts: { removeOnComplete: true, removeOnFail: 100, ...(delayMs ? { delay: delayMs } : {}) },
+          opts: { ...opts, ...(delayMs ? { delay: delayMs } : {}) },
         })),
       );
     },

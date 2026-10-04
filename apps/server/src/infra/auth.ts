@@ -31,6 +31,21 @@ export async function requireAuth(ctx: Ctx, req: FastifyRequest): Promise<Auth> 
   return { userId: req.userId, name: row.name, orgId: row.org_id, role: row.role };
 }
 
+/**
+ * A member as the server acts for them when nobody is calling — a scheduled
+ * run, say. Null when they have left the organization.
+ */
+export async function authFor(ctx: Ctx, orgId: string, userId: string): Promise<Auth | null> {
+  const row = await ctx.db
+    .selectFrom("org_members as m")
+    .innerJoin("users as u", "u.id", "m.user_id")
+    .select(["m.role", "u.name"])
+    .where("m.org_id", "=", orgId)
+    .where("m.user_id", "=", userId)
+    .executeTakeFirst();
+  return row ? { userId, name: row.name, orgId, role: row.role } : null;
+}
+
 export const isOrgAdmin = (auth: Auth): boolean => auth.role === "owner" || auth.role === "admin";
 
 export function requireOrgAdmin(auth: Auth): void {

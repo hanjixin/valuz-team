@@ -167,7 +167,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 | 会话 | `sessions` `sessions/:id/messages` `…/events` `…/events/stream`(SSE) `…/interrupt` `…/actions` `…/shares` |
 | 任务 | `projects/:id/tasks` `tasks` `tasks/:id` `tasks/:id/plan` `tasks/:id/events(/stream)` `tasks/:id:intervene` `:inject` `:commit` `:abandon` |
 | 任务工具 | `mcp/tasks`（MCP over HTTP，仅 lead 会话的令牌可用） |
-| 自动化 | `projects/:id/automations` `automations/:id` `automations/:id/run` `automations/:id/runs` |
+| 自动化 | 已移植（`apps/server/src/modules/automations`） |
 | 知识库 | 已移植（`apps/server/src/modules/knowledge`） |
 | 通知 | `notifications` `notifications/stream` `notifications/read-all` `notifications/:id/read` |
 | 会话排队与反馈 | `sessions/:id/queue` `sessions/:id/queue/resume` `sessions/:id/feedback` |

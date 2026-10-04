@@ -320,6 +320,7 @@ export async function commit(ctx: Ctx, taskId: string, by: string, leadOverride?
       cwd: s.task.cwd,
       name: `${s.task.title} · lead`,
       metadata: roleMetadata({ task_id: taskId, role: "lead" }),
+      origin: "task",
     });
     await s.tx
       .updateTable("tasks")
@@ -829,6 +830,7 @@ async function dispatch(ctx: Ctx, taskId: string, args: Fields) {
         cwd: s.task.cwd,
         name: `${s.task.title} · ${node.title}`,
         metadata: roleMetadata({ task_id: taskId, role: "member", subtask_key: node.key }),
+        origin: "task",
       });
       await s.tx
         .insertInto("task_runs")

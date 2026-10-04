@@ -5,6 +5,7 @@ import { migrations } from "./migrations/index.ts";
 import type { Database } from "./schema.ts";
 
 export type {
+  AutomationTrigger,
   ConnectorConfig,
   ConnectorEntry,
   Database,

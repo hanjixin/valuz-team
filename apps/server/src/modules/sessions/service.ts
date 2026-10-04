@@ -130,7 +130,7 @@ export const recent = (
   ctx: Ctx,
   auth: Auth,
   projectIds: string[],
-  page: { projectId?: string; before?: repo.Before; limit: number },
+  page: { projectId?: string; before?: repo.Before; limit: number; origins: ("user" | "automation")[] },
 ) => repo.recent(ctx.db, auth, projectIds, page);
 
 /** The device a new session runs on: the one named, the project's, else the caller's own that is online. */
@@ -153,7 +153,13 @@ async function chooseDevice(ctx: Ctx, auth: Auth, wanted: string | null | undefi
   return best.id;
 }
 
-export async function create(ctx: Ctx, auth: Auth, input: Schema<"SessionCreateRequest">): Promise<Detail> {
+export async function create(
+  ctx: Ctx,
+  auth: Auth,
+  input: Schema<"SessionCreateRequest">,
+  /** Set when something other than a person starts the session, and says what for. */
+  started?: { origin: "automation"; metadata: Record<string, unknown> },
+): Promise<Detail> {
   const quickChat = input.project_id === CHAT_PROJECT;
   const existing = quickChat ? null : await projects.require(ctx, auth, input.project_id, "use");
   const deviceId = await chooseDevice(ctx, auth, input.device_id, existing?.device_id ?? null);
@@ -191,6 +197,7 @@ export async function create(ctx: Ctx, auth: Auth, input: Schema<"SessionCreateR
     cwd: project.root_path ?? managedCwd(quickChat ? `chat-${id}` : `project-${project.id}`),
     effort: input.effort ?? agent?.effort ?? null,
     permission_mode: input.permission_mode ?? agent?.permission_mode ?? "full_access",
+    ...(started ?? {}),
   });
   await audit.record(ctx.db, auth, "session.create", { type: "session", id }, { project_id: project.id });
   return get(ctx, auth, id);
@@ -338,6 +345,7 @@ export async function createForRun(
     cwd: string;
     name: string;
     metadata: Record<string, unknown>;
+    origin: "task" | "automation";
   },
 ): Promise<string> {
   const { agent } = run;
@@ -368,6 +376,7 @@ export async function createForRun(
     effort: agent.effort,
     permission_mode: agent.permission_mode,
     metadata: run.metadata,
+    origin: run.origin,
   });
   return id;
 }

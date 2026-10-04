@@ -489,6 +489,46 @@ export interface MemoryReviewsTable {
   reviewed_until: number;
 }
 
+export interface AutomationTrigger {
+  kind: "cron" | "interval" | "manual";
+  cron_expr?: string;
+  timezone?: string | null;
+  seconds?: number;
+}
+
+export interface AutomationsTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  project_id: string;
+  name: string;
+  agent_kind: string | null;
+  agent_slug: string | null;
+  action_kind: "chat" | "task";
+  prompt_template: string;
+  trigger: ColumnType<AutomationTrigger, string, string>;
+  status: ColumnType<"enabled" | "paused", "enabled" | "paused" | undefined, "enabled" | "paused">;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface AutomationRunsTable {
+  id: string;
+  automation_id: string;
+  trigger_type: string;
+  status: string;
+  input: ColumnType<unknown, string | null | undefined, string | null>;
+  result_summary: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  session_id: string | null;
+  task_id: string | null;
+  triggered_at: Timestamp;
+  started_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  completed_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  cancel_requested_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -522,6 +562,8 @@ export interface Database {
   kb_chunks: KbChunksTable;
   kb_tasks: KbTasksTable;
   project_kb_bindings: ProjectKbBindingsTable;
+  automations: AutomationsTable;
+  automation_runs: AutomationRunsTable;
   memories: MemoriesTable;
   memory_reviews: MemoryReviewsTable;
   message_feedback: MessageFeedbackTable;

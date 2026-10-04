@@ -69,7 +69,7 @@ connectors, projects, automations, knowledge base…) are reached by hand-writte
 As each of those modules is ported, its operations are added to the contract here, with shapes taken from the
 frontend's types and the Python routes. Added so far: `auth`, `orgs`, `teams`, `shares`, `devices` (new in
 agent-base), and `providers`, `settings/model-defaults`, `settings/model-options` and the project CRUD under `projects`
-(existing frontend calls), `connectors`, and the knowledge base (`kb`, `projects/{id}/kb-bindings`, and the
+(existing frontend calls), `connectors`, `automations`, and the knowledge base (`kb`, `projects/{id}/kb-bindings`, and the
 fields the frontend reads on `docs`).
 
 Deliberate differences in behaviour:
@@ -113,4 +113,10 @@ Deliberate differences in behaviour:
   prunes it. It is rendered into every turn rather than frozen when the session is created. The background review
   asks the session's model channel directly (one request, no tools) instead of running a throwaway session, so a
   session on a subscription channel is not reviewed; the review at the end of a multi-agent task is not ported.
+- Automations run an agent — a conversation, or a team task — by cron, by interval, or by hand. Not supported, and
+  refused when asked for: code execution, playbooks, worktrees, and event triggers (`event-sources` is empty).
+  An automation belongs to its creator and runs as them, on the device their sessions run on; whoever can see its
+  project sees it, and its owner or the project's editors change it. A run that starts a task succeeds once the
+  task is handed over; `task_status` follows the task. Proposals made by an agent in chat are not implemented.
+  The shortest interval is `AUTOMATION_MIN_INTERVAL_SECONDS` (30).
 - `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

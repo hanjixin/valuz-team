@@ -42,6 +42,8 @@ const Env = z.object({
     .int()
     .positive()
     .default(8 * 1024 * 1024),
+  /** The shortest interval an automation may repeat at. */
+  AUTOMATION_MIN_INTERVAL_SECONDS: z.coerce.number().int().min(1).default(30),
   /** How long a conversation must be quiet before it is reviewed for what to remember. 0 turns the review off. */
   MEMORY_REVIEW_IDLE_SECONDS: z.coerce.number().int().min(0).default(60),
   /** Override where api/openapi.yaml is read from (the bundled server ships a copy). */

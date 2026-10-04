@@ -31,8 +31,6 @@ export async function page(
   auth: Auth,
   query: { projectId?: string; tab: Tab; limit: number; cursor?: string },
 ): Promise<Schema<"ActivityPage">> {
-  // Nothing is run by an automation yet, so that tab is empty.
-  if (query.tab === "automation") return { items: [], next_cursor: null };
   const visible = await projects.list(ctx, auth);
   const names = new Map(visible.map((project) => [project.id, project.kind === "chat" ? null : project.name]));
   const projectIds = visible.map((project) => project.id);
@@ -43,9 +41,13 @@ export async function page(
     // One more than asked for, to know whether anything is left.
     limit: query.limit + 1,
   };
+  // What an automation started is a conversation too, shown under its own tab as well as under "all".
+  const origins = { all: ["user", "automation"], chat: ["user"], automation: ["automation"], task: [] }[query.tab] as (
+    "user" | "automation"
+  )[];
   const [chats, work] = await Promise.all([
-    query.tab === "task" ? [] : sessions.recent(ctx, auth, projectIds, page),
-    query.tab === "chat" ? [] : tasks.recent(ctx, projectIds, page),
+    origins.length === 0 ? [] : sessions.recent(ctx, auth, projectIds, { ...page, origins }),
+    query.tab === "all" || query.tab === "task" ? tasks.recent(ctx, projectIds, page) : [],
   ]);
   const items: Item[] = [
     ...chats.map((row): Item => ({
@@ -53,7 +55,7 @@ export async function page(
       id: row.id,
       title: row.name ?? "",
       status: row.status,
-      is_automation: false,
+      is_automation: row.origin === "automation",
       project_id: row.project_id,
       project_name: names.get(row.project_id) ?? null,
       sort_at: Number(row.sort_at),

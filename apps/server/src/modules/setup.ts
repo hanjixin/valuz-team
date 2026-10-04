@@ -4,6 +4,7 @@
  */
 import type { FastifyInstance } from "fastify";
 import { mountToolkit, toolkitServer } from "../infra/toolkit.ts";
+import * as automations from "./automations/runner.ts";
 import { registerDeviceLink } from "./devices/link.ts";
 import * as parser from "./knowledge/parse.ts";
 import * as knowledge from "./knowledge/service.ts";
@@ -72,5 +73,9 @@ export function setupModules(app: FastifyInstance): void {
     authorize: (sessionId) => authorizeMemory(app.ctx, sessionId),
     call: (owner, tool, args) => callMemoryTool(app.ctx, owner, tool, args),
   });
+
+  // Automations: the clock starts runs, and a turn ending tells a run how it went.
+  automations.start(app);
+  onTurnEnd(app.ctx, (turn) => automations.handleTurnEnd(app.ctx, turn));
   registerDeviceLink(app);
 }

@@ -136,6 +136,14 @@ replace and remove entries. When a conversation has been quiet for a minute, a b
 asks the session's model what else was worth keeping and applies its answer through the same store — so the same
 limits, secret redaction and scan for hidden instructions cover both paths.
 
+## Automations
+
+An automation is an agent's work started by the clock or by hand (`modules/automations`): a conversation with an
+agent, or a goal handed to a project's team as a task. The clock is BullMQ's repeating jobs (`infra/jobs.ts`), so
+with several replicas each firing is delivered to exactly one. A firing runs as the automation's owner, on the
+device their sessions run on, and is recorded as a run; one that finds the previous run still going is noted and
+dropped. A conversation's turn ending is what tells its run how it went.
+
 ## Calling out on a member's behalf
 
 A model channel's endpoint is a URL a member typed. Before the server calls one, `infra/outbound.ts` checks it
@@ -149,8 +157,8 @@ returned by the API.
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events, fork), and the collaboration UI (Settings → Organization,
-Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed.
-Not yet: regenerate, automations, channels.
+Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations.
+Not yet: regenerate, channels (Feishu, WeCom), playbooks, plugins.
 
 The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),
 module by module. `make contract` reports how much of the contract is implemented.

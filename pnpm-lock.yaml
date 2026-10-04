@@ -259,6 +259,12 @@ importers:
       bullmq:
         specifier: ^6.3.11
         version: 6.3.11(ioredis@5.11.1)(pg@8.23.1)
+      cron-parser:
+        specifier: ^5.10.1
+        version: 5.10.1
+      cronstrue:
+        specifier: ^3.27.0
+        version: 3.27.0
       fastify:
         specifier: ^5.2.0
         version: 5.12.5
@@ -4240,6 +4246,10 @@ packages:
   cron-parser@5.10.1:
     resolution: {integrity: sha512-pKRrRagItwk9rGIStcUyMxFX34x56zoX3KDf9HJ4ttwkXIK1qxK63EvXvEDmlxI9AdPJ+Y7TEKRftRlW5eSS7A==}
     engines: {node: '>=18'}
+
+  cronstrue@3.27.0:
+    resolution: {integrity: sha512-AKhV4ilvx73NmicrZCGASdszUIf2ew0A/6jQQTh4pu3lIUzgWOGjT3Gv3CGIcTQ/p8Qy/tZuCmlaOftj8PXaNg==}
+    hasBin: true
 
   cross-dirname@0.1.0:
     resolution: {integrity: sha512-+R08/oI0nl3vfPcqftZRpytksBXDzOUveBq/NBVx0sUp1axwzPQrKinNx5yd5sxPu8j1wIy8AfnVQ+5eFdha6Q==}
@@ -12002,6 +12012,8 @@ snapshots:
   cron-parser@5.10.1:
     dependencies:
       luxon: 3.7.2
+
+  cronstrue@3.27.0: {}
 
   cross-dirname@0.1.0:
     optional: true

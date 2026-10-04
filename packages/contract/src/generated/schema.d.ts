@@ -4554,6 +4554,236 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/automations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List automations
+         * @description Grouped by project. Without `project_id`: every automation the caller can see.
+         */
+        get: operations["listAutomations"];
+        put?: never;
+        /** Create an automation */
+        post: operations["createAutomation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/project-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Where a new automation may run */
+        get: operations["listAutomationProjectTargets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/event-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What can trigger an automation besides the clock */
+        get: operations["listAutomationEventSources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/event-sources/{source}/refs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What of an event source can be subscribed to */
+        get: operations["listAutomationEventRefs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/validate-cron": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check a cron expression and say when it fires */
+        post: operations["validateAutomationCron"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/validate-interval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check an interval */
+        post: operations["validateAutomationInterval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/{automation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One automation */
+        get: operations["getAutomation"];
+        put?: never;
+        post?: never;
+        /** Delete an automation and its run history */
+        delete: operations["deleteAutomation"];
+        options?: never;
+        head?: never;
+        /** Change an automation */
+        patch: operations["updateAutomation"];
+        trace?: never;
+    };
+    "/v1/automations/{automation_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop an automation's trigger */
+        post: operations["pauseAutomation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/{automation_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start an automation's trigger again */
+        post: operations["resumeAutomation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/{automation_id}/run-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run an automation now
+         * @description Starts a run whatever the trigger, and answers at once with the run as it stands.
+         */
+        post: operations["runAutomationNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/{automation_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An automation's runs, newest first */
+        get: operations["listAutomationRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/{automation_id}/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One run */
+        get: operations["getAutomationRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/{automation_id}/runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop a run that is still going */
+        post: operations["cancelAutomationRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -8756,6 +8986,229 @@ export interface components {
         };
         KbBindingUpdate: {
             bindings: components["schemas"]["KbBinding"][];
+        };
+        /** @description When an automation runs — by a cron expression, every so many seconds, or only when asked. */
+        AutomationTrigger: {
+            /** @enum {string} */
+            kind: "cron" | "interval" | "manual" | "event";
+            cron_expr?: string;
+            timezone?: string | null;
+            seconds?: number;
+        };
+        AutomationItem: {
+            automation_id: string;
+            project_id: string;
+            project_name: string;
+            /** @enum {string} */
+            project_kind: "chat" | "project";
+            name: string;
+            /** @enum {string|null} */
+            agent_kind?: "project_member" | "library_agent" | null;
+            agent_slug?: string | null;
+            agent_name?: string | null;
+            /** @enum {string} */
+            action_kind: "chat" | "task";
+            execution: {
+                kind: string;
+            } & {
+                [key: string]: unknown;
+            };
+            input: {
+                kind: string;
+            } & {
+                [key: string]: unknown;
+            };
+            result: {
+                kind: string;
+            } & {
+                [key: string]: unknown;
+            };
+            worktree: boolean;
+            playbook_definition_id?: string | null;
+            playbook_version?: number | null;
+            event_source?: string | null;
+            event_refs?: string[] | null;
+            trigger: components["schemas"]["AutomationTrigger"];
+            trigger_human_readable: string;
+            /** @enum {string} */
+            status: "enabled" | "paused";
+            /** Format: int64 */
+            next_run_at?: number | null;
+            /** Format: int64 */
+            last_run_at?: number | null;
+            last_run_status?: string | null;
+            /** Format: uuid */
+            owner_id?: string;
+            /** @description Whether the caller may change it — its owner, or whoever may edit its project. */
+            editable?: boolean;
+        };
+        AutomationDetail: components["schemas"]["AutomationItem"] & {
+            prompt_template: string;
+            total_runs: number;
+            recent_failures: number;
+            /** Format: int64 */
+            created_at: number;
+            /** Format: int64 */
+            updated_at: number;
+        };
+        AutomationGroup: {
+            project_id: string;
+            project_name: string;
+            /** @enum {string} */
+            project_kind: "chat" | "project";
+            automations: components["schemas"]["AutomationItem"][];
+        };
+        AutomationCreateRequest: {
+            name: string;
+            /** @enum {string} */
+            project_kind: "chat" | "project";
+            project_id?: string | null;
+            /** @enum {string|null} */
+            agent_kind?: "project_member" | "library_agent" | null;
+            agent_slug?: string | null;
+            prompt_template: string;
+            trigger: components["schemas"]["AutomationTrigger"];
+            /** @enum {string|null} */
+            action_kind?: "chat" | "task" | null;
+            worktree?: boolean | null;
+            playbook_definition_id?: string | null;
+            playbook_version?: number | null;
+            event_source?: string | null;
+            event_refs?: string[] | null;
+            execution?: ({
+                kind: string;
+            } & {
+                [key: string]: unknown;
+            }) | null;
+            input?: ({
+                kind: string;
+            } & {
+                [key: string]: unknown;
+            }) | null;
+            result?: ({
+                kind: string;
+            } & {
+                [key: string]: unknown;
+            }) | null;
+        };
+        AutomationUpdateRequest: {
+            name?: string | null;
+            prompt_template?: string | null;
+            trigger?: components["schemas"]["AutomationTrigger"] | null;
+            agent_slug?: string | null;
+            /** @enum {string|null} */
+            action_kind?: "chat" | "task" | null;
+            worktree?: boolean | null;
+            playbook_definition_id?: string | null;
+            playbook_version?: number | null;
+            event_source?: string | null;
+            event_refs?: string[] | null;
+            execution?: ({
+                kind: string;
+            } & {
+                [key: string]: unknown;
+            }) | null;
+            input?: ({
+                kind: string;
+            } & {
+                [key: string]: unknown;
+            }) | null;
+            result?: ({
+                kind: string;
+            } & {
+                [key: string]: unknown;
+            }) | null;
+        };
+        AutomationProjectTarget: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "chat" | "project";
+            project_id?: string | null;
+        };
+        AutomationEventSource: {
+            source: string;
+            event_types: string[];
+        };
+        AutomationEventRef: {
+            ref: string;
+            label: string;
+            group?: string | null;
+            kind?: string | null;
+        };
+        AutomationCronValidateRequest: {
+            expr: string;
+            timezone?: string | null;
+        };
+        AutomationCronValidation: {
+            valid: boolean;
+            human_readable?: string | null;
+            next_runs: string[];
+            error_message?: string | null;
+        };
+        AutomationIntervalValidateRequest: {
+            seconds: number;
+        };
+        AutomationIntervalValidation: {
+            valid: boolean;
+            human_readable?: string | null;
+            error_message?: string | null;
+        };
+        AutomationRunNowRequest: {
+            /** @description Text (or an object) appended to the automation's prompt for this run. */
+            input?: unknown;
+            wait_seconds?: number | null;
+        };
+        AutomationRun: {
+            run_id: string;
+            automation_id: string;
+            project_id: string;
+            /** @enum {string} */
+            trigger_type: "cron" | "interval" | "manual" | "agent" | "api" | "event" | "recovered_skip" | "system";
+            /** @enum {string} */
+            status: "queued" | "running" | "success" | "failed" | "timeout" | "cancelled" | "skipped" | "interrupted_by_shutdown";
+            /** Format: int64 */
+            triggered_at: number;
+            /** Format: int64 */
+            started_at?: number | null;
+            /** Format: int64 */
+            completed_at?: number | null;
+            /** Format: int64 */
+            duration_ms?: number | null;
+            result_summary?: string | null;
+            error_code?: string | null;
+            error_message_key?: string | null;
+            error_message?: string | null;
+            session_id?: string | null;
+            created_files: string[];
+            playbook_run_id?: string | null;
+            executor_ref?: string | null;
+            invoked_by_ref?: string | null;
+            has_artifact: boolean;
+            has_input: boolean;
+            task_id?: string | null;
+            task_title?: string | null;
+            /** @enum {string|null} */
+            task_status?: "active" | "completed" | "failed" | "paused" | null;
+        };
+        AutomationRunDetail: components["schemas"]["AutomationRun"] & {
+            input?: unknown;
+            artifact?: {
+                [key: string]: unknown;
+            } | null;
+            files?: {
+                [key: string]: unknown;
+            }[];
+            log_tail?: string | null;
+            /** Format: int64 */
+            cancel_requested_at?: number | null;
+        };
+        AutomationRunAccepted: {
+            run_id: string;
+            automation_id: string;
+            /** @enum {string} */
+            status: "queued" | "running";
+            run?: components["schemas"]["AutomationRunDetail"] | null;
         };
     };
     responses: never;
@@ -16923,6 +17376,381 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OkResponse"];
+                };
+            };
+        };
+    };
+    listAutomations: {
+        parameters: {
+            query?: {
+                project_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        groups: components["schemas"]["AutomationGroup"][];
+                    };
+                };
+            };
+        };
+    };
+    createAutomation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationDetail"];
+                };
+            };
+        };
+    };
+    listAutomationProjectTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        targets: components["schemas"]["AutomationProjectTarget"][];
+                    };
+                };
+            };
+        };
+    };
+    listAutomationEventSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        sources: components["schemas"]["AutomationEventSource"][];
+                    };
+                };
+            };
+        };
+    };
+    listAutomationEventRefs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        refs: components["schemas"]["AutomationEventRef"][];
+                    };
+                };
+            };
+        };
+    };
+    validateAutomationCron: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationCronValidateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationCronValidation"];
+                };
+            };
+        };
+    };
+    validateAutomationInterval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationIntervalValidateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationIntervalValidation"];
+                };
+            };
+        };
+    };
+    getAutomation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationDetail"];
+                };
+            };
+        };
+    };
+    deleteAutomation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateAutomation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationDetail"];
+                };
+            };
+        };
+    };
+    pauseAutomation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationDetail"];
+                };
+            };
+        };
+    };
+    resumeAutomation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationDetail"];
+                };
+            };
+        };
+    };
+    runAutomationNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AutomationRunNowRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationRunAccepted"];
+                };
+            };
+        };
+    };
+    listAutomationRuns: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        runs: components["schemas"]["AutomationRun"][];
+                    };
+                };
+            };
+        };
+    };
+    getAutomationRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationRunDetail"];
+                };
+            };
+        };
+    };
+    cancelAutomationRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                automation_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationRunDetail"];
                 };
             };
         };

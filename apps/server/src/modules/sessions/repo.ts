@@ -41,7 +41,7 @@ export interface Before {
 }
 
 /**
- * The caller's conversations with a person, newest first, a page at a time.
+ * The caller's conversations — with a person, or started by an automation — newest first, a page at a time.
  * Ordered by the millisecond a session last changed, then by id, so a cursor
  * taken from one page lands exactly on the next.
  */
@@ -49,14 +49,14 @@ export async function recent(
   db: Db,
   auth: Auth,
   projectIds: string[],
-  page: { projectId?: string; before?: Before; limit: number },
+  page: { projectId?: string; before?: Before; limit: number; origins: ("user" | "automation")[] },
 ) {
   const sortAt = sql<string>`floor(extract(epoch from r.updated_at) * 1000)::bigint`;
   let query = db
     .selectFrom("sessions as r")
-    .select(["r.id", "r.name", "r.status", "r.project_id", sortAt.as("sort_at")])
+    .select(["r.id", "r.name", "r.status", "r.project_id", "r.origin", sortAt.as("sort_at")])
     .where("r.org_id", "=", auth.orgId)
-    .where("r.origin", "=", "user")
+    .where("r.origin", "in", page.origins)
     .where((eb) =>
       eb.or([
         sql<boolean>`${permissionOf(auth, "session", "r")} IS NOT NULL`,
@@ -89,6 +89,8 @@ export interface NewSession {
   permission_mode: string;
   /** What the session is for, beyond a conversation — e.g. its role in a task. */
   metadata?: Record<string, unknown>;
+  /** Who started it: a person (the default), a task, or an automation. */
+  origin?: "user" | "task" | "automation";
 }
 
 export const insert = async (db: Db, row: NewSession): Promise<void> =>

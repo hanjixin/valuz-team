@@ -6900,6 +6900,330 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkResponse"
 
+  # ── Automations (agent-base) ───────────────────────────────────────────────
+  # Work an agent does on a schedule, or when asked: a conversation or a team task,
+  # started on the project's device as the automation's owner.
+  /v1/automations:
+    get:
+      summary: List automations
+      operationId: listAutomations
+      tags: [automations]
+      description: |
+        Grouped by project. Without `project_id`: every automation the caller can see.
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groups]
+                properties:
+                  groups:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AutomationGroup"
+    post:
+      summary: Create an automation
+      operationId: createAutomation
+      tags: [automations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationCreateRequest"
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationDetail"
+  /v1/automations/project-targets:
+    get:
+      summary: Where a new automation may run
+      operationId: listAutomationProjectTargets
+      tags: [automations]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [targets]
+                properties:
+                  targets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AutomationProjectTarget"
+  /v1/automations/event-sources:
+    get:
+      summary: What can trigger an automation besides the clock
+      operationId: listAutomationEventSources
+      tags: [automations]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sources]
+                properties:
+                  sources:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AutomationEventSource"
+  /v1/automations/event-sources/{source}/refs:
+    get:
+      summary: What of an event source can be subscribed to
+      operationId: listAutomationEventRefs
+      tags: [automations]
+      parameters:
+        - name: source
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [refs]
+                properties:
+                  refs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AutomationEventRef"
+  /v1/automations/validate-cron:
+    post:
+      summary: Check a cron expression and say when it fires
+      operationId: validateAutomationCron
+      tags: [automations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationCronValidateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationCronValidation"
+  /v1/automations/validate-interval:
+    post:
+      summary: Check an interval
+      operationId: validateAutomationInterval
+      tags: [automations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationIntervalValidateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationIntervalValidation"
+  /v1/automations/{automation_id}:
+    get:
+      summary: One automation
+      operationId: getAutomation
+      tags: [automations]
+      parameters:
+        - name: automation_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationDetail"
+    patch:
+      summary: Change an automation
+      operationId: updateAutomation
+      tags: [automations]
+      parameters:
+        - name: automation_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationDetail"
+    delete:
+      summary: Delete an automation and its run history
+      operationId: deleteAutomation
+      tags: [automations]
+      parameters:
+        - name: automation_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "204":
+          description: OK
+  /v1/automations/{automation_id}/pause:
+    post:
+      summary: Stop an automation's trigger
+      operationId: pauseAutomation
+      tags: [automations]
+      parameters:
+        - name: automation_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationDetail"
+  /v1/automations/{automation_id}/resume:
+    post:
+      summary: Start an automation's trigger again
+      operationId: resumeAutomation
+      tags: [automations]
+      parameters:
+        - name: automation_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationDetail"
+  /v1/automations/{automation_id}/run-now:
+    post:
+      summary: Run an automation now
+      operationId: runAutomationNow
+      tags: [automations]
+      description: |
+        Starts a run whatever the trigger, and answers at once with the run as it stands.
+      parameters:
+        - name: automation_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRunNowRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRunAccepted"
+  /v1/automations/{automation_id}/runs:
+    get:
+      summary: An automation's runs, newest first
+      operationId: listAutomationRuns
+      tags: [automations]
+      parameters:
+        - name: automation_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 50, default: 20}
+        - name: cursor
+          in: query
+          required: false
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [runs]
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AutomationRun"
+  /v1/automations/{automation_id}/runs/{run_id}:
+    get:
+      summary: One run
+      operationId: getAutomationRun
+      tags: [automations]
+      parameters:
+        - name: automation_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: run_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRunDetail"
+  /v1/automations/{automation_id}/runs/{run_id}/cancel:
+    post:
+      summary: Stop a run that is still going
+      operationId: cancelAutomationRun
+      tags: [automations]
+      parameters:
+        - name: automation_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: run_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRunDetail"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -13239,3 +13563,210 @@ components:
           maxItems: 500
           items:
             $ref: "#/components/schemas/KbBinding"
+    AutomationTrigger:
+      type: object
+      required: [kind]
+      description: When an automation runs — by a cron expression, every so many seconds, or only when asked.
+      properties:
+        kind: {type: string, enum: [cron, interval, manual, event]}
+        cron_expr: {type: string, maxLength: 128}
+        timezone: {type: string, nullable: true}
+        seconds: {type: integer, minimum: 1}
+    AutomationItem:
+      type: object
+      required: [automation_id, project_id, project_name, project_kind, name, action_kind, execution, input, result, worktree, trigger, trigger_human_readable, status]
+      properties:
+        automation_id: {type: string}
+        project_id: {type: string}
+        project_name: {type: string}
+        project_kind: {type: string, enum: [chat, project]}
+        name: {type: string}
+        agent_kind: {type: string, enum: [project_member, library_agent], nullable: true}
+        agent_slug: {type: string, nullable: true}
+        agent_name: {type: string, nullable: true}
+        action_kind: {type: string, enum: [chat, task]}
+        execution: {type: object, required: [kind], properties: {kind: {type: string}}, additionalProperties: true}
+        input: {type: object, required: [kind], properties: {kind: {type: string}}, additionalProperties: true}
+        result: {type: object, required: [kind], properties: {kind: {type: string}}, additionalProperties: true}
+        worktree: {type: boolean}
+        playbook_definition_id: {type: string, nullable: true}
+        playbook_version: {type: integer, nullable: true}
+        event_source: {type: string, nullable: true}
+        event_refs: {type: array, nullable: true, items: {type: string}}
+        trigger:
+          $ref: "#/components/schemas/AutomationTrigger"
+        trigger_human_readable: {type: string}
+        status: {type: string, enum: [enabled, paused]}
+        next_run_at: {type: integer, format: int64, nullable: true}
+        last_run_at: {type: integer, format: int64, nullable: true}
+        last_run_status: {type: string, nullable: true}
+        owner_id: {type: string, format: uuid}
+        editable:
+          type: boolean
+          description: Whether the caller may change it — its owner, or whoever may edit its project.
+    AutomationDetail:
+      allOf:
+        - $ref: "#/components/schemas/AutomationItem"
+        - type: object
+          required: [prompt_template, total_runs, recent_failures, created_at, updated_at]
+          properties:
+            prompt_template: {type: string}
+            total_runs: {type: integer}
+            recent_failures: {type: integer}
+            created_at: {type: integer, format: int64}
+            updated_at: {type: integer, format: int64}
+    AutomationGroup:
+      type: object
+      required: [project_id, project_name, project_kind, automations]
+      properties:
+        project_id: {type: string}
+        project_name: {type: string}
+        project_kind: {type: string, enum: [chat, project]}
+        automations:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutomationItem"
+    AutomationCreateRequest:
+      type: object
+      required: [name, project_kind, prompt_template, trigger]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 50}
+        project_kind: {type: string, enum: [chat, project]}
+        project_id: {type: string, nullable: true}
+        agent_kind: {type: string, enum: [project_member, library_agent], nullable: true}
+        agent_slug: {type: string, nullable: true}
+        prompt_template: {type: string, minLength: 1, maxLength: 20000}
+        trigger:
+          $ref: "#/components/schemas/AutomationTrigger"
+        action_kind: {type: string, enum: [chat, task], nullable: true}
+        worktree: {type: boolean, nullable: true}
+        playbook_definition_id: {type: string, nullable: true}
+        playbook_version: {type: integer, nullable: true}
+        event_source: {type: string, nullable: true}
+        event_refs: {type: array, nullable: true, items: {type: string}}
+        execution: {type: object, nullable: true, required: [kind], properties: {kind: {type: string}}, additionalProperties: true}
+        input: {type: object, nullable: true, required: [kind], properties: {kind: {type: string}}, additionalProperties: true}
+        result: {type: object, nullable: true, required: [kind], properties: {kind: {type: string}}, additionalProperties: true}
+    AutomationUpdateRequest:
+      type: object
+      properties:
+        name: {type: string, minLength: 1, maxLength: 50, nullable: true}
+        prompt_template: {type: string, minLength: 1, maxLength: 20000, nullable: true}
+        trigger:
+          allOf:
+            - $ref: "#/components/schemas/AutomationTrigger"
+          nullable: true
+        agent_slug: {type: string, nullable: true}
+        action_kind: {type: string, enum: [chat, task], nullable: true}
+        worktree: {type: boolean, nullable: true}
+        playbook_definition_id: {type: string, nullable: true}
+        playbook_version: {type: integer, nullable: true}
+        event_source: {type: string, nullable: true}
+        event_refs: {type: array, nullable: true, items: {type: string}}
+        execution: {type: object, nullable: true, required: [kind], properties: {kind: {type: string}}, additionalProperties: true}
+        input: {type: object, nullable: true, required: [kind], properties: {kind: {type: string}}, additionalProperties: true}
+        result: {type: object, nullable: true, required: [kind], properties: {kind: {type: string}}, additionalProperties: true}
+    AutomationProjectTarget:
+      type: object
+      required: [id, name, kind]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        kind: {type: string, enum: [chat, project]}
+        project_id: {type: string, nullable: true}
+    AutomationEventSource:
+      type: object
+      required: [source, event_types]
+      properties:
+        source: {type: string}
+        event_types: {type: array, items: {type: string}}
+    AutomationEventRef:
+      type: object
+      required: [ref, label]
+      properties:
+        ref: {type: string}
+        label: {type: string}
+        group: {type: string, nullable: true}
+        kind: {type: string, nullable: true}
+    AutomationCronValidateRequest:
+      type: object
+      required: [expr]
+      properties:
+        expr: {type: string, maxLength: 128}
+        timezone: {type: string, nullable: true}
+    AutomationCronValidation:
+      type: object
+      required: [valid, next_runs]
+      properties:
+        valid: {type: boolean}
+        human_readable: {type: string, nullable: true}
+        next_runs: {type: array, items: {type: string}}
+        error_message: {type: string, nullable: true}
+    AutomationIntervalValidateRequest:
+      type: object
+      required: [seconds]
+      properties:
+        seconds: {type: integer}
+    AutomationIntervalValidation:
+      type: object
+      required: [valid]
+      properties:
+        valid: {type: boolean}
+        human_readable: {type: string, nullable: true}
+        error_message: {type: string, nullable: true}
+    AutomationRunNowRequest:
+      type: object
+      properties:
+        input:
+          nullable: true
+          description: Text (or an object) appended to the automation's prompt for this run.
+        wait_seconds: {type: integer, minimum: 0, maximum: 60, nullable: true}
+    AutomationRun:
+      type: object
+      required: [run_id, automation_id, project_id, trigger_type, status, triggered_at, created_files, has_artifact, has_input]
+      properties:
+        run_id: {type: string}
+        automation_id: {type: string}
+        project_id: {type: string}
+        trigger_type: {type: string, enum: [cron, interval, manual, agent, api, event, recovered_skip, system]}
+        status: {type: string, enum: [queued, running, success, failed, timeout, cancelled, skipped, interrupted_by_shutdown]}
+        triggered_at: {type: integer, format: int64}
+        started_at: {type: integer, format: int64, nullable: true}
+        completed_at: {type: integer, format: int64, nullable: true}
+        duration_ms: {type: integer, format: int64, nullable: true}
+        result_summary: {type: string, nullable: true}
+        error_code: {type: string, nullable: true}
+        error_message_key: {type: string, nullable: true}
+        error_message: {type: string, nullable: true}
+        session_id: {type: string, nullable: true}
+        created_files: {type: array, items: {type: string}}
+        playbook_run_id: {type: string, nullable: true}
+        executor_ref: {type: string, nullable: true}
+        invoked_by_ref: {type: string, nullable: true}
+        has_artifact: {type: boolean}
+        has_input: {type: boolean}
+        task_id: {type: string, nullable: true}
+        task_title: {type: string, nullable: true}
+        task_status: {type: string, enum: [active, completed, failed, paused], nullable: true}
+    AutomationRunDetail:
+      allOf:
+        - $ref: "#/components/schemas/AutomationRun"
+        - type: object
+          properties:
+            input:
+              nullable: true
+            artifact: {type: object, nullable: true, additionalProperties: true}
+            files: {type: array, items: {type: object, additionalProperties: true}}
+            log_tail: {type: string, nullable: true}
+            cancel_requested_at: {type: integer, format: int64, nullable: true}
+    AutomationRunAccepted:
+      type: object
+      required: [run_id, automation_id, status]
+      properties:
+        run_id: {type: string}
+        automation_id: {type: string}
+        status: {type: string, enum: [queued, running]}
+        run:
+          allOf:
+            - $ref: "#/components/schemas/AutomationRunDetail"
+          nullable: true

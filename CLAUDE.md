@@ -10,6 +10,7 @@
 - Tests: `make test-all`, or one package: `make test P=@agent-base/server`
 - Type check: `make typecheck` · Lint: `make lint` · Format: `make format`
 - Browser tests: `make test-e2e` (builds the server and web app, drives them in the installed Chrome)
+- Desktop app test: `pnpm test:e2e:desktop` (builds the server, the host and the Electron app, drives the app)
 - Dev: `make dev` (local PostgreSQL + Redis, server in watch mode)
 - Migrations: `make migrate` / `make migrate-down`
 - Contract coverage: `make contract` (add `-- --missing` to `pnpm contract:coverage` to list gaps)
@@ -31,6 +32,5 @@ After any change run `make check`. Do not consider work complete until it passes
 - **Use a package before writing one.** Check npm, and check what valuz-agent itself uses, before hand-writing a capability.
 - **The frontend apps and packages, `i18n/`, `e2e/`, and `api/openapi.yaml` came from valuz-agent** — `UPSTREAM.md` lists them and every deliberate difference. Keep changes there to the documented seams, and record new ones in that file.
 - **Tests run one package at a time with at most 4 workers** (`pnpm test`). Do not run `turbo run test` or bare `vitest` across the repo without those limits — the frontend suite is large.
-- **`legacy/` is what is left of the prototype** this codebase was ported from (its server is gone; its pages and desktop shell remain as reference). It is not in the workspace; never import from it.
 - Commits follow Conventional Commits (enforced by commitlint). Never skip hooks with `--no-verify`.
 - Secrets go in `.env`, never in code.

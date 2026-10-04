@@ -7,7 +7,7 @@ import boundaries from "eslint-plugin-boundaries";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/node_modules/**", ".turbo/**", "legacy/**", "**/generated/**", "**/dist-electron/**", "**/release/**"],
+    ignores: ["**/dist/**", "**/node_modules/**", ".turbo/**", "**/generated/**", "**/dist-electron/**", "**/release/**"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

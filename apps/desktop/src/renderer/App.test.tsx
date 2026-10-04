@@ -30,6 +30,11 @@ vi.mock("./components/UpdateToast", () => ({
   UpdateToast: () => null,
 }));
 
+// agent-base: signing in is the web app's own flow; here the member is taken as signed in.
+vi.mock("@valuz/app/auth", () => ({
+  AuthGate: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 vi.mock("@valuz/app/lib/onboarding", () => ({
   isOnboarded: () => true,
 }));

@@ -13,6 +13,7 @@ import {
 } from "@valuz/ui";
 import { ShareDialog } from "./ShareDialog";
 import { ErrorLine, Section, attempt, useLoaded } from "./shared";
+import { ThisComputer, onDesktop } from "./ThisComputer";
 
 const RANK = { view: 1, use: 2, edit: 3, control: 4, admin: 5 } as const;
 
@@ -95,6 +96,7 @@ export function DevicesSection() {
 
   return (
     <div className="flex flex-col gap-4">
+      {onDesktop() ? <ThisComputer onChanged={devices.reload} /> : null}
       <Section title={t("team.devices.title")} description={t("team.devices.desc")}>
         <ErrorLine message={error ?? devices.error} />
         {devices.data?.length === 0 ? (
@@ -155,11 +157,14 @@ export function DevicesSection() {
         })}
       </Section>
 
-      <Section title={t("team.devices.link")} description={t("team.devices.linkDesc")}>
-        <pre className="overflow-auto rounded-md bg-muted p-3 text-xs" data-testid="link-commands">
-          {`agent-base-host login --server ${server} --email ${email}\nagent-base-host run`}
-        </pre>
-      </Section>
+      {/* In a browser there is no computer to link from the page: the member runs the host themselves. */}
+      {onDesktop() ? null : (
+        <Section title={t("team.devices.link")} description={t("team.devices.linkDesc")}>
+          <pre className="overflow-auto rounded-md bg-muted p-3 text-xs" data-testid="link-commands">
+            {`agent-base-host login --server ${server} --email ${email}\nagent-base-host run`}
+          </pre>
+        </Section>
+      )}
 
       {sharing ? (
         <ShareDialog type="device" id={sharing.id} name={sharing.name} onClose={() => setSharing(null)} />

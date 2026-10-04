@@ -4,15 +4,21 @@ import {
   readPersistedEgressMode,
   resolveEgressFrontendsEnabled,
   resolveInitialEgressMode,
-  writePersistedEgressMode,
 } from "@valuz/desktop-network-egress/main";
-import { createServiceManager } from "../services/mod";
+import { type TeamServiceManager, createTeamServiceManager } from "../services/team";
 import { getMainWindow } from "../windows";
 import { createDesktopRuntime } from "./services";
 
 type DesktopRuntime = ReturnType<typeof createDesktopRuntime>;
 
 let _desktopRuntime: DesktopRuntime | null = null;
+let _teamManager: TeamServiceManager | null = null;
+
+/** The connection to the team's server, for the screens that set it up. */
+export const getTeamManager = (): TeamServiceManager => {
+  getDesktopRuntime();
+  return _teamManager as TeamServiceManager;
+};
 
 export const getDesktopRuntime = () => {
   if (!_desktopRuntime) {
@@ -23,10 +29,6 @@ export const getDesktopRuntime = () => {
       process.env,
       app.commandLine.hasSwitch("disable-valuz-egress-frontends"),
     );
-    // A separately launched development backend cannot be rebuilt when the
-    // user crosses the managed/client-managed network boundary. When the
-    // canary is enabled, Electron owns the source backend like a sidecar.
-    const managedDevMode = !app.isPackaged && frontendsEnabled;
     const egressManager = new EgressManager({
       mode: resolveInitialEgressMode({
         env: process.env,
@@ -38,14 +40,14 @@ export const getDesktopRuntime = () => {
       frontendsEnabled,
       emergencyOverride,
     });
+    // agent-base: no local backend to own — the manager proxies to the team's
+    // server and supervises the host that links this computer to it.
+    _teamManager = createTeamServiceManager(userDataDir, {
+      egressManager,
+      onChange: (services) => getMainWindow()?.webContents.send("service-status-changed", services),
+    });
     _desktopRuntime = createDesktopRuntime(
-      createServiceManager(app.getPath("userData"), {
-        devMode: !app.isPackaged && !managedDevMode,
-        managedDevMode,
-        egressManager,
-        onEgressModeChanged: (mode) =>
-          writePersistedEgressMode(userDataDir, mode),
-      }),
+      _teamManager,
       (eventName, payload) => {
         const window = getMainWindow();
         if (

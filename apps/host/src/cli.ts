@@ -130,7 +130,9 @@ program
     }
   });
 
-program.parseAsync().catch((err: unknown) => {
+// Said explicitly: the desktop app runs this file with Electron's own Node, where commander
+// would otherwise guess the arguments start one place earlier.
+program.parseAsync(process.argv, { from: "node" }).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

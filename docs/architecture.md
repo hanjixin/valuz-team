@@ -26,7 +26,6 @@ packages/                                                                    │
 e2e/                        Playwright specs
 deploy/                     the production image and stack, and the dev infra
 scripts/                    dev launcher, contract coverage, i18n tooling
-legacy/                     what is left of the prototype: its pages and desktop shell (not in the workspace)
 ```
 
 Two TypeScript bases: `tsconfig.base.json` (bundler resolution, for the browser/Electron code) and
@@ -155,6 +154,14 @@ agent, owned by whoever made the binding and run on their device; a turn ending 
 chat. Every replica holds a connection, the platform delivers an event to one of them, and an event id is taken
 once (Redis), so redelivery is harmless. The platform side is the official SDK.
 
+## The desktop app
+
+`apps/desktop` is the carried-over Electron shell with its backend replaced (`src/main/services/team.ts`). There
+is no local server: the app asks once which team server it belongs to, then keeps two things running — a small
+reverse proxy on the local port its pages were built against, pointing at that server, and, once the signed-in
+member links the computer (Settings → Devices), the host as a child process run by Electron's own Node. The pages
+are the same ones the web app serves, behind the same sign-in.
+
 ## Calling out on a member's behalf
 
 A model channel's endpoint is a URL a member typed. Before the server calls one, `infra/outbound.ts` checks it
@@ -168,10 +175,8 @@ returned by the API.
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events, fork), and the collaboration UI (Settings → Organization,
-Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations, the Feishu channel.
+Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations, the Feishu channel, the desktop app.
 Not yet: regenerate, the WeCom channel, playbooks, plugins.
 
-The repository was rebuilt from a prototype (tag `prototype-v0`), module by module; its server is fully ported and
-gone, and what is left under `legacy/` is the prototype's own desktop shell and pages, kept for reference. `make contract` reports how much of the contract is implemented.
-The plan and its phases are in the project plan; the prototype's feature list and
-known limits are in `legacy/README.md`.
+The repository was rebuilt from a prototype (tag `prototype-v0`), module by module; the prototype itself is no
+longer in the tree. `make contract` reports how much of the contract is implemented.

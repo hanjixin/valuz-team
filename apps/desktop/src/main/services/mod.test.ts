@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createServiceManager } from './mod'
 
 describe('createServiceManager', () => {
-  it('initializes with a stopped agent-server service', () => {
+  it('initializes with a stopped agent-server service: the proxy to the team\'s server', () => {
     const manager = createServiceManager()
     const snapshot = manager.getAllStatus()
 

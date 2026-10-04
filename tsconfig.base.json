@@ -29,6 +29,8 @@
       "@valuz/a2ui/react": ["./packages/a2ui/src/react/index.ts"],
       "@valuz/app": ["./packages/app/src/index.ts"],
       "@valuz/app/platform": ["./packages/app/src/platform/index.ts"],
+      "@valuz/app/auth": ["./packages/app/src/auth/index.ts"],
+      "@valuz/app/team": ["./packages/app/src/team/index.ts"],
       "@valuz/app/pages": ["./packages/app/src/pages/index.ts"],
       "@valuz/app/components": ["./packages/app/src/components/index.ts"],
       "@valuz/app/hooks": ["./packages/app/src/hooks/index.ts"],

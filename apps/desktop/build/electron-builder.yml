@@ -80,7 +80,13 @@ extraResources:
     to: bin/
     filter:
       - "**/*"
-  # Internal helpers (valuz-server PyInstaller bundle, rg, future valuz-tui).
+  # agent-base: the host that links this computer to the team's server and runs
+  # sessions on it (built by `pnpm build:host`). The app runs it with its own Node.
+  - from: resources/host/
+    to: host/
+    filter:
+      - "**/*"
+  # Internal helpers (rg, future valuz-tui).
   # Not on the user PATH — invoked by valuz / Electron main process.
   - from: resources/libexec/
     to: libexec/

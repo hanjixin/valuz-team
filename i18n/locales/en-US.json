@@ -3563,6 +3563,16 @@
       "deleteTeam": "Delete team"
     },
     "devices": {
+      "thisComputer": "This computer",
+      "thisComputerDesc": "Link this computer as your device and agents run on it; project files stay here.",
+      "linkThis": "Link this computer",
+      "unlinkThis": "Unlink",
+      "hostUnlinked": "Not linked",
+      "hostStarting": "Connecting…",
+      "hostOnline": "Connected",
+      "hostOffline": "Disconnected, reconnecting",
+      "hostRejected": "The link was revoked — link again",
+      "hostStopped": "Not running",
       "title": "Devices",
       "desc": "Sessions run on devices. Link a computer to this server and you — and anyone you share it with — can put agents to work on it.",
       "online": "Online",

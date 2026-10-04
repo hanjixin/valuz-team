@@ -3,7 +3,7 @@
  * valuz-agent (see UPSTREAM.md), which is never auto-rewritten so it stays re-syncable.
  */
 const UPSTREAM =
-  /^(apps\/(webui|desktop|tui)|packages\/(app|core|ui|shared|a2ui|parser-plugins|desktop-network-egress)|e2e(?!\/web\/)|i18n|docs\/frontend|legacy)\//;
+  /^(apps\/(webui|desktop|tui)|packages\/(app|core|ui|shared|a2ui|parser-plugins|desktop-network-egress)|i18n|docs\/frontend)\//;
 const ROOT_UPSTREAM = new Set([
   "vitest.config.ts",
   "vitest.setup.ts",

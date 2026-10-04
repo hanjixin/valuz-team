@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { providersApi } from "@valuz/core";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createTransport, providersApi } from "@valuz/core";
 import { ErrorBoundary, LogoShimmer } from "@valuz/ui";
+import { AuthGate } from "@valuz/app/auth";
+import { ConnectScreen } from "./components/ConnectScreen";
 import { StartupScreen } from "./components/StartupScreen";
 import { UpdaterListener } from "./components/UpdaterListener";
 import { UpdateToast } from "./components/UpdateToast";
@@ -14,31 +16,17 @@ const hasUsableProvider = (
   providers: { enabled: boolean; credential_source: string }[],
 ) => providers.some((p) => p.enabled && p.credential_source !== "none");
 
-export const App = () => {
-  const { services, logs, loading, checking, ready, error, retry } =
-    useDesktopStartup();
+/**
+ * Once signed in: a member with no usable model channel is sent to the welcome
+ * flow first. (Asked after signing in — the server answers nobody else.)
+ */
+const SignedIn = () => {
   const [setupChecked, setSetupChecked] = useState(false);
 
-  // "Arrive, then enter": once the backend is up we keep the splash mounted
-  // until its progress bar has visibly run to 100% (StartupScreen calls
-  // onComplete) instead of cutting away mid-bar. Only when a boot was
-  // actually shown — if services were already up when we looked (renderer
-  // reload, warm relaunch) there is nothing to finish and we go straight on.
-  const [splashDone, setSplashDone] = useState(false);
-  const sawBootRef = useRef(false);
-  if (!checking && !ready) sawBootRef.current = true;
-  const holdSplash = ready && sawBootRef.current && !splashDone;
-
   useEffect(() => {
-    if (!ready) return;
-
     let cancelled = false;
 
     const check = async () => {
-      // User already completed connection setup on /welcome (persisted
-      // marker). Skip the startup gate so refresh doesn't bounce back to
-      // /welcome — needed for subscription logins whose credential lives in
-      // the CLI keychain and can't be detected from the providers API.
       if (isOnboarded()) {
         if (!cancelled) setSetupChecked(true);
         return;
@@ -66,15 +54,38 @@ export const App = () => {
     return () => {
       cancelled = true;
     };
-  }, [ready]);
+  }, []);
 
-  // The platform provider wraps EVERY branch — StartupScreen calls
-  // usePlatform() (frameless-window controls), so rendering it outside
-  // the provider crashes the renderer before the backend is ready.
-  let content = null;
+  if (!setupChecked) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <LogoShimmer size="md" />
+      </div>
+    );
+  }
+  return (
+    <>
+      <UpdaterListener />
+      <UpdateToast />
+      <AppRouter />
+    </>
+  );
+};
+
+/** With a server chosen: wait for the connection, then for the member to sign in. */
+const Connected = () => {
+  const { services, logs, loading, checking, ready, error, retry } =
+    useDesktopStartup();
+
+  // Once the splash has shown, keep it mounted until its exit animation
+  // finishes, instead of cutting straight to the app.
+  const [splashDone, setSplashDone] = useState(false);
+  const sawBootRef = useRef(false);
+  if (!checking && !ready) sawBootRef.current = true;
+  const holdSplash = ready && sawBootRef.current && !splashDone;
+
   if (!checking && (!ready || holdSplash)) {
-    // The onboarding probe above runs concurrently while the bar finishes.
-    content = (
+    return (
       <StartupScreen
         services={services}
         logs={logs}
@@ -85,31 +96,59 @@ export const App = () => {
         onComplete={() => setSplashDone(true)}
       />
     );
-  } else if (checking || !setupChecked) {
-    // Startup gates (services status probe / onboarding check) used to
-    // render literally nothing here — a plain white window with no hint
-    // of life for however long they took (the onboarding probe can retry
-    // for several seconds against a slow backend). Show the shimmer.
+  }
+  if (checking) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <LogoShimmer size="md" />
+      </div>
+    );
+  }
+  return (
+    <AuthGate>
+      <SignedIn />
+    </AuthGate>
+  );
+};
+
+export const App = () => {
+  // agent-base: the desktop belongs to a team server; a new one asks which.
+  // `undefined`: asking; `null`: none chosen yet; a string: connected to it.
+  const [server, setServer] = useState<string | null | undefined>(undefined);
+  const transport = useMemo(() => createTransport(), []);
+  useEffect(() => {
+    // Outside the desktop shell (the renderer's own tests) there is nobody to ask.
+    if (!("valuzDesktop" in window)) return setServer("");
+    void transport
+      .invoke<{ server_url: string } | undefined>("team_connection")
+      // No answer at all is not "no server": let the startup flow report what is wrong.
+      .then((connection) => setServer(connection ? connection.server_url || null : ""))
+      .catch(() => setServer(""));
+  }, [transport]);
+
+  let content;
+  if (server === undefined) {
     content = (
       <div className="flex h-screen items-center justify-center">
         <LogoShimmer size="md" />
       </div>
     );
-  } else {
+  } else if (server === null) {
     content = (
-      <>
-        <UpdaterListener />
-        <UpdateToast />
-        <AppRouter />
-      </>
+      <ConnectScreen
+        onConnect={async (url) => {
+          const connection = await transport.invoke<{ server_url: string }>(
+            "team_set_server_url",
+            { url },
+          );
+          setServer(connection.server_url);
+        }}
+      />
     );
+  } else {
+    content = <Connected />;
   }
 
-  // Root boundary: without it, any uncaught render/effect throw above the
-  // layout-level boundary (router root, layout hooks, startup branches)
-  // unmounts the entire tree — a permanently white window that only a
-  // reload can recover. Degrade to the "Something went wrong" fallback
-  // with a Retry instead.
   return (
     <ElectronPlatformProvider>
       <ErrorBoundary>{content}</ErrorBoundary>

@@ -3563,6 +3563,16 @@
       "deleteTeam": "删除分组"
     },
     "devices": {
+      "thisComputer": "这台电脑",
+      "thisComputerDesc": "把这台电脑链接为你的设备，智能体就在它上面运行；项目文件留在本机。",
+      "linkThis": "链接这台电脑",
+      "unlinkThis": "取消链接",
+      "hostUnlinked": "未链接",
+      "hostStarting": "连接中…",
+      "hostOnline": "已连接",
+      "hostOffline": "已断开，正在重连",
+      "hostRejected": "链接已失效，请重新链接",
+      "hostStopped": "未运行",
       "title": "设备",
       "desc": "会话在设备上运行。把电脑链接到这个服务器后，你和被共享的同事就能让智能体在它上面工作。",
       "online": "在线",

@@ -3,10 +3,9 @@
 Cloud-first, team-collaborative Node rewrite of valuz-agent: no Python, PostgreSQL + Redis on the server,
 desktops that can be shared with an organization and controlled remotely.
 
-**Status: being rebuilt.** A working prototype of the whole system lives in [`legacy/`](legacy/README.md)
-(tag `prototype-v0`). This tree is the engineered version it is being ported into, module by module —
-see [docs/architecture.md](docs/architecture.md). Run `make contract` to see how much of the HTTP
-contract is implemented so far.
+The server is the system of record and the point of coordination; a desktop is where agents run. Project files
+stay on the desktop and are reached through it — see [docs/architecture.md](docs/architecture.md). Rebuilt from a
+prototype (tag `prototype-v0`), module by module; `make contract` shows how much of the HTTP contract is implemented.
 
 ## Quick start
 
@@ -15,6 +14,7 @@ make install
 make check        # format + lint + typecheck + tests (needs Docker for the integration tests)
 make dev          # local PostgreSQL + Redis, server on :8787 in watch mode
 make test-e2e     # browser tests: built server + web app in Chrome
+pnpm test:e2e:desktop   # the Electron app against the same stack
 ```
 
 `make help` lists every command.

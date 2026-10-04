@@ -5,7 +5,7 @@ import { copyFile, mkdir, open, unlink } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { getMainWindow } from "../windows";
 import { openExternalIfSafe } from "../security";
-import { desktopRuntime } from "./desktop";
+import { desktopRuntime, getTeamManager } from "./desktop";
 import { serviceHandlers } from "./services";
 import {
   getCliStatus,
@@ -27,6 +27,16 @@ export const registerIpcHandlers = () => {
   }
 
   registerNotificationHandlers();
+
+  // agent-base: which server this desktop belongs to, and this computer's link to it.
+  ipcMain.handle("team_connection", () => getTeamManager().getConnection());
+  ipcMain.handle("team_set_server_url", (_event, args: { url?: string }) =>
+    getTeamManager().setServerUrl(args?.url ?? ""),
+  );
+  ipcMain.handle("team_link_device", (_event, args: { access_token?: string }) =>
+    getTeamManager().linkDevice(args?.access_token ?? ""),
+  );
+  ipcMain.handle("team_unlink_device", () => getTeamManager().unlinkDevice());
 
   ipcMain.handle("select_directory", async () => {
     const win = getMainWindow();

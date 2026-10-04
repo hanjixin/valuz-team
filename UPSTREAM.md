@@ -43,6 +43,18 @@ Keep changes in those directories to the documented seams so upstream can be re-
   selected style after the action-kind picker became a `SegmentedControl`. It now asserts that control's selected
   style. Worth sending upstream.
 
+- **The desktop app has no local backend.** `apps/desktop/src/main/services/sidecar.ts` (which started the Python
+  `valuz-server`) and its tests are gone; `services/mod.ts` keeps the service-manager interface and
+  `services/team.ts` implements it: a reverse proxy on the port the renderer was built against, pointing at the
+  team's server, plus supervision of `agent-base-host`. The renderer gained a connect screen, the sign-in gate and
+  the collaboration sections (`renderer/App.tsx`, `renderer/main.tsx`, `renderer/components/ConnectScreen.tsx`);
+  its two startup tests take the member as signed in. `tsconfig.base.json` maps `@valuz/app/auth` and
+  `@valuz/app/team`. Network-egress management is still wired but manages nothing: the host makes its own calls.
+  The installer bundles the host (`pnpm build:host` → `resources/host`); building a signed installer has not been
+  exercised here.
+- Upstream's desktop end-to-end specs (`e2e/*.spec.ts`, `e2e/fixtures/`) drove the app against the Python backend
+  and were removed; `e2e/desktop/` drives the new one.
+
 ## agent-base additions inside carried-over packages
 
 The server is multi-user, which the frontend never had to know about. The additions are confined to:

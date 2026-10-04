@@ -27,3 +27,5 @@ resources/THIRD-PARTY-NOTICES.txt
 *.njsproj
 *.sln
 *.sw?
+# The host bundled for the installer (pnpm build:host)
+resources/host/

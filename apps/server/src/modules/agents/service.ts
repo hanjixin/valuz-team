@@ -75,6 +75,10 @@ async function chooseSlug(ctx: Ctx, auth: Auth, wanted: string | null | undefine
   return slug;
 }
 
+/** Whether a slug is already an agent's in this organization — the caller's or anyone else's. */
+export const slugTaken = async (ctx: Ctx, auth: Auth, slug: string): Promise<boolean> =>
+  (await repo.slugsInOrg(ctx.db, auth.orgId)).has(slug);
+
 /** An agent's channel must be one its author can actually run models through. */
 const checkChannel = async (ctx: Ctx, auth: Auth, providerId: string | null | undefined): Promise<void> => {
   if (providerId) await providers.assertUsable(ctx, auth, providerId);

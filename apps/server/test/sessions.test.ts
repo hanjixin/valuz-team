@@ -194,6 +194,8 @@ describe("sessions", () => {
     const session = await newChat(alice);
     model.replies.push({ content: "First." });
     await say(alice, session.id, "one");
+    // A turn's last event is the status announcement that follows going idle; wait for it to be stored.
+    await eventually(async () => (await types(session.id)).at(-1) === "session.update");
     const before = await history(session.id);
 
     const controller = new AbortController();

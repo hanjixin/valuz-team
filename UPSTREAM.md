@@ -92,7 +92,8 @@ Deliberate differences in behaviour:
   on the machine that runs the agent, so they will belong to a device.
 - Agents and projects belong to a member and are shared through the ladder; responses carry `permission` and
   `owner_id`. An agent's slug is unique in its organization. A project's folder is on a device (`device_id`).
-- There are no built-in ("official") agents yet, including the system agent.
+- There are no built-in ("official") agents; the general assistant (`valurion`) is an ordinary agent the first-run
+  tour creates in the member's library.
 - A session runs on a device (`device_id`); `POST /v1/sessions` picks the project's device or the caller's own
   when none is named. Deltas are stored as well as final messages, so history replays exactly what a live
   stream showed, and every frame carries the durable `seq`.
@@ -137,4 +138,10 @@ Deliberate differences in behaviour:
   chat per Feishu chat), on the binder's device. Events arrive over the long connection the server dials; the HTTP
   callback is accepted only for a binding given a Verification Token or an Encrypt Key. Text messages only. The
   connection status shown is the answering replica's view. Binding chats to projects is not implemented.
+- Agent templates and the first-run tour use the 24 bundled team packs, copied from valuz-agent's
+  `backend/valuz_agent/resources/agent_packs` into `apps/server/src/modules/templates/packs` and reduced to what is
+  read (each team and its roles' names, descriptions and instructions). The skills and connectors the packs name are
+  not bundled, so a role arrives with its instructions only. A role's slug is unique in the organization: the first
+  member to add it gets the plain slug, a colleague gets `<slug>-<their id prefix>`. The example project has no
+  folder of its own (it works in a workspace the device manages). Agent pack export/import is not implemented.
 - `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

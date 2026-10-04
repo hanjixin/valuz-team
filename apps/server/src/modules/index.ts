@@ -26,3 +26,4 @@ export * from "./skills/handlers.ts";
 export * from "./system/handlers.ts";
 export * from "./tasks/handlers.ts";
 export * from "./teams/handlers.ts";
+export * from "./templates/handlers.ts";

@@ -175,7 +175,7 @@ returned by the API.
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events, fork), and the collaboration UI (Settings → Organization,
-Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations, the Feishu channel, the desktop app.
+Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations, the Feishu channel, the desktop app, agent templates and the first-run tour.
 Not yet: regenerate, the WeCom channel, playbooks, plugins.
 
 The repository was rebuilt from a prototype (tag `prototype-v0`), module by module; the prototype itself is no

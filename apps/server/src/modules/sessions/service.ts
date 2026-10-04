@@ -192,3 +192,34 @@ export async function remove(ctx: Ctx, auth: Auth, id: string): Promise<void> {
       .catch(() => undefined);
   }
 }
+
+/** What each runtime can be asked to do. The native runtime neither reviews tool calls itself nor plans. */
+const SUPPORTS: Record<string, { modes: string[]; permissionModes: string[] }> = {
+  claude_agent: { modes: ["default", "plan", "goal"], permissionModes: ["default", "auto_review", "full_access"] },
+  codex: { modes: ["default", "plan", "goal"], permissionModes: ["default", "auto_review", "full_access"] },
+  deepagents: { modes: ["default"], permissionModes: ["default", "full_access"] },
+};
+
+/**
+ * Change how a session runs — its approval mode, working mode, or reasoning
+ * effort. The session's row is what each turn is built from, so the change
+ * takes effect on the next message.
+ */
+export async function setControls(
+  ctx: Ctx,
+  auth: Auth,
+  id: string,
+  controls: { permission_mode?: string; mode?: string; effort?: string | null },
+): Promise<Detail> {
+  const { row } = await drive(ctx, auth, id);
+  const supported = SUPPORTS[row.runtime_provider];
+  if (controls.permission_mode && !supported?.permissionModes.includes(controls.permission_mode))
+    throw badRequest(
+      `the ${row.runtime_provider} runtime has no "${controls.permission_mode}" approval mode`,
+      "unsupported_mode",
+    );
+  if (controls.mode && !supported?.modes.includes(controls.mode))
+    throw badRequest(`the ${row.runtime_provider} runtime has no "${controls.mode}" mode`, "unsupported_mode");
+  await repo.setControls(ctx.db, id, controls);
+  return get(ctx, auth, id);
+}

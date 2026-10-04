@@ -21,6 +21,16 @@ export function stringify(value: unknown): string {
 
 const text = (data: Data, ...keys: string[]): string => stringify(keys.map((key) => data[key]).find(Boolean) ?? "");
 
+/**
+ * What an approval card shows. The kernel reports the tool and its arguments;
+ * the card reads the arguments it knows by name (`command`, `path`) directly.
+ */
+const approvalPayload = (d: Data): Data => ({
+  ...(typeof d["input"] === "object" && d["input"] !== null ? (d["input"] as Data) : {}),
+  tool_name: d["tool_name"] ?? "",
+  input: d["input"] ?? {},
+});
+
 /** How each kernel event becomes a frame: its name on the wire, and its payload. */
 const RULES: Record<string, [string, (data: Data) => Payload]> = {
   user_message: [
@@ -86,10 +96,10 @@ const RULES: Record<string, [string, (data: Data) => Payload]> = {
       subject: text(d, "subject"),
       runtime_provider: text(d, "runtime_provider"),
       available_decisions: stringify(d["available_decisions"] ?? []),
-      payload: stringify(d["payload"] ?? {}),
+      payload: stringify(d["payload"] ?? approvalPayload(d)),
       expires_at: text(d, "expires_at"),
       session_rule_preview: stringify(d["session_rule_preview"] ?? {}),
-      original_input: stringify(d["original_input"] ?? {}),
+      original_input: stringify(d["original_input"] ?? d["input"] ?? {}),
     }),
   ],
   action_resolved: [

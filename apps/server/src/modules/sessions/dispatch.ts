@@ -13,9 +13,10 @@ import {
 import type { Schema } from "@agent-base/contract";
 import type { Auth, Ctx } from "../../infra/context.ts";
 import { DeviceOfflineError } from "../../infra/device-hub.ts";
-import { conflict, notFound } from "../../infra/errors.ts";
+import { HttpError, conflict, notFound } from "../../infra/errors.ts";
 import { orgChannel } from "../../infra/pubsub.ts";
 import * as agents from "../agents/service.ts";
+import * as audit from "../audit/service.ts";
 import * as connectors from "../connectors/service.ts";
 import * as projects from "../projects/service.ts";
 import { type ApiProtocol, protocolFor } from "../providers/catalog.ts";
@@ -99,24 +100,19 @@ const titleFrom = (text: string): string => {
 };
 
 /**
- * Start a turn on the session's device and return its message id. Throws 409
- * `session_busy` when a turn is already running and 503 when the device is
- * offline; a dispatch that fails leaves nothing behind.
+ * Run a turn on a session this caller has just claimed. Whatever goes wrong
+ * before the device accepts it leaves nothing behind: the turn's row is removed
+ * and the session goes back to the status it had.
  */
-export async function dispatchTurn(ctx: Ctx, sessionId: string, text: string, actor: Actor): Promise<string> {
-  const row = await repo.byId(ctx.db, sessionId);
-  if (!row) throw notFound("session");
-  if (!row.device_id) throw conflict("the device this session ran on was removed", "device_removed");
-  const { session, skillBundles } = await kernelSession(ctx, row);
-  const userMessage: UserMessage = { text, attachments: [], additional_context: "" };
-
-  if (!(await repo.claimForTurn(ctx.db, sessionId, text, titleFrom(text))))
-    throw conflict("this session is already running a turn", "session_busy");
+async function startClaimed(ctx: Ctx, row: Row, previous: string, text: string, actor: Actor): Promise<string> {
   const messageId = crypto.randomUUID();
+  const userMessage: UserMessage = { text, attachments: [], additional_context: "" };
   try {
+    if (!row.device_id) throw conflict("the device this session ran on was removed", "device_removed");
+    const { session, skillBundles } = await kernelSession(ctx, row);
     await repo.insertMessage(ctx.db, {
       id: messageId,
-      session_id: sessionId,
+      session_id: row.id,
       actor_id: actor.user_id,
       user_message: userMessage,
       started_at: Date.now(),
@@ -129,16 +125,30 @@ export async function dispatchTurn(ctx: Ctx, sessionId: string, text: string, ac
     );
   } catch (err) {
     await repo.deleteMessage(ctx.db, messageId);
-    await repo.setStatus(ctx.db, sessionId, row.status === "running" ? "idle" : row.status);
+    await repo.setStatus(ctx.db, row.id, previous);
     throw err;
   }
+  await repo.noteUserMessage(ctx.db, row.id, text, titleFrom(text));
   await ctx.pubsub.publish(orgChannel(row.org_id), {
     type: "session.updated",
-    session_id: sessionId,
+    session_id: row.id,
     status: "running",
     actor_id: actor.user_id,
   });
   return messageId;
+}
+
+/**
+ * Start a turn on the session's device and return its message id. Throws 409
+ * `session_busy` when a turn is already running and 503 when the device is
+ * offline.
+ */
+export async function dispatchTurn(ctx: Ctx, sessionId: string, text: string, actor: Actor): Promise<string> {
+  const row = await repo.byId(ctx.db, sessionId);
+  if (!row) throw notFound("session");
+  const previous = await repo.claimForTurn(ctx.db, sessionId);
+  if (!previous) throw conflict("this session is already running a turn", "session_busy");
+  return startClaimed(ctx, row, previous, text, actor);
 }
 
 export async function send(ctx: Ctx, auth: Auth, id: string, prompt: string): Promise<Schema<"SessionDetail">> {
@@ -245,15 +255,27 @@ export async function listQueue(ctx: Ctx, auth: Auth, id: string): Promise<Queue
  * Send the next queued input of an idle session, as the person who queued it.
  * Returns false when there was nothing to send, the queue is paused, or the
  * session could not take it (busy, device offline) — then it stays queued.
+ *
+ * The session is claimed BEFORE an input is taken off the queue. Several things
+ * ask for a drain at the same moment (a turn's final state, the session going
+ * idle, someone queueing); claiming first means only one of them gets to take
+ * the head of the queue, so inputs go out in order.
  */
 export async function drain(ctx: Ctx, sessionId: string): Promise<boolean> {
   const row = await repo.byId(ctx.db, sessionId);
-  if (!row || row.queue_paused || row.status === "running") return false;
+  if (!row || row.queue_paused) return false;
+  // Nothing queued: do not claim at all, or a message sent at that instant would find the session "busy".
+  if ((await repo.listQueue(ctx.db, sessionId)).length === 0) return false;
+  const previous = await repo.claimForTurn(ctx.db, sessionId);
+  if (!previous) return false;
   const next = await repo.takeNextQueued(ctx.db, sessionId);
-  if (!next) return false;
+  if (!next) {
+    await repo.setStatus(ctx.db, sessionId, previous);
+    return false;
+  }
   try {
     const name = await repo.userName(ctx.db, next.actor_id);
-    await dispatchTurn(ctx, sessionId, next.text, { user_id: next.actor_id, name });
+    await startClaimed(ctx, row, previous, next.text, { user_id: next.actor_id, name });
     return true;
   } catch {
     await repo.restoreQueued(ctx.db, { ...next, session_id: sessionId });
@@ -282,4 +304,98 @@ export async function deleteQueued(ctx: Ctx, auth: Auth, id: string, queueId: st
   await sessions.drive(ctx, auth, id);
   if (!(await repo.deleteQueued(ctx.db, id, queueId))) throw notFound("queued input");
   return presentQueue(ctx, id);
+}
+
+/** "Go on": queued input held back by an interrupt starts flowing again. */
+export async function resumeQueue(ctx: Ctx, auth: Auth, id: string): Promise<Queue> {
+  await sessions.drive(ctx, auth, id);
+  await repo.setQueuePaused(ctx.db, id, false);
+  await drain(ctx, id);
+  return presentQueue(ctx, id);
+}
+
+/**
+ * "Do this one now": the queued input jumps to the front and, if a turn is
+ * running, that turn is stopped to make way — what it had not finished is lost.
+ */
+export async function steer(ctx: Ctx, auth: Auth, id: string, queueId: string): Promise<Queue> {
+  const { row } = await sessions.drive(ctx, auth, id);
+  if (!(await repo.promoteQueued(ctx.db, id, queueId))) throw notFound("queued input");
+  await repo.setQueuePaused(ctx.db, id, false);
+  if (row.status === "running" && row.device_id) {
+    // The turn ending is what sends the promoted input.
+    await ctx.hub
+      .call(row.device_id, "session.interrupt", { session_id: id }, { user_id: auth.userId, name: auth.name })
+      .catch(async (err: unknown) => {
+        if (!(err instanceof DeviceOfflineError)) throw err;
+        await closeStrandedTurn(ctx, id, "the device went offline mid-turn");
+      });
+  } else {
+    await drain(ctx, id);
+  }
+  return presentQueue(ctx, id);
+}
+
+// -- Approvals --
+
+const DECISION_TTL_S = 24 * 60 * 60;
+
+/**
+ * Answer a `requires_action` the agent is waiting on. Saying the same thing
+ * twice is harmless; a different decision for the same request is refused —
+ * in a shared session two people may answer at once, and the first one stands.
+ */
+export async function submitAction(
+  ctx: Ctx,
+  auth: Auth,
+  id: string,
+  input: Schema<"SessionActionRequest">,
+): Promise<Schema<"SessionActionResponse">> {
+  const { row } = await sessions.drive(ctx, auth, id);
+  if (!row.device_id) throw conflict("the device this session ran on was removed", "device_removed");
+  const key = `action:${id}:${input.pending_id}`;
+  const mine = JSON.stringify({ decision: input.decision, accepted_at: Date.now() });
+  // The first decision to arrive claims the request.
+  const claimed = await ctx.redis.set(key, mine, "EX", DECISION_TTL_S, "NX");
+  const standing = JSON.parse((claimed ? mine : await ctx.redis.get(key)) ?? mine) as {
+    decision: Schema<"SessionActionRequest">["decision"];
+    accepted_at: number;
+  };
+  const answer = { session_id: id, pending_id: input.pending_id, ...standing, rule_id: null };
+  if (!claimed) {
+    if (standing.decision !== input.decision)
+      throw conflict(`this request was already answered: ${standing.decision}`, "already_resolved");
+    return { ...answer, idempotent: true };
+  }
+  try {
+    await ctx.hub.call(
+      row.device_id,
+      "session.action",
+      {
+        session_id: id,
+        action: {
+          pending_id: input.pending_id,
+          decision: input.decision,
+          message: input.message ?? null,
+          answers: input.answers ?? null,
+          modified_input: input.modified_input ?? null,
+        },
+      },
+      { user_id: auth.userId, name: auth.name },
+    );
+  } catch (err) {
+    await ctx.redis.del(key);
+    // The device no longer has it: it expired, was interrupted, or was answered there.
+    if (err instanceof HttpError && err.status === 404)
+      throw new HttpError(410, "action_expired", "that request is no longer waiting for an answer");
+    throw err;
+  }
+  await audit.record(
+    ctx.db,
+    auth,
+    "session.action",
+    { type: "session", id },
+    { pending_id: input.pending_id, decision: input.decision },
+  );
+  return { ...answer, idempotent: false };
 }

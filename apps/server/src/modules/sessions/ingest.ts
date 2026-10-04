@@ -11,6 +11,16 @@ import * as repo from "./repo.ts";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function attach(ctx: Ctx): void {
+  /**
+   * A turn ending makes room for the next queued input. The device reports the
+   * end twice — the turn's final state and the session going idle — in either
+   * order, so both ask; taking an input off the queue is atomic, and a session
+   * still marked running is left alone. Never hold the device's frames up for
+   * it: the next turn is a dispatch of its own.
+   */
+  const next = (sessionId: string): void =>
+    void drain(ctx, sessionId).catch((err: unknown) => ctx.log(err, `session ${sessionId}: draining the queue failed`));
+
   ctx.hub.listen({
     async hello(device, _info, running) {
       // Anything the server believes is running here but the host does not know about
@@ -45,18 +55,14 @@ export function attach(ctx: Ctx): void {
               session_id: frame.session_id,
               status: frame.patch.status,
             });
+          if (orgId && frame.patch.status === "idle") next(frame.session_id);
           return;
         }
         case "message.upsert": {
           const { message } = frame;
           if (!(await repo.orgOfSessionOn(ctx.db, device.id, message.session_id))) return;
           await repo.upsertMessage(ctx.db, message);
-          // A finished turn makes room for the next queued input. Never hold the
-          // device's frames up for it: the next turn is a dispatch of its own.
-          if (message.status !== "running")
-            void drain(ctx, message.session_id).catch((err: unknown) =>
-              ctx.log(err, `session ${message.session_id}: draining the queue failed`),
-            );
+          if (message.status !== "running") next(message.session_id);
         }
       }
     },

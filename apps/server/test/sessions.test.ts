@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Host } from "@agent-base/host";
 import { type ModelGateway, startMcpServer, startModelGateway } from "@agent-base/test-utils";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { type Account, type TestServer, eventually, joinOrg, signUp, startTestServer } from "./harness.ts";
 
 interface Frame {
@@ -65,6 +65,10 @@ describe("sessions", () => {
     dir = await realpath(await mkdtemp(path.join(tmpdir(), "ab-sessions-")));
     alice = await signUp(t, "alice");
     bob = await joinOrg(t, alice, "bob");
+  });
+  // A reply one test queued but never used (its turn was cancelled) must not answer the next test.
+  beforeEach(() => {
+    model.replies.length = 0;
   });
   afterAll(async () => {
     await host?.stop();
@@ -219,10 +223,8 @@ describe("sessions", () => {
 
     model.replies.push({ content: "Second.", delayMs: 50 });
     await call(alice, "POST", `/v1/sessions/${session.id}/messages`, { prompt: "two" });
-    // The turn's last event is the status announcement that follows going idle.
-    await idle(session.id);
-    const last = (await history(session.id)).at(-1)?.seq;
-    await eventually(async () => frames.some((f) => f.event_type && f.seq === last));
+    // A turn's last event is the status announcement that follows going idle: one replayed, one live.
+    await eventually(async () => frames.filter((f) => f.event_type === "session.update").length === 2);
     controller.abort();
     await pump;
 
@@ -418,6 +420,116 @@ describe("sessions", () => {
     } finally {
       await mcp.stop();
     }
+  });
+
+  it("asks before acting when the session says so: approve lets the tool run, reject tells the agent no", async () => {
+    const session = await newChat(alice, { permission_mode: "default" });
+    const pending = async (nth: number) =>
+      eventually(
+        async () => (await history(session.id)).filter((e) => e.event.event_type === "session.requires_action")[nth],
+      );
+    const answer = (account: Account, body: object) =>
+      call(account, "POST", `/v1/sessions/${session.id}/actions`, body);
+    const workspace = path.join(dir, "data", "workspaces", `chat-${session.id}`);
+
+    model.replies.push(
+      { tool: { name: "write_file", args: { path: "approved.txt", content: "yes" } } },
+      { content: "Written." },
+    );
+    await call(alice, "POST", `/v1/sessions/${session.id}/messages`, { prompt: "write it" });
+    const request = (await pending(0)).event.payload;
+    expect(request).toMatchObject({ subject: "file_change" });
+    expect(JSON.parse(request["payload"] ?? "{}")).toMatchObject({ tool_name: "write_file", path: "approved.txt" });
+    expect(JSON.parse(request["available_decisions"] ?? "[]")).toEqual(["approve", "approve_with_changes", "reject"]);
+    await expect(stat(path.join(workspace, "approved.txt"))).rejects.toThrow(); // nothing happens until someone decides
+
+    // bob cannot see this session, let alone answer for it.
+    expect((await answer(bob, { pending_id: request["pending_id"], decision: "approve" })).status).toBe(404);
+    const approved = await answer(alice, { pending_id: request["pending_id"], decision: "approve" });
+    expect(approved.body).toMatchObject({ session_id: session.id, decision: "approve", idempotent: false });
+    await idle(session.id);
+    expect(await readFile(path.join(workspace, "approved.txt"), "utf8")).toBe("yes");
+
+    // Saying it again is harmless; changing the answer afterwards is refused.
+    const again = await answer(alice, { pending_id: request["pending_id"], decision: "approve" });
+    expect(again.body).toMatchObject({ idempotent: true, accepted_at: approved.body.accepted_at });
+    const flip = await answer(alice, { pending_id: request["pending_id"], decision: "reject" });
+    expect([flip.status, flip.body.code]).toEqual([409, "already_resolved"]);
+
+    model.replies.push(
+      { tool: { name: "write_file", args: { path: "refused.txt", content: "no" } } },
+      { content: "Understood." },
+    );
+    await call(alice, "POST", `/v1/sessions/${session.id}/messages`, { prompt: "write another" });
+    const second = (await pending(1)).event.payload;
+    await answer(alice, { pending_id: second["pending_id"], decision: "reject", message: "not that file" });
+    await idle(session.id);
+    await expect(stat(path.join(workspace, "refused.txt"))).rejects.toThrow();
+    const refusal = (await history(session.id)).filter((e) => e.event.event_type === "tool.call.completed").at(-1);
+    expect(refusal?.event.payload["content"]).toContain("not that file");
+
+    // A request nobody is waiting on any more.
+    const stale = await answer(alice, { pending_id: crypto.randomUUID(), decision: "approve" });
+    expect([stale.status, stale.body.code]).toEqual([410, "action_expired"]);
+    const actions = (await call(alice, "GET", "/v1/org/audit-logs?limit=200")).body.logs.filter(
+      (log: { action: string }) => log.action === "session.action",
+    );
+    expect(actions.map((log: { detail: { decision: string } }) => log.detail.decision).sort()).toEqual([
+      "approve",
+      "reject",
+    ]);
+  });
+
+  it("changes how a session runs from its next turn, within what its runtime can do", async () => {
+    const session = await newChat(alice);
+    const patch = (what: string, body: object) => call(alice, "PATCH", `/v1/sessions/${session.id}/${what}`, body);
+    expect((await patch("permission-mode", { permission_mode: "default" })).body.permission_mode).toBe("default");
+    expect((await patch("effort", { effort: "max" })).body.effort).toBe("max");
+    expect((await patch("effort", { effort: null })).body.effort).toBeNull();
+    // The native runtime neither plans nor reviews tool calls on its own.
+    expect((await patch("mode", { mode: "plan" })).body.code).toBe("unsupported_mode");
+    expect((await patch("permission-mode", { permission_mode: "auto_review" })).body.code).toBe("unsupported_mode");
+    expect((await patch("mode", { mode: "default" })).body.mode).toBe("default");
+    expect((await call(bob, "PATCH", `/v1/sessions/${session.id}/effort`, { effort: "low" })).status).toBe(404);
+    expect((await call(alice, "POST", `/v1/sessions/${session.id}/prepare`)).body).toEqual({ ready: true });
+
+    // The approval mode set above holds for the next turn.
+    model.replies.push({ tool: { name: "write_file", args: { path: "x.txt", content: "x" } } }, { content: "ok" });
+    await call(alice, "POST", `/v1/sessions/${session.id}/messages`, { prompt: "write" });
+    await eventually(async () => (await types(session.id)).includes("session.requires_action"));
+    await call(alice, "POST", `/v1/sessions/${session.id}/cancel`);
+    await idle(session.id);
+  });
+
+  it("lets a queued message jump the queue, stopping the running turn to make way", async () => {
+    const session = await newChat(alice);
+    model.replies.push({ hang: true });
+    await call(alice, "POST", `/v1/sessions/${session.id}/messages`, { prompt: "a long task" });
+    await call(alice, "POST", `/v1/sessions/${session.id}/queue`, { prompt: "later" });
+    const queue = (await call(alice, "POST", `/v1/sessions/${session.id}/queue`, { prompt: "urgent" })).body;
+    const urgent = queue.items.find((item: { text: string }) => item.text === "urgent");
+
+    model.replies.push({ content: "On it." }, { content: "And the other." });
+    const steered = await call(alice, "POST", `/v1/sessions/${session.id}/queue/${urgent.id}/steer`);
+    expect(steered.status).toBe(200);
+    await eventually(async () => (await types(session.id)).filter((type) => type === "message.user").length === 3);
+    await idle(session.id);
+    const said = (await history(session.id))
+      .filter((e) => e.event.event_type === "message.user")
+      .map((e) => e.event.payload["text"]);
+    expect(said).toEqual(["a long task", "urgent", "later"]);
+
+    // After an interrupt the queue waits for "go on".
+    model.replies.push({ hang: true });
+    await call(alice, "POST", `/v1/sessions/${session.id}/messages`, { prompt: "another long one" });
+    await call(alice, "POST", `/v1/sessions/${session.id}/queue`, { prompt: "held" });
+    await call(alice, "POST", `/v1/sessions/${session.id}/interrupt`);
+    await idle(session.id);
+    model.replies.push({ content: "Resumed." });
+    const resumed = await call(alice, "POST", `/v1/sessions/${session.id}/queue/resume`);
+    expect(resumed.body).toMatchObject({ paused: false, items: [] });
+    await eventually(async () => (await history(session.id)).some((e) => e.event.payload["text"] === "held"));
+    await idle(session.id);
   });
 
   it("closes a turn on the device's behalf when the device restarts in the middle of it", async () => {

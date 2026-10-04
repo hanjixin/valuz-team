@@ -63,25 +63,43 @@ export const remove = async (db: Db, id: string): Promise<void> =>
 export const byId = (db: Db, id: string) =>
   db.selectFrom("sessions").selectAll().where("id", "=", id).executeTakeFirst();
 
-/** The status flip is the lock: only one sender can move a session to `running`. */
-export const claimForTurn = async (db: Db, id: string, lastUserText: string, name: string | null): Promise<boolean> =>
-  (
-    await db
-      .updateTable("sessions")
-      .set((eb) => ({
-        status: "running",
-        stop_reason: null,
-        last_user_message_text: lastUserText,
-        name: eb.fn.coalesce("name", eb.val(name)),
-        updated_at: new Date(),
-      }))
-      .where("id", "=", id)
-      .where("status", "<>", "running")
-      .executeTakeFirst()
-  ).numUpdatedRows > 0n;
+/**
+ * The status flip is the lock: only one sender can move a session to `running`.
+ * Returns the status it had — what to put back if the turn does not start — or
+ * null when it was already running. Read and written in one statement, so the
+ * status handed back is never another claimant's transient `running`.
+ */
+export async function claimForTurn(db: Db, id: string): Promise<string | null> {
+  const { rows } = await sql<{ previous: string }>`
+    UPDATE sessions AS s SET status = 'running', stop_reason = NULL, updated_at = now()
+      FROM (SELECT id, status FROM sessions WHERE id = ${id}::uuid FOR UPDATE) AS before
+     WHERE s.id = before.id AND before.status <> 'running'
+    RETURNING before.status AS previous`.execute(db);
+  return rows[0]?.previous ?? null;
+}
+
+/** Remember what was last said, and name a session that has no name yet after it. */
+export const noteUserMessage = async (db: Db, id: string, text: string, name: string): Promise<void> =>
+  void (await db
+    .updateTable("sessions")
+    .set((eb) => ({ last_user_message_text: text, name: eb.fn.coalesce("name", eb.val(name)) }))
+    .where("id", "=", id)
+    .execute());
 
 export const setStatus = async (db: Db, id: string, status: string): Promise<void> =>
   void (await db.updateTable("sessions").set({ status, updated_at: new Date() }).where("id", "=", id).execute());
+
+/** Change how the session runs from its next turn on. */
+export const setControls = async (
+  db: Db,
+  id: string,
+  controls: { permission_mode?: string; mode?: string; effort?: string | null },
+): Promise<void> =>
+  void (await db
+    .updateTable("sessions")
+    .set({ ...controls, updated_at: new Date() })
+    .where("id", "=", id)
+    .execute());
 
 export const setQueuePaused = async (db: Db, id: string, paused: boolean): Promise<void> =>
   void (await db.updateTable("sessions").set({ queue_paused: paused }).where("id", "=", id).execute());
@@ -324,6 +342,22 @@ export const editQueued = async (db: Db, sessionId: string, id: string, text: st
 export const deleteQueued = async (db: Db, sessionId: string, id: string): Promise<boolean> =>
   (await db.deleteFrom("queued_inputs").where("session_id", "=", sessionId).where("id", "=", id).executeTakeFirst())
     .numDeletedRows > 0n;
+
+/** Move a queued input to the front of the queue. */
+export const promoteQueued = async (db: Db, sessionId: string, id: string): Promise<boolean> =>
+  (
+    await db
+      .updateTable("queued_inputs")
+      .set((eb) => ({
+        position: eb
+          .selectFrom("queued_inputs as q")
+          .select((sub) => sql<number>`${sub.fn.min("q.position")} - 1`.as("front"))
+          .where("q.session_id", "=", sessionId),
+      }))
+      .where("session_id", "=", sessionId)
+      .where("id", "=", id)
+      .executeTakeFirst()
+  ).numUpdatedRows > 0n;
 
 /** Take the next queued input off the queue, with the name of whoever queued it. */
 export async function takeNextQueued(db: Db, sessionId: string) {

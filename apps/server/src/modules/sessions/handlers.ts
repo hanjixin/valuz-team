@@ -101,3 +101,53 @@ export const deleteSessionQueuedInput: Handler = async (req) => {
   const { ctx, auth, id, queueId } = await caller(req);
   return dispatch.deleteQueued(ctx, auth, id, queueId);
 };
+
+export const resumeSessionQueue: Handler = async (req) => {
+  const { ctx, auth, id } = await caller(req);
+  return dispatch.resumeQueue(ctx, auth, id);
+};
+
+export const steerSessionQueuedInput: Handler = async (req) => {
+  const { ctx, auth, id, queueId } = await caller(req);
+  return dispatch.steer(ctx, auth, id, queueId);
+};
+
+// -- How the session runs --
+
+export const submitSessionAction: Handler = async (req) => {
+  const { ctx, auth, id } = await caller(req);
+  return dispatch.submitAction(ctx, auth, id, req.body as Schema<"SessionActionRequest">);
+};
+
+export const updateSessionPermissionMode: Handler = async (req) => {
+  const { ctx, auth, id } = await caller(req);
+  const { permission_mode } = req.body as Schema<"SessionPermissionModeRequest">;
+  return service.setControls(ctx, auth, id, { permission_mode });
+};
+
+export const updateSessionMode: Handler = async (req) => {
+  const { ctx, auth, id } = await caller(req);
+  return service.setControls(ctx, auth, id, { mode: (req.body as Schema<"SessionModeRequest">).mode });
+};
+
+export const updateSessionEffort: Handler = async (req) => {
+  const { ctx, auth, id } = await caller(req);
+  return service.setControls(ctx, auth, id, { effort: (req.body as Schema<"SessionEffortRequest">).effort ?? null });
+};
+
+/** Cancelling a session stops what it is doing; it is the same act as interrupting it. */
+export const cancelSession: Handler = async (req) => {
+  const { ctx, auth, id } = await caller(req);
+  return dispatch.interrupt(ctx, auth, id);
+};
+
+/**
+ * The runtime is started on the device by the first message, so there is
+ * nothing to warm up from here; this reports whether the device is reachable.
+ */
+export const prepareSessionRuntime: Handler = async (req, reply) => {
+  const { ctx, auth, id } = await caller(req);
+  const { row } = await service.access(ctx, auth, id);
+  const ready = row.device_id ? (await ctx.hub.online([row.device_id])).has(row.device_id) : false;
+  return reply.code(202).send({ ready });
+};

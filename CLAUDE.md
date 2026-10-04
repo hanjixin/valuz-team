@@ -21,7 +21,8 @@ After any change run `make check`. Do not consider work complete until it passes
 
 ## Rules
 
-- **Contract first.** `api/openapi.yaml` is the single source of truth for HTTP. Change the contract, then the server, then the frontend.
+- **Contract first.** `api/openapi.yaml` is the single source of truth for HTTP. Change the contract, then the server, then the frontend. After editing it run `make generate-types`; handlers take their request and response types from `@agent-base/contract`.
+- **Errors use `errorBody()`** (`apps/server/src/infra/errors.ts`): the web client reads the message from `detail`.
 - **An operation is implemented** when a function named exactly after its `operationId` is exported from `apps/server/src/modules/<module>/handlers.ts`. `make contract` counts these.
 - **Migrations are reversible.** Every migration in `packages/db/src/migrations` has a working `down`, and is listed in `migrations/index.ts`.
 - **Module boundaries.** A module's `repo.ts` is private to it; other modules call its service. `infra/` never imports a module. Lint enforces both.

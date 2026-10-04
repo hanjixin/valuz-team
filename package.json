@@ -13,14 +13,16 @@
     "test": "VITEST_MAX_FORKS=4 VITEST_MAX_THREADS=4 turbo run test --concurrency=1",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm format:check && pnpm i18n:check && pnpm lint && turbo run typecheck && pnpm test",
+    "check": "pnpm format:check && pnpm i18n:check && pnpm contract:check && pnpm lint && turbo run typecheck && pnpm test",
     "contract:coverage": "node scripts/contract-coverage.mjs",
     "i18n:gen": "node scripts/i18n.mjs gen",
     "i18n:check": "node scripts/i18n.mjs check",
     "prepare": "husky",
     "design-audit": "node scripts/design-audit.mjs",
     "design-audit:update": "node scripts/design-audit.mjs --update-baseline",
-    "test:e2e": "playwright test --config e2e/playwright.config.ts"
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "contract:generate": "pnpm --filter @agent-base/contract generate",
+    "contract:check": "pnpm --filter @agent-base/contract generate:check"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.6.0",

@@ -23,6 +23,9 @@ jobs:
       # A lockfile that does not match package.json fails here rather than silently re-resolving.
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
+      - run: pnpm i18n:check
+      # Generated contract types must match api/openapi.yaml.
+      - run: pnpm contract:check
       - run: pnpm lint
       - run: pnpm typecheck
       # Integration tests start PostgreSQL and Redis with Testcontainers (Docker is preinstalled on the runner).

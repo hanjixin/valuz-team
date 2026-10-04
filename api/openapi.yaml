@@ -8,6 +8,10 @@ servers:
   - url: http://localhost:8000
     description: Local development
 
+# Every operation requires a signed-in organization member unless it declares `security: []`.
+security:
+  - bearerAuth: []
+
 paths:
   /v1/channels/wecom-aibot/bindings/{agent_slug}:
     get:
@@ -1266,18 +1270,23 @@ paths:
   /health:
     get:
       summary: Health check
+      description: Liveness of the server and its dependencies. Public — load balancers poll it.
       operationId: healthCheck
+      tags: [system]
+      security: []
       responses:
         "200":
           description: Service is healthy
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: "ok"
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: A dependency is not answering
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
 
   /api/v1/users:
     get:
@@ -4890,7 +4899,7 @@ paths:
       responses:
         "204": {description: Playbook deleted}
         "404": {description: Playbook not found}
-        "409": {description: Revision conflict, active run, or Automation binding}
+        "409": {description: "Revision conflict, active run, or Automation binding"}
 
   /v1/playbooks/{definition_id}/versions:
     get:
@@ -5046,7 +5055,7 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Operation"}
-        "409": {description: Hash, state, or revision conflict}
+        "409": {description: "Hash, state, or revision conflict"}
 
   /v1/operations/{operation_id}/cancel:
     post:
@@ -5101,7 +5110,121 @@ paths:
                     type: object
                     additionalProperties: {$ref: "#/components/schemas/Operation"}
 
+  # ── Accounts (agent-base: cloud-first, multi-user) ─────────────────────────
+  /v1/auth/register:
+    post:
+      summary: Create an account
+      description: |
+        Creates the user and, without an invite, a new organization they own.
+        With an invite token the user joins the inviting organization instead.
+      operationId: registerAccount
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account created and signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "409":
+          description: An account with this email already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /v1/auth/login:
+    post:
+      summary: Sign in with email and password
+      operationId: login
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "401":
+          description: Incorrect email or password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /v1/auth/refresh:
+    post:
+      summary: Exchange a refresh token for a new token pair
+      description: Refresh tokens are single-use; the one presented is invalidated.
+      operationId: refreshTokens
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: New token pair
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokens"
+        "401":
+          description: The refresh token is invalid, expired, or already used
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /v1/auth/logout:
+    post:
+      summary: Invalidate a refresh token
+      operationId: logout
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "204":
+          description: Signed out
+  /v1/me:
+    get:
+      summary: The signed-in user and their organizations
+      operationId: getMe
+      tags: [auth]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token from `/v1/auth/login`. Send `X-Org-Id` to choose the organization (default — the first joined).
   parameters:
     AcceptLanguage:
       name: Accept-Language
@@ -7007,6 +7130,11 @@ components:
           type: string
         message:
           type: string
+        detail:
+          description: |
+            The same message under the key the web client reads (it was written against
+            FastAPI's `{detail}` error body). A string, or an object with `message` and
+            optionally `message_key` / `message_params` for a translated message.
 
     PaginatedResponse:
       allOf:
@@ -10247,3 +10375,100 @@ components:
                 type: string
                 enum: [replace, create]
               bytes: {type: integer}
+
+    # Referenced by /v1/onboarding/example-project but never defined upstream;
+    # shapes taken from the frontend client (packages/core/src/api/onboarding-api.ts).
+    ExampleProjectRequest:
+      type: object
+      required: [team_id]
+      properties:
+        team_id:
+          type: string
+          enum: [content, investment, development-engineering]
+    ExampleProjectResponse:
+      type: object
+      required: [project_id, project_name]
+      properties:
+        project_id: {type: string}
+        project_name: {type: string}
+
+    # ── agent-base: health & accounts ────────────────────────────────────
+    HealthStatus:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        checks:
+          type: object
+          required: [database, redis]
+          properties:
+            database: {type: boolean}
+            redis: {type: boolean}
+    RegisterRequest:
+      type: object
+      required: [email, password, name]
+      additionalProperties: false
+      properties:
+        email: {type: string, format: email, maxLength: 320}
+        password: {type: string, minLength: 8, maxLength: 200}
+        name: {type: string, minLength: 1, maxLength: 100}
+        org_name: {type: string, minLength: 1, maxLength: 100}
+        invite_token: {type: string}
+    LoginRequest:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      properties:
+        email: {type: string, format: email, maxLength: 320}
+        password: {type: string, minLength: 1, maxLength: 200}
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      additionalProperties: false
+      properties:
+        refresh_token: {type: string, minLength: 1}
+    AuthTokens:
+      type: object
+      required: [access_token, refresh_token, token_type, expires_in]
+      properties:
+        access_token: {type: string}
+        refresh_token: {type: string}
+        token_type: {type: string, enum: [Bearer]}
+        expires_in: {type: integer, description: Access token lifetime in seconds.}
+    AuthUser:
+      type: object
+      required: [id, email, name]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        name: {type: string}
+    OrgMembership:
+      type: object
+      required: [id, name, role]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        role: {type: string, enum: [owner, admin, member]}
+    AuthSession:
+      allOf:
+        - $ref: "#/components/schemas/AuthTokens"
+        - type: object
+          required: [user, org_id]
+          properties:
+            user:
+              $ref: "#/components/schemas/AuthUser"
+            org_id: {type: string, format: uuid, description: The organization the session starts in.}
+    Me:
+      type: object
+      required: [user, orgs, current_org_id, role]
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthUser"
+        orgs:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgMembership"
+        current_org_id: {type: string, format: uuid}
+        role: {type: string, enum: [owner, admin, member]}

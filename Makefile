@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install dev infra infra-down test test-all typecheck lint format check migrate migrate-down contract generate-types build clean
+.PHONY: generate-types help install dev infra infra-down test test-all typecheck lint format check migrate migrate-down contract generate-types build clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -42,6 +42,9 @@ migrate-down: ## Roll back the last migration (needs DATABASE_URL)
 
 contract: ## Show how much of api/openapi.yaml the server implements
 	pnpm contract:coverage
+
+generate-types: ## Regenerate contract types (after editing api/openapi.yaml) and i18n key types
+	pnpm contract:generate && pnpm i18n:gen
 
 build: ## Build everything
 	pnpm build

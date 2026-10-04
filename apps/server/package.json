@@ -7,16 +7,24 @@
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "migrate": "tsx src/migrate-cli.ts",
-    "build": "tsup",
+    "build": "tsup && cp ../../api/openapi.yaml dist/openapi.yaml",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "test": "vitest run"
   },
   "dependencies": {
+    "@agent-base/contract": "workspace:*",
     "@agent-base/db": "workspace:*",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/jwt": "^9.1.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@node-rs/argon2": "^2.2.1",
     "fastify": "^5.2.0",
+    "fastify-openapi-glue": "^4.11.5",
     "ioredis": "^5.4.2",
     "kysely": "^0.28.0",
+    "pg": "^8.23.1",
+    "yaml": "^2.9.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {

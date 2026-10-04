@@ -1,5 +1,6 @@
 import type { Migration } from "kysely";
 import * as baseline from "./0001_baseline.ts";
+import * as identity from "./0002_identity.ts";
 
 /**
  * Every migration, keyed by name; Kysely applies them in key order. Listed
@@ -8,4 +9,5 @@ import * as baseline from "./0001_baseline.ts";
  */
 export const migrations: Record<string, Migration> = {
   "0001_baseline": baseline,
+  "0002_identity": identity,
 };

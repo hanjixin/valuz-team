@@ -15,7 +15,10 @@ Keep changes in those directories to the documented seams so upstream can be re-
 - **Paths that counted directory levels** were shortened by one: the locale imports in `packages/shared/src/i18n/index.ts`,
   the monorepo root in `packages/shared/src/vite/preset.ts`, the repo root in `packages/core/src/api/request-usage.test.ts`.
 - **No Python.** `i18n/scripts/*.py` became `scripts/i18n.mjs` (same output), and the Vite i18n HMR plugin runs it with Node.
-- **`api/openapi.yaml`**: a duplicated `"422"` response key was removed (it made the file invalid YAML for strict parsers).
+- **`api/openapi.yaml`** was not machine-valid upstream: a duplicated `"422"` response key was removed, and the two
+  schemas `/v1/onboarding/example-project` referenced but never defined were added. Two response descriptions
+  containing commas inside a flow mapping (which YAML reads as extra keys) were quoted. agent-base additions (global bearer
+  security, the `auth` operations, a richer `/health`) are marked with `agent-base` comments in the file.
 - Tauri/Python-sidecar leftovers (`frontend/scripts/build-*.sh`, `frontend/sidecar-services/`) were not carried over.
 - `apps/webui/eslint.config.js` (a Vite template leftover that upstream bypassed with `--config`) was removed so it
   cannot shadow the root config.

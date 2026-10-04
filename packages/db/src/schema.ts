@@ -473,6 +473,22 @@ export interface ProjectKbBindingsTable {
   target_id: string;
 }
 
+export interface MemoriesTable {
+  id: string;
+  org_id: string;
+  target: "user" | "global" | "project";
+  user_id: string | null;
+  project_id: string | null;
+  content: string;
+  source: string;
+  created_at: Timestamp;
+}
+
+export interface MemoryReviewsTable {
+  session_id: string;
+  reviewed_until: number;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -506,6 +522,8 @@ export interface Database {
   kb_chunks: KbChunksTable;
   kb_tasks: KbTasksTable;
   project_kb_bindings: ProjectKbBindingsTable;
+  memories: MemoriesTable;
+  memory_reviews: MemoryReviewsTable;
   message_feedback: MessageFeedbackTable;
   user_settings: UserSettingsTable;
 }

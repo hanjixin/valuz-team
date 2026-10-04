@@ -77,6 +77,8 @@ export async function startTestServer(
     REDIS_URL: redisUrl,
     APP_SECRET: "test-secret-test-secret-test-secret-0123",
     LOG_LEVEL: "silent",
+    // No background memory review unless a test asks for one.
+    MEMORY_REVIEW_IDLE_SECONDS: "0",
     // Uploads are staged outside the repository.
     STORAGE_DIR: path.join(tmpdir(), `ab-storage-${crypto.randomUUID()}`),
     ...env,

@@ -104,4 +104,9 @@ Deliberate differences in behaviour:
   matching over parsed text (PostgreSQL trigrams) — no embeddings, and no OCR for scanned documents.
   The original file cannot be opened from the page yet (`source_path` is null). A project with no bindings
   consults every knowledge base of its organization.
+- Memory is rows in PostgreSQL, not files on a disk. `user` and `global` are a member's own (per organization);
+  `project` memory belongs to the project, so everyone who can see the project reads it and whoever can edit it
+  prunes it. It is rendered into every turn rather than frozen when the session is created. The background review
+  asks the session's model channel directly (one request, no tools) instead of running a throwaway session, so a
+  session on a subscription channel is not reviewed; the review at the end of a multi-agent task is not ported.
 - `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

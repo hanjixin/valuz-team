@@ -170,6 +170,18 @@ export const insertMessage = async (
     .values({ ...message, user_message: JSON.stringify(message.user_message) })
     .execute());
 
+/** The turns that finished after `since`, oldest first: what was asked and what was answered. */
+export const completedTurnsSince = (db: Db, sessionId: string, since: number, limit: number) =>
+  db
+    .selectFrom("messages")
+    .select(["user_message", "assistant_message", "ended_at"])
+    .where("session_id", "=", sessionId)
+    .where("status", "=", "completed")
+    .where("ended_at", ">", since)
+    .orderBy("ended_at")
+    .limit(limit)
+    .execute();
+
 export const deleteMessage = async (db: Db, id: string): Promise<void> =>
   void (await db.deleteFrom("messages").where("id", "=", id).execute());
 

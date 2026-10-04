@@ -81,6 +81,23 @@ export async function access(
   return { row, permission };
 }
 
+/** A session as background work sees it: there is no caller, so no permission to check. */
+export const byId = async (ctx: Ctx, id: string) => (UUID.test(id) ? repo.byId(ctx.db, id) : undefined);
+
+/** What was said in the turns that finished after `since` (epoch ms), oldest first. */
+export async function transcriptSince(
+  ctx: Ctx,
+  id: string,
+  since: number,
+): Promise<{ user: string; assistant: string; endedAt: number }[]> {
+  const turns = await repo.completedTurnsSince(ctx.db, id, since, 50);
+  return turns.map((turn) => ({
+    user: String((turn.user_message as { text?: unknown }).text ?? ""),
+    assistant: turn.assistant_message ?? "",
+    endedAt: Number(turn.ended_at),
+  }));
+}
+
 /** As `access`, for someone who is going to send, interrupt or queue. */
 export async function drive(ctx: Ctx, auth: Auth, id: string) {
   const found = await access(ctx, auth, id);

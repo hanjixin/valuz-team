@@ -9,6 +9,14 @@ import * as parser from "./knowledge/parse.ts";
 import * as knowledge from "./knowledge/service.ts";
 import { DOCS_INSTRUCTIONS, DOCS_TOOLKIT, DOCS_TOOLS, callTool as callDocsTool } from "./knowledge/tools.ts";
 import * as devices from "./devices/service.ts";
+import * as memoryReview from "./memory/review.ts";
+import * as memory from "./memory/service.ts";
+import {
+  MEMORY_TOOLKIT,
+  MEMORY_TOOLS,
+  authorize as authorizeMemory,
+  callTool as callMemoryTool,
+} from "./memory/tools.ts";
 import { onSessionIdle, onTurnEnd, registerTurnExtras } from "./sessions/dispatch.ts";
 import * as sessions from "./sessions/ingest.ts";
 import { TASK_TOOLKIT } from "./tasks/prompts.ts";
@@ -33,8 +41,7 @@ export function setupModules(app: FastifyInstance): void {
 
   // The knowledge base: uploads are parsed in the background, and a session whose
   // scope holds any document is given the tools to consult it.
-  const stopParser = parser.start(app.ctx);
-  app.addHook("onClose", stopParser);
+  parser.start(app);
   registerTurnExtras(app.ctx, async (session) => {
     const scope = await knowledge.scopeOf(app.ctx, session.org_id, session.project_id);
     if (!(await knowledge.hasReachable(app.ctx, scope))) return null;
@@ -45,6 +52,25 @@ export function setupModules(app: FastifyInstance): void {
     tools: DOCS_TOOLS,
     authorize: (sessionId) => knowledge.sessionScope(app.ctx, sessionId),
     call: (scope, tool, args) => callDocsTool(app.ctx, scope, tool, args),
+  });
+
+  // Memory: what was remembered is shown to every turn, an agent keeps it with a tool,
+  // and a conversation that has gone quiet is reviewed for what else is worth keeping.
+  memoryReview.start(app);
+  registerTurnExtras(app.ctx, async (session) => {
+    const owner = await memory.ownerOfSession(app.ctx, session);
+    if (!(await memory.getSettings(app.ctx, owner)).enabled) return null;
+    return {
+      instructions: await memory.render(app.ctx, owner),
+      mcpServers: [toolkitServer(app, session.id, MEMORY_TOOLKIT)],
+    };
+  });
+  onTurnEnd(app.ctx, (turn) => memoryReview.arm(app.ctx, turn));
+  mountToolkit<memory.Owner>(app, {
+    ...MEMORY_TOOLKIT,
+    tools: MEMORY_TOOLS,
+    authorize: (sessionId) => authorizeMemory(app.ctx, sessionId),
+    call: (owner, tool, args) => callMemoryTool(app.ctx, owner, tool, args),
   });
   registerDeviceLink(app);
 }

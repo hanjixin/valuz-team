@@ -1,13 +1,13 @@
 /**
- * Turning an uploaded file into searchable text, off the request path. Jobs
- * wait in a Redis queue (BullMQ), so any replica may parse what another accepted
- * and a restart loses nothing. Parsers and the splitter are third-party.
+ * Turning an uploaded file into searchable text, off the request path
+ * (`infra/jobs.ts`). Parsers and the splitter are third-party.
  */
 import path from "node:path";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { Queue, Worker } from "bullmq";
+import type { FastifyInstance } from "fastify";
 import { parseOffice } from "officeparser";
 import type { Ctx } from "../../infra/context.ts";
+import { type JobQueue, startJobs } from "../../infra/jobs.ts";
 import * as notifications from "../notifications/service.ts";
 import * as repo from "./repo.ts";
 
@@ -26,7 +26,7 @@ interface ParseJob {
 }
 
 const splitter = new RecursiveCharacterTextSplitter({ chunkSize: 1200, chunkOverlap: 150 });
-const queues = new WeakMap<Ctx, Queue<ParseJob>>();
+const queues = new WeakMap<Ctx, JobQueue<ParseJob>>();
 
 async function extract(filename: string, bytes: Buffer): Promise<string> {
   const ext = path.extname(filename).toLowerCase();
@@ -65,34 +65,17 @@ async function parse(ctx: Ctx, job: ParseJob): Promise<void> {
   }
 }
 
-/** Start parsing what is queued. Returns how to stop. */
-export function start(ctx: Ctx): () => Promise<void> {
-  // BullMQ blocks on its connection, so it gets its own rather than the server's.
-  const connection = ctx.redis.duplicate();
-  connection.on("error", () => undefined); // retried by ioredis; reported once by the server's own connection
-  const queue = new Queue<ParseJob>(QUEUE, { connection: ctx.redis });
-  const worker = new Worker<ParseJob>(QUEUE, (job) => parse(ctx, job.data), { connection, concurrency: 2 });
-  queue.on("error", (err) => ctx.log(err, "knowledge base queue"));
-  worker.on("error", (err) => ctx.log(err, "knowledge base parser"));
-  worker.on("failed", (job, err) => ctx.log(err, `document ${job?.data.documentId ?? "?"}: parsing crashed`));
-  queues.set(ctx, queue);
-  return async () => {
-    // Closing waits for Redis to answer; when Redis is what went away, shutdown must not wait with it.
-    const closed = Promise.allSettled([worker.close(true), queue.close()]);
-    await Promise.race([closed, new Promise((resolve) => setTimeout(resolve, 2000).unref())]);
-    void worker.disconnect().catch(() => undefined);
-    connection.disconnect();
-  };
+/** Start parsing what is queued, on this server. */
+export function start(app: FastifyInstance): void {
+  const ctx = app.ctx;
+  queues.set(
+    ctx,
+    startJobs<ParseJob>(app, QUEUE, (job) => parse(ctx, job)),
+  );
 }
 
 export async function enqueue(ctx: Ctx, taskId: string, documentIds: string[]): Promise<void> {
   const queue = queues.get(ctx);
   if (!queue) throw new Error("the knowledge base parser was not started");
-  await queue.addBulk(
-    documentIds.map((documentId) => ({
-      name: "parse",
-      data: { documentId, taskId },
-      opts: { removeOnComplete: true, removeOnFail: 100 },
-    })),
-  );
+  await queue.add(documentIds.map((documentId) => ({ documentId, taskId })));
 }

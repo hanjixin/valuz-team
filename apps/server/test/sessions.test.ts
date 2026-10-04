@@ -535,8 +535,10 @@ describe("sessions", () => {
   it("closes a turn on the device's behalf when the device restarts in the middle of it", async () => {
     const session = await newChat(alice);
     model.replies.push({ hang: true });
+    const asked = model.requests.length;
     await call(alice, "POST", `/v1/sessions/${session.id}/messages`, { prompt: "this will be cut off" });
-    await eventually(async () => (await types(session.id)).includes("message.user"));
+    // Mid-turn: the model has been asked and has not answered.
+    await eventually(async () => model.requests.length > asked);
 
     await host.stop();
     host = await startHost(); // a new process: it knows nothing of the turn

@@ -131,7 +131,10 @@ export async function remove(ctx: Ctx, auth: Auth, id: string): Promise<void> {
 }
 
 /** What a session in the project carries into every turn. No permission check: the session is the authorization. */
-export async function contextForSession(ctx: Ctx, id: string): Promise<{ name: string; instructions: string } | null> {
+export async function contextForSession(
+  ctx: Ctx,
+  id: string,
+): Promise<{ name: string; instructions: string; kind: string } | null> {
   const row = await repo.byId(ctx.db, id);
-  return row ? { name: row.name, instructions: row.instructions_md } : null;
+  return row ? { name: row.name, instructions: row.instructions_md, kind: row.kind } : null;
 }

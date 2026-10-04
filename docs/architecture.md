@@ -122,6 +122,15 @@ Agents consult it through a second server-hosted toolkit (`/v1/mcp/docs`: search
 every turn whose scope holds a document. The scope is the project's bindings — knowledge bases, folders or single
 documents — or, with none, everything the organization has.
 
+## Memory
+
+What agents carry from one session to the next (`modules/memory`). Three scopes of short entries, each with a hard
+size limit: `user` and `global` are a member's own, `project` belongs to a project and is shared with everyone who
+works in it. A turn is shown what is in scope and given a `memory` tool (a third server-hosted toolkit) to add,
+replace and remove entries. When a conversation has been quiet for a minute, a background job (`infra/jobs.ts`)
+asks the session's model what else was worth keeping and applies its answer through the same store — so the same
+limits, secret redaction and scan for hidden instructions cover both paths.
+
 ## Calling out on a member's behalf
 
 A model channel's endpoint is a URL a member typed. Before the server calls one, `infra/outbound.ts` checks it
@@ -135,8 +144,8 @@ returned by the API.
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events), and the collaboration UI (Settings → Organization,
-Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base.
-Not yet: fork, regenerate, project memory, automations, channels.
+Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory.
+Not yet: fork, regenerate, automations, channels.
 
 The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),
 module by module. `make contract` reports how much of the contract is implemented.

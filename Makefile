@@ -25,7 +25,7 @@ test-all: ## Run all tests (integration tests start PostgreSQL/Redis with Testco
 typecheck: ## Type check everything
 	pnpm typecheck
 
-lint: ## Lint everything (includes the module-boundary contract)
+lint: ## Lint everything (packages, root scripts, and the module-boundary contract)
 	pnpm lint
 
 format: ## Format all code

@@ -1,0 +1,91 @@
+/**
+ * Shared Vite config factory for @valuz project apps.
+ *
+ * Provides the common plugin stack (react, tailwindcss, i18n HMR),
+ * edition define, and package alias resolution. Each app extends the
+ * result with app-specific options and passes in the edition overlay
+ * plugin (from @valuz/core/vite) to avoid circular deps.
+ *
+ * Usage:
+ *   import { editionOverlayPlugin } from "@valuz/core/vite";
+ *   import { baseViteConfig } from "@valuz/shared/vite/preset";
+ *   export default defineConfig({
+ *     ...baseViteConfig({
+ *       configDir: __dirname,
+ *       editionOverlay: editionOverlayPlugin(),
+ *     }),
+ *     server: { port: 1420 },
+ *   });
+ */
+
+import { createRequire } from "node:module";
+import path from "node:path";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import type { PluginOption, UserConfig } from "vite";
+import { i18nHmrPlugin } from "./i18n-hmr-plugin.ts";
+import { pdfjsAssetsPlugin } from "./pdfjs-assets-plugin.ts";
+
+const edition = process.env.EDITION ?? "personal";
+
+export interface BaseViteConfigOptions {
+  /** Directory of the vite.config file — used to resolve aliases. */
+  configDir: string;
+  /** Root of the frontend monorepo (default: configDir/../..). */
+  monorepoRoot?: string;
+  /** Edition overlay plugin from @valuz/core/vite. */
+  editionOverlay: PluginOption;
+}
+
+function canResolve(id: string, dir: string): boolean {
+  try {
+    createRequire(path.join(dir, "_")).resolve(id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function baseViteConfig(options: BaseViteConfigOptions): UserConfig {
+  const root =
+    options.monorepoRoot ?? path.resolve(options.configDir, "../..");
+
+  return {
+    plugins: [
+      react(),
+      tailwindcss(),
+      options.editionOverlay,
+      i18nHmrPlugin({
+        root,
+        command: ["node", "scripts/i18n.mjs", "gen"],
+      }),
+      pdfjsAssetsPlugin({ configDir: options.configDir }),
+    ],
+    define: {
+      __EDITION__: JSON.stringify(edition),
+    },
+    // Spreadsheet parsing runs inside a lazily-created Worker. Vite cannot
+    // discover that dependency during its normal entry scan, so the first
+    // spreadsheet opened in dev would optimize `xlsx` on demand and reload
+    // the entire renderer. Pre-bundle it at startup to keep the preview open.
+    // Only include when resolvable from the consuming app (pnpm strict hoisting
+    // means it may not be visible from every app root).
+    optimizeDeps: {
+      include: canResolve("xlsx", options.configDir) ? ["xlsx"] : [],
+    },
+    resolve: {
+      alias: {
+        "@valuz/shared": path.resolve(
+          options.configDir,
+          "../../packages/shared/src",
+        ),
+        "@valuz/core": path.resolve(
+          options.configDir,
+          "../../packages/core/src",
+        ),
+        "@valuz/ui": path.resolve(options.configDir, "../../packages/ui/src"),
+        "@valuz/app": path.resolve(options.configDir, "../../packages/app/src"),
+      },
+    },
+  };
+}

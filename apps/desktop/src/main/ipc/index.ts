@@ -1,0 +1,283 @@
+import { t } from "@valuz/shared/i18n";
+import { app, dialog, ipcMain, shell } from "electron";
+import { spawn } from "node:child_process";
+import { copyFile, mkdir, open, unlink } from "node:fs/promises";
+import { join, dirname } from "node:path";
+import { getMainWindow } from "../windows";
+import { openExternalIfSafe } from "../security";
+import { desktopRuntime } from "./desktop";
+import { serviceHandlers } from "./services";
+import {
+  getCliStatus,
+  launchTerminalWithCommand,
+  type CliTool,
+} from "./cli-login";
+import {
+  getCliInstallStatus,
+  installCliToPath,
+  uninstallCliFromPath,
+} from "./install-cli";
+import { registerNotificationHandlers } from "./notifications";
+
+export const registerIpcHandlers = () => {
+  const handlers = serviceHandlers(desktopRuntime);
+
+  for (const [channel, handler] of Object.entries(handlers)) {
+    ipcMain.handle(channel, handler);
+  }
+
+  registerNotificationHandlers();
+
+  ipcMain.handle("select_directory", async () => {
+    const win = getMainWindow();
+    const opts: Electron.OpenDialogOptions = {
+      properties: ["openDirectory", "createDirectory"],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, opts)
+      : await dialog.showOpenDialog(opts);
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, path: null };
+    }
+    return { canceled: false, path: result.filePaths[0] };
+  });
+
+  ipcMain.handle("open_in_finder", async (_event, args: { path: string }) => {
+    // ``shell.openPath`` reports failure by RESOLVING with a message, not by
+    // rejecting — so awaiting and discarding it turns every failure (no app
+    // for the extension, quarantine, a path that no longer exists) into a
+    // click that does nothing at all. Hand it back.
+    if (!args?.path) return "";
+    return await shell.openPath(args.path);
+  });
+
+  ipcMain.handle(
+    "open_external_url",
+    async (_event, args: { url?: string }) => {
+      if (!args?.url) {
+        return false;
+      }
+      return openExternalIfSafe(args.url);
+    },
+  );
+
+  ipcMain.handle(
+    "read_file_content",
+    async (_event, args: { path: string }) => {
+      if (!args?.path) return { content: null, truncated: false };
+      const maxBytes = 5 * 1024 * 1024;
+      let handle: Awaited<ReturnType<typeof open>> | null = null;
+      try {
+        handle = await open(args.path, "r");
+        const stat = await handle.stat();
+        const previewBytes = Math.min(stat.size, maxBytes);
+        const buf = Buffer.allocUnsafe(previewBytes);
+        const { bytesRead } = await handle.read(buf, 0, previewBytes, 0);
+        return {
+          content: buf.subarray(0, bytesRead).toString("utf-8"),
+          truncated: stat.size > maxBytes,
+        };
+      } catch {
+        return { content: null, truncated: false };
+      } finally {
+        await handle?.close();
+      }
+    },
+  );
+
+  ipcMain.handle(
+    "copy_files",
+    async (_event, args: { sources: string[]; destDir: string }) => {
+      if (!args?.sources?.length || !args?.destDir) {
+        return { copied: 0, errors: [] };
+      }
+      let copied = 0;
+      const errors: string[] = [];
+      for (const src of args.sources) {
+        try {
+          const dest = join(args.destDir, src.split(/[/\\]/).pop()!);
+          await mkdir(dirname(dest), { recursive: true });
+          await copyFile(src, dest);
+          copied++;
+        } catch (err) {
+          errors.push(
+            `${src}: ${err instanceof Error ? err.message : t("common.copy" as Parameters<typeof t>[0]) + " " + t("common.failed" as Parameters<typeof t>[0])}`,
+          );
+        }
+      }
+      return { copied, errors };
+    },
+  );
+
+  // "Download" for a file that is already on this machine: ask where to put a
+  // copy. The web shell's download path (navigate to an attachment URL) has
+  // nothing to navigate to for a local file, so the desktop answers the same
+  // user intent with a save dialog instead.
+  ipcMain.handle(
+    "save_file_as",
+    async (_event, args: { path: string; suggestedName?: string }) => {
+      if (!args?.path) return { saved: false, error: "No path" };
+      const win = getMainWindow();
+      const opts: Electron.SaveDialogOptions = {
+        defaultPath: args.suggestedName || args.path.split(/[/\\]/).pop() || "",
+      };
+      const result = win
+        ? await dialog.showSaveDialog(win, opts)
+        : await dialog.showSaveDialog(opts);
+      if (result.canceled || !result.filePath) return { saved: false };
+      try {
+        await copyFile(args.path, result.filePath);
+        return { saved: true, path: result.filePath };
+      } catch (err) {
+        return {
+          saved: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    },
+  );
+
+  ipcMain.handle("delete_file", async (_event, args: { path: string }) => {
+    if (!args?.path) return { success: false, error: "No path" };
+    try {
+      await unlink(args.path);
+      return { success: true };
+    } catch (err) {
+      return {
+        success: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : t("common.deleteFailed" as Parameters<typeof t>[0]),
+      };
+    }
+  });
+
+  // Renderer asks for the runtime app version. In a packaged build this is
+  // the value electron-builder stamped from package.json (which build-desktop.sh
+  // overwrites with the git tag), so it's the single authoritative version the
+  // user is actually running — independent of the backend's pyproject version.
+  ipcMain.handle("app_get_version", async () => {
+    return app.getVersion();
+  });
+
+  // Brand-logo dropdown's "关闭" item — quits the entire client and
+  // every spawned sidecar. ``app.quit()`` triggers ``before-quit``,
+  // which already calls ``desktopRuntime.stopAllServices()`` (see
+  // ``main/index.ts``), so background processes (agent server, etc.)
+  // get torn down before the Electron process exits. Renderer cannot
+  // call ``app.quit()`` directly from sandbox.
+  ipcMain.handle("app_quit", async () => {
+    app.quit();
+  });
+
+  // Full client restart — used by Settings → Backup after staging a restore
+  // (the staged restore applies at next backend boot, so quit alone would
+  // leave the user to reopen the app by hand). ``app.relaunch()`` schedules a
+  // fresh instance for after exit; ``app.quit()`` then runs the normal
+  // ``before-quit`` teardown (sidecars incl. the agent server stop cleanly),
+  // and the relaunched instance boots the backend, which applies the restore.
+  ipcMain.handle("app_relaunch", async () => {
+    app.relaunch();
+    app.quit();
+  });
+
+  // Brand-logo dropdown's "新窗口" item — spawns a brand-new client
+  // INSTANCE (separate Electron process), not just another
+  // BrowserWindow inside this one. Each instance has its own main
+  // process, its own sidecar services, its own IPC bus.
+  //
+  // ``process.execPath`` is the right binary in both modes:
+  //   - dev: the locally-installed Electron binary; we replay
+  //     ``process.argv.slice(1)`` so it loads the same renderer +
+  //     preload as the parent dev process.
+  //   - packaged: the app bundle's executable; no extra args needed,
+  //     the bundle knows which renderer to load.
+  // ``detached: true`` + ``unref()`` lets the child outlive the
+  // parent if the parent exits first; ``stdio: 'ignore'`` keeps the
+  // child's logs from spamming the parent's terminal.
+  ipcMain.handle("window_open_new", async () => {
+    const args = app.isPackaged ? [] : process.argv.slice(1);
+    const child = spawn(process.execPath, args, {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+  });
+
+  // Window control IPC — minimze, maximize/restore, close, and state query.
+  // Used by the custom WindowControls component in the renderer TopBar on
+  // Windows and Linux (macOS uses native traffic-light buttons instead).
+  ipcMain.handle("window_minimize", async () => {
+    getMainWindow()?.minimize();
+  });
+
+  ipcMain.handle("window_maximize", async () => {
+    const win = getMainWindow();
+    if (!win) return false;
+    if (win.isMaximized()) {
+      win.unmaximize();
+      return false;
+    }
+    win.maximize();
+    return true;
+  });
+
+  ipcMain.handle("window_close", async () => {
+    getMainWindow()?.close();
+  });
+
+  ipcMain.handle("window_is_maximized", async () => {
+    return getMainWindow()?.isMaximized() ?? false;
+  });
+
+  ipcMain.handle("window_reload", async () => {
+    getMainWindow()?.reload();
+  });
+
+  ipcMain.handle("window_toggle_devtools", async () => {
+    const win = getMainWindow();
+    if (win) {
+      win.webContents.toggleDevTools();
+    }
+  });
+
+  ipcMain.handle("window_toggle_fullscreen", async () => {
+    const win = getMainWindow();
+    if (win) {
+      win.setFullScreen(!win.isFullScreen());
+    }
+  });
+
+  ipcMain.handle(
+    "cli_login_status",
+    async (_event, args: { tool?: CliTool }) => {
+      if (args?.tool !== "claude" && args?.tool !== "codex") {
+        return { installed: false, state: "unsupported", cliPath: null };
+      }
+      return getCliStatus(args.tool);
+    },
+  );
+
+  ipcMain.handle(
+    "cli_login_launch",
+    async (_event, args: { tool?: CliTool }) => {
+      if (args?.tool !== "claude" && args?.tool !== "codex") {
+        return { launched: false, error: "invalid_tool" };
+      }
+      return launchTerminalWithCommand(args.tool);
+    },
+  );
+
+  ipcMain.handle("cli_install_status", async () => {
+    return getCliInstallStatus();
+  });
+
+  ipcMain.handle("cli_install_to_path", async () => {
+    return installCliToPath();
+  });
+
+  ipcMain.handle("cli_uninstall_from_path", async () => {
+    return uninstallCliFromPath();
+  });
+};

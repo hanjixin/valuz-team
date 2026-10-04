@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Valuz Design Spec v2</title>
+<style>
+:root {
+  --background:#f8f9fb; --foreground:#131313; --surface:#ffffff;
+  --brand:#725cf9; --success:#16a34a; --warning:#ef8b0c; --error:#e5484d;
+  --error-strong:color-mix(in oklab,var(--error) 88%,#000);
+  --error-hover:color-mix(in oklab,var(--error-strong) 92%,#000);
+  --finance-up:#f54b4b; --finance-down:#53bc76; --slate:#444b54;
+  --finance-up-text:color-mix(in oklab,var(--finance-up) 65%,var(--foreground));
+  --finance-down-text:color-mix(in oklab,var(--finance-down) 65%,var(--foreground));
+  --accent-sky:#0ea5e9; --accent-teal:#14b8a6; --accent-amber:#eab308; --accent-pink:#ec4899;
+  --accent-blue:#3b82f6; --accent-lime:#84cc16; --accent-orange:#f97316; --accent-fuchsia:#d946ef;
+  --fg-1:color-mix(in oklab,var(--foreground) 1%,var(--background));
+  --fg-2:color-mix(in oklab,var(--foreground) 2%,var(--background));
+  --fg-3:color-mix(in oklab,var(--foreground) 3%,var(--background));
+  --fg-5:color-mix(in oklab,var(--foreground) 5%,var(--background));
+  --fg-8:color-mix(in oklab,var(--foreground) 8%,var(--background));
+  --fg-12:color-mix(in oklab,var(--foreground) 12%,var(--background));
+  --fg-30:color-mix(in oklab,var(--slate) 37%,var(--background));
+  --fg-50:color-mix(in oklab,var(--slate) 60%,var(--background));
+  --fg-60:color-mix(in oklab,var(--slate) 75%,var(--background));
+  --fg-80:var(--slate);
+  --brand-50:#f3f2ff; --brand-100:#eae6ff; --brand-200:#d1c8ff; --brand-300:#b29ff7;
+  --brand-500:var(--brand); --brand-600:#5d46e8; --brand-700:#4936c2;
+  --success-soft:color-mix(in oklab,var(--success) 10%,var(--background));
+  --success-border:color-mix(in oklab,var(--success) 35%,var(--background));
+  --success-text:color-mix(in oklab,var(--success) 65%,var(--foreground));
+  --warning-soft:color-mix(in oklab,var(--warning) 10%,var(--background));
+  --warning-border:color-mix(in oklab,var(--warning) 35%,var(--background));
+  --warning-text:color-mix(in oklab,var(--warning) 65%,var(--foreground));
+  --error-soft:color-mix(in oklab,var(--error) 10%,var(--background));
+  --error-border:color-mix(in oklab,var(--error) 35%,var(--background));
+  --error-text:color-mix(in oklab,var(--error) 65%,var(--foreground));
+  --shadow-rgb:19 19 19; --shadow-border-a:0.06; --shadow-blur-a:0.07;
+  --shadow-outline:0 1px 2px rgb(var(--shadow-rgb)/var(--shadow-blur-a));
+  --shadow-1:0 1px 2px rgb(var(--shadow-rgb)/calc(var(--shadow-blur-a)*1.35)),0 0 0 1px var(--fg-3);
+  --shadow-2:0 4px 10px rgb(var(--shadow-rgb)/var(--shadow-blur-a)),0 1px 2px rgb(var(--shadow-rgb)/var(--shadow-blur-a));
+  --shadow-3:0 12px 32px -8px rgb(var(--shadow-rgb)/calc(var(--shadow-blur-a)*2)),0 2px 6px rgb(var(--shadow-rgb)/var(--shadow-blur-a));
+  --shadow-4:0 24px 48px rgb(var(--shadow-rgb)/calc(var(--shadow-blur-a)*2.4)),0 0 0 1px rgb(var(--shadow-rgb)/var(--shadow-border-a));
+}
+html.dark {
+  --background:#0f1012; --foreground:#e4e4e7; --surface:#17181c;
+  --brand:#8b7afc; --success:#22c55e; --warning:#f59e0b; --error:#ef4444;
+  --finance-up:#ff6b6b; --finance-down:#5fd389; --slate:#a8b1bf;
+  --accent-sky:#38bdf8; --accent-teal:#2dd4bf; --accent-amber:#facc15; --accent-pink:#f472b6;
+  --accent-blue:#60a5fa; --accent-lime:#a3e635; --accent-orange:#fb923c; --accent-fuchsia:#e879f9;
+  --brand-50:color-mix(in oklab,var(--brand) 10%,var(--background));
+  --brand-100:color-mix(in oklab,var(--brand) 16%,var(--background));
+  --brand-200:color-mix(in oklab,var(--brand) 28%,var(--background));
+  --brand-300:color-mix(in oklab,var(--brand) 45%,var(--background));
+  --brand-600:color-mix(in oklab,var(--brand) 85%,white);
+  --brand-700:color-mix(in oklab,var(--brand) 70%,white);
+  --shadow-rgb:0 0 0; --shadow-border-a:0.18; --shadow-blur-a:0.30;
+}
+* { box-sizing:border-box; margin:0; }
+body {
+  font-family:"PingFang SC",-apple-system,"Helvetica Neue",sans-serif;
+  background:var(--background); color:var(--foreground);
+  font-size:14px; line-height:1.7; -webkit-font-smoothing:antialiased;
+  padding:48px 56px 96px; max-width:1080px; margin:0 auto;
+  transition:background .2s,color .2s;
+}
+h1 { font-size:24px; font-weight:500; letter-spacing:-.01em; }
+h2 { font-size:15px; font-weight:600; margin:56px 0 4px; padding-top:24px; border-top:1px solid var(--fg-8); }
+h2 .num { color:var(--fg-30); font-feature-settings:"tnum"; margin-right:8px; }
+.sub { color:var(--fg-60); font-size:12px; margin-bottom:20px; }
+.meta { color:var(--fg-60); font-size:12px; margin-top:6px; }
+.toggle {
+  position:fixed; top:24px; right:24px; padding:6px 14px; font-size:12px;
+  background:var(--surface); border:1px solid var(--fg-8); border-radius:8px;
+  color:var(--foreground); cursor:pointer; box-shadow:var(--shadow-outline); font-family:inherit;
+}
+.row { display:flex; flex-wrap:wrap; gap:10px; }
+.chip { width:104px; }
+.chip .c { height:56px; border-radius:8px; border:1px solid rgb(var(--shadow-rgb)/.06); }
+.chip .n { font-size:12px; font-weight:500; margin-top:6px; }
+.chip .v { font-size:11px; color:var(--fg-60); font-family:ui-monospace,Menlo,monospace; }
+.chip .u { font-size:11px; color:var(--fg-30); }
+.ramp { display:flex; border-radius:8px; overflow:hidden; border:1px solid var(--fg-8); }
+.ramp div { flex:1; height:48px; position:relative; }
+.ramp span { position:absolute; bottom:4px; left:6px; font-size:10px; font-family:ui-monospace,Menlo,monospace; }
+.cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; }
+.status-card { border-radius:10px; padding:12px 14px; border:1px solid; font-size:13px; }
+.status-card b { font-size:13px; font-weight:600; display:flex; align-items:center; gap:5px; margin-bottom:2px; }
+.status-card b svg { width:13px; height:13px; flex-shrink:0; }
+.status-card .formula { font-size:11px; font-family:ui-monospace,Menlo,monospace; opacity:.75; }
+table { border-collapse:collapse; width:100%; background:var(--surface); border-radius:10px; overflow:hidden; box-shadow:var(--shadow-1); }
+th { text-align:left; font-size:11px; font-weight:600; color:var(--fg-60); letter-spacing:.05em; padding:9px 14px; background:var(--fg-1); }
+td { padding:10px 14px; border-top:1px solid var(--fg-3); font-size:13px; vertical-align:baseline; }
+td.mono, .mono { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--fg-60); }
+.spec-box { background:var(--surface); border:1px solid var(--fg-8); border-radius:12px; padding:24px; }
+.sp-row { display:flex; align-items:center; gap:16px; margin-bottom:10px; }
+.sp-bar { height:16px; background:var(--brand-200); border-radius:4px; }
+.sp-label { font-size:12px; color:var(--fg-60); font-family:ui-monospace,Menlo,monospace; width:32px; }
+.rad-row { display:flex; gap:16px; flex-wrap:wrap; }
+.rad-box { width:88px; height:64px; background:var(--brand-100); border:1.5px solid var(--brand-300); display:flex; align-items:flex-end; justify-content:center; padding-bottom:6px; font-size:11px; color:var(--brand-700); font-family:ui-monospace,Menlo,monospace; }
+.shadow-row { display:flex; gap:24px; flex-wrap:wrap; }
+.shadow-box { width:150px; height:90px; background:var(--surface); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--fg-60); }
+.btn { display:inline-flex; align-items:center; justify-content:center; height:32px; padding:0 14px; border-radius:8px; font-size:13px; font-weight:500; font-family:inherit; border:1px solid transparent; cursor:pointer; transition:all .12s cubic-bezier(.4,0,.2,1); }
+.btn-default { background:var(--brand); color:#fff; }
+.btn-default:hover { background:var(--brand-600); }
+.btn-outline { background:var(--surface); border-color:var(--fg-8); color:var(--foreground); box-shadow:var(--shadow-outline); }
+.btn-outline:hover { background:var(--fg-5); }
+.btn-ghost { background:transparent; color:var(--foreground); }
+.btn-ghost:hover { background:var(--fg-5); color:var(--foreground); }
+.btn-destructive { background:var(--error-strong); color:#fff; }
+.btn-destructive:hover { background:var(--error-hover); }
+.btn-link { background:none; color:var(--brand); text-decoration:underline; text-underline-offset:4px; }
+.btn:disabled { opacity:.5; pointer-events:none; }
+.btn:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }
+.btn-grid { display:grid; grid-template-columns:90px repeat(3,1fr); gap:12px 20px; align-items:center; max-width:640px; }
+.btn-grid .lab { font-size:12px; color:var(--fg-60); font-family:ui-monospace,Menlo,monospace; }
+.btn-grid .head { font-size:11px; color:var(--fg-30); }
+.input-demo { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:20px; }
+.field label { display:block; font-size:12px; font-weight:500; margin-bottom:6px; }
+.field input { width:100%; height:32px; padding:0 10px; font:inherit; font-size:13px; color:var(--foreground); background:var(--surface); border:1px solid var(--fg-8); border-radius:8px; outline:none; }
+.field .hint { font-size:11px; color:var(--fg-60); margin-top:4px; }
+.field.focus input { border-color:var(--brand); box-shadow:0 0 0 3px color-mix(in oklab,var(--brand) 20%,transparent); }
+.field.err input { border-color:var(--error); }
+.field.err .hint { color:var(--error); }
+.field.dis input { background:var(--fg-3); color:var(--fg-30); }
+kbd { font-family:ui-monospace,Menlo,monospace; font-size:11px; background:var(--fg-5); border:1px solid var(--fg-8); border-radius:4px; padding:1px 5px; }
+.callout { background:var(--brand-50); border:1px solid var(--brand-200); border-radius:10px; padding:12px 16px; font-size:13px; margin-top:12px; }
+.fin-up { color:var(--finance-up-text); font-weight:500; font-feature-settings:"tnum"; }
+.fin-down { color:var(--finance-down-text); font-weight:500; font-feature-settings:"tnum"; }
+.pill { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:4px; font-size:11px; font-weight:500; border:1px solid transparent; }
+.pill svg { width:11px; height:11px; flex-shrink:0; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.pill .spin { animation:spin 1.2s linear infinite; }
+.pill-done { background:var(--success-soft); border-color:var(--success-border); color:var(--success-text); }
+.pill-running { background:var(--brand-50); border-color:var(--brand-200); color:var(--brand-700); }
+.pill-queued { background:var(--fg-5); color:var(--fg-80); }
+.pill-warn { background:var(--warning-soft); border-color:var(--warning-border); color:var(--warning-text); }
+.pill-err { background:var(--error-soft); border-color:var(--error-border); color:var(--error-text); }
+.tag-brand { background:var(--brand-100); color:var(--brand-700); }
+.tag-outline { background:transparent; border-color:var(--fg-8); color:var(--fg-60); }
+.tag-neutral { background:var(--fg-5); color:var(--fg-80); }
+.role-tag { display:inline-flex; align-items:center; gap:4px; height:16px; padding:0 4px; border-radius:4px; font-size:10px; line-height:1; font-weight:400; border:1px solid transparent; }
+.tag-role-lead { background:var(--brand-100); color:var(--brand-700); }
+.tag-role-sky { background:color-mix(in oklab,var(--accent-sky) 14%,var(--background)); color:color-mix(in oklab,var(--accent-sky) 62%,var(--foreground)); }
+.tag-role-teal { background:color-mix(in oklab,var(--accent-teal) 14%,var(--background)); color:color-mix(in oklab,var(--accent-teal) 62%,var(--foreground)); }
+.tag-role-amber { background:color-mix(in oklab,var(--accent-amber) 16%,var(--background)); color:color-mix(in oklab,var(--accent-amber) 50%,var(--foreground)); }
+.tag-role-pink { background:color-mix(in oklab,var(--accent-pink) 14%,var(--background)); color:color-mix(in oklab,var(--accent-pink) 62%,var(--foreground)); }
+.tag-role-blue { background:color-mix(in oklab,var(--accent-blue) 14%,var(--background)); color:color-mix(in oklab,var(--accent-blue) 62%,var(--foreground)); }
+.tag-demo { display:flex; flex-direction:column; gap:14px; }
+.tag-line { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:4px; }
+.tag-label { font-size:12px; color:var(--fg-60); font-family:ui-monospace,Menlo,monospace; }
+</style>
+</head>
+<body>
+<button class="toggle" onclick="document.documentElement.classList.toggle('dark')">☀ / ☾ 切换暗色</button>
+
+<h1>Valuz Design Spec v2.6</h1>
+<p class="meta">2026-06-15 · 18 个手选基色，其余全部派生 · 阴影分层（有边框纯投影/无边框带环）· 点右上角验证暗色模式</p>
+<p class="meta" style="margin-top:2px">⚠️ 本页是<b>视觉预览</b>，只内嵌展示用 token。完整 token（含 brand-gradient、状态三件套、z-index、动效）以 <b>tokens.css</b> 为唯一来源，落地以它为准。</p>
+
+<h2><span class="num">01</span>基色 — 每个模式仅 18 个手选决策</h2>
+<p class="sub">裁决：主色 #725cf9（废止 #6d5cff / #533afd）· warning #ef8b0c（v2.4 提亮，废止 #ff8710 / #d97706）· 财务绿 #53bc76（#53cb76 为笔误，废止）</p>
+<div class="row">
+  <div class="chip"><div class="c" style="background:var(--background)"></div><div class="n">background</div><div class="v">#f8f9fb</div><div class="u">页面背景</div></div>
+  <div class="chip"><div class="c" style="background:var(--foreground)"></div><div class="n">foreground</div><div class="v">#131313</div><div class="u">文字·派生源</div></div>
+  <div class="chip"><div class="c" style="background:var(--surface)"></div><div class="n">surface</div><div class="v">#ffffff</div><div class="u">面板·卡片</div></div>
+  <div class="chip"><div class="c" style="background:var(--brand)"></div><div class="n">brand ★</div><div class="v">#725cf9</div><div class="u">主CTA·Info</div></div>
+  <div class="chip"><div class="c" style="background:var(--success)"></div><div class="n">success</div><div class="v">#16a34a</div><div class="u">状态绿</div></div>
+  <div class="chip"><div class="c" style="background:var(--warning)"></div><div class="n">warning</div><div class="v">#ef8b0c</div><div class="u">警示</div></div>
+  <div class="chip"><div class="c" style="background:var(--error)"></div><div class="n">error</div><div class="v">#e5484d</div><div class="u">错误·危险</div></div>
+  <div class="chip"><div class="c" style="background:var(--finance-up)"></div><div class="n">finance-up</div><div class="v">#f54b4b</div><div class="u">涨·仅财务</div></div>
+  <div class="chip"><div class="c" style="background:var(--finance-down)"></div><div class="n">finance-down</div><div class="v">#53bc76</div><div class="u">跌·仅财务</div></div>
+  <div class="chip"><div class="c" style="background:var(--slate)"></div><div class="n">slate</div><div class="v">#444b54</div><div class="u">蓝灰极·灰阶轴</div></div>
+</div>
+<p class="sub" style="margin-top:16px">点缀 / 图表分类色（同亮度同饱和度，只动色相）· 图表系列按以下固定顺序取色，超过 8 个系列用 fg-50 归并为"其他" · amber 是点缀，不得当 warning 用：</p>
+<div class="row">
+  <div class="chip"><div class="c" style="background:var(--accent-sky)"></div><div class="n">1 sky</div><div class="v">#0ea5e9</div></div>
+  <div class="chip"><div class="c" style="background:var(--accent-teal)"></div><div class="n">2 teal</div><div class="v">#14b8a6</div></div>
+  <div class="chip"><div class="c" style="background:var(--accent-amber)"></div><div class="n">3 amber</div><div class="v">#eab308</div></div>
+  <div class="chip"><div class="c" style="background:var(--accent-pink)"></div><div class="n">4 pink</div><div class="v">#ec4899 ✓裁决</div></div>
+  <div class="chip"><div class="c" style="background:var(--accent-blue)"></div><div class="n">5 blue</div><div class="v">#3b82f6</div></div>
+  <div class="chip"><div class="c" style="background:var(--accent-lime)"></div><div class="n">6 lime</div><div class="v">#84cc16</div></div>
+  <div class="chip"><div class="c" style="background:var(--accent-orange)"></div><div class="n">7 orange</div><div class="v">#f97316</div></div>
+  <div class="chip"><div class="c" style="background:var(--accent-fuchsia)"></div><div class="n">8 fuchsia</div><div class="v">#d946ef</div></div>
+</div>
+<div style="margin-top:14px;font-size:13px">财务数据示例：贵州茅台 <span class="fin-up">+2.41%</span> · 宁德时代 <span class="fin-down">−1.08%</span>（语义与 error/success 分离，不得混用 token）</div>
+
+<h2><span class="num">02</span>灰阶 — color-mix 派生，禁止手选</h2>
+<p class="sub">浅端（1~12）mix(foreground, background) 保持中性 · 中段（30~80）沿蓝灰极 slate 派生，冷调中间最饱满、两端归零 · 旧 9 档手选灰全部归入此梯</p>
+<div class="ramp">
+  <div style="background:var(--fg-1)"><span style="color:var(--fg-60)">1</span></div>
+  <div style="background:var(--fg-3)"><span style="color:var(--fg-60)">3</span></div>
+  <div style="background:var(--fg-5)"><span style="color:var(--fg-60)">5</span></div>
+  <div style="background:var(--fg-8)"><span style="color:var(--fg-80)">8</span></div>
+  <div style="background:var(--fg-12)"><span style="color:var(--fg-80)">12</span></div>
+  <div style="background:var(--fg-30)"><span style="color:var(--background)">30</span></div>
+  <div style="background:var(--fg-50)"><span style="color:var(--background)">50</span></div>
+  <div style="background:var(--fg-60)"><span style="color:var(--background)">60</span></div>
+  <div style="background:var(--fg-80)"><span style="color:var(--background)">80</span></div>
+  <div style="background:var(--foreground)" title="= foreground 本体，非新颜色"><span style="color:var(--background)">fg</span></div>
+</div>
+<p class="sub" style="margin-top:8px">注：末格 fg 即 foreground（#131313）本体——灰阶的终点，不是新颜色。全系统文字黑只有这一个值。</p>
+<table style="margin-top:14px">
+  <tr><th>档位</th><th>用途</th><th>无障碍</th></tr>
+  <tr><td class="mono">fg-1 / 3 / 5</td><td>hover 底 · 分割线 · 次级浅底</td><td class="mono">—</td></tr>
+  <tr><td class="mono">fg-8 / 12</td><td>常规边框 · 强边界</td><td class="mono">—</td></tr>
+  <tr><td class="mono">fg-30</td><td style="color:var(--fg-30)">disabled、已完成划线（本行示例）</td><td class="mono">不承载必读信息</td></tr>
+  <tr><td class="mono">fg-50</td><td style="color:var(--fg-50)">折叠箭头、次级图标（本行示例）</td><td class="mono">仅图标或 ≥18px</td></tr>
+  <tr><td class="mono">fg-60</td><td style="color:var(--fg-60)">次级文字唯一 token（本行示例）</td><td class="mono">AA ✓</td></tr>
+  <tr><td class="mono">fg-80</td><td style="color:var(--fg-80)">强次级文字（本行示例）</td><td class="mono">AA ✓</td></tr>
+</table>
+
+<h2><span class="num">03</span>品牌色阶 + 状态色三件套</h2>
+<p class="sub">品牌阶取自 Figma 色板（700 为补档）；状态色三角色全部派生，禁止手配</p>
+<div class="ramp" style="max-width:720px">
+  <div style="background:var(--brand-50)"><span style="color:var(--brand-700)">50</span></div>
+  <div style="background:var(--brand-100)"><span style="color:var(--brand-700)">100</span></div>
+  <div style="background:var(--brand-200)"><span style="color:var(--brand-700)">200</span></div>
+  <div style="background:var(--brand-300)"><span style="color:#fff">300</span></div>
+  <div style="background:var(--brand-500)"><span style="color:#fff">500★</span></div>
+  <div style="background:var(--brand-600)"><span style="color:#fff">600</span></div>
+  <div style="background:var(--brand-700)"><span style="color:#fff">700</span></div>
+</div>
+<div class="cards" style="margin-top:16px">
+  <div class="status-card" style="background:color-mix(in oklab,var(--success) 10%,var(--background));border-color:color-mix(in oklab,var(--success) 35%,var(--background));color:color-mix(in oklab,var(--success) 65%,var(--foreground))"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Success</b>任务执行完成<div class="formula">soft 10% · border 35% · text 65%</div></div>
+  <div class="status-card" style="background:color-mix(in oklab,var(--warning) 10%,var(--background));border-color:color-mix(in oklab,var(--warning) 35%,var(--background));color:color-mix(in oklab,var(--warning) 65%,var(--foreground))"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Warning</b>API 配额即将用尽<div class="formula">soft 10% · border 35% · text 65%</div></div>
+  <div class="status-card" style="background:color-mix(in oklab,var(--error) 10%,var(--background));border-color:color-mix(in oklab,var(--error) 35%,var(--background));color:color-mix(in oklab,var(--error) 65%,var(--foreground))"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Error</b>连接已断开<div class="formula">soft 10% · border 35% · text 65%</div></div>
+  <div class="status-card" style="background:var(--brand-50);border-color:var(--brand-200);color:var(--brand-700)"><b><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>Info</b>复用品牌紫，不引入第五色相<div class="formula">brand-50 · 200 · 700</div></div>
+</div>
+
+<h2><span class="num">04</span>字阶 — 8 档整数，0.5px 档全部废止</h2>
+<p class="sub">主字体 PingFang SC · 禁用 italic 与 700+ 字重（700 仅限 micro badge）· 13.5→14，12.5→13，11.5→12，10.5→11</p>
+<table>
+  <tr><th>Token</th><th>规格</th><th>示例</th><th>用途</th></tr>
+  <tr><td class="mono">micro</td><td class="mono">10/1.2</td><td style="font-size:10px;font-weight:700">PDF CSV XLS</td><td class="mono">文件badge，仅图形</td></tr>
+  <tr><td class="mono">2xs</td><td class="mono">11/1.4</td><td style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--fg-60)">最近对话 · SECTION LABEL</td><td class="mono">Section Label / 表头</td></tr>
+  <tr><td class="mono">xs</td><td class="mono">12/1.5</td><td style="font-size:12px;color:var(--fg-60)">3 分钟前 · 共 12 个文件 · <kbd>⌘K</kbd></td><td class="mono">meta / 按钮标签 / code</td></tr>
+  <tr><td class="mono">sm</td><td class="mono">13/1.55</td><td style="font-size:13px">新建对话 · 季度财报分析任务</td><td class="mono">Sidebar / Composer / 列表</td></tr>
+  <tr><td class="mono">base</td><td class="mono">14/1.7</td><td style="font-size:14px">已为你梳理三家公司的核心财务指标，详见下表。</td><td class="mono">消息正文 / 标题栏</td></tr>
+  <tr><td class="mono">lg</td><td class="mono">15/1.5</td><td style="font-size:15px;font-weight:500">上下文面板</td><td class="mono">面板主标题</td></tr>
+  <tr><td class="mono">xl</td><td class="mono">18/1.4</td><td style="font-size:18px;font-weight:500">项目设置</td><td class="mono">页面标题</td></tr>
+  <tr><td class="mono">2xl</td><td class="mono">24/1.3</td><td style="font-size:24px;font-weight:500">欢迎使用 Valuz</td><td class="mono">onboarding / 大数字</td></tr>
+</table>
+
+<h2><span class="num">05</span>间距 · 圆角 · 阴影</h2>
+<p class="sub">间距 4px 网格 7 档 · 圆角 6 档（2/3/7/14px 废止）· 阴影 4 级从前景色派生（切暗色验证自动加深）</p>
+<div class="spec-box">
+  <div class="sp-row"><span class="sp-label">4</span><div class="sp-bar" style="width:4px"></div></div>
+  <div class="sp-row"><span class="sp-label">8</span><div class="sp-bar" style="width:8px"></div></div>
+  <div class="sp-row"><span class="sp-label">12</span><div class="sp-bar" style="width:12px"></div></div>
+  <div class="sp-row"><span class="sp-label">16</span><div class="sp-bar" style="width:16px"></div></div>
+  <div class="sp-row"><span class="sp-label">20</span><div class="sp-bar" style="width:20px"></div></div>
+  <div class="sp-row"><span class="sp-label">24</span><div class="sp-bar" style="width:24px"></div></div>
+  <div class="sp-row" style="margin-bottom:24px"><span class="sp-label">32</span><div class="sp-bar" style="width:32px"></div></div>
+  <div class="rad-row">
+    <div class="rad-box" style="border-radius:4px">sm 4</div>
+    <div class="rad-box" style="border-radius:6px">md 6</div>
+    <div class="rad-box" style="border-radius:8px">lg 8</div>
+    <div class="rad-box" style="border-radius:10px">xl 10</div>
+    <div class="rad-box" style="border-radius:12px">2xl 12</div>
+    <div class="rad-box" style="border-radius:999px">full</div>
+  </div>
+  <div class="shadow-row" style="margin-top:32px">
+    <div class="shadow-box" style="box-shadow:var(--shadow-1)">shadow-1 卡片</div>
+    <div class="shadow-box" style="box-shadow:var(--shadow-2)">shadow-2 悬浮</div>
+    <div class="shadow-box" style="box-shadow:var(--shadow-3)">shadow-3 popover</div>
+    <div class="shadow-box" style="box-shadow:var(--shadow-4)">shadow-4 modal</div>
+  </div>
+</div>
+
+<h2><span class="num">06</span>Button — 变体名与代码 props 逐字一致</h2>
+<p class="sub">variant: default / outline / ghost / destructive / link（secondary 已废止并入 outline：一个强调层级只配一个变体）· 状态全集 default / hover / active / focus-visible / disabled / loading</p>
+<div class="spec-box">
+  <div class="btn-grid">
+    <span></span><span class="head">Default</span><span class="head">Hover（移入验证）</span><span class="head">Disabled</span>
+    <span class="lab">default</span><button class="btn btn-default">运行任务</button><button class="btn btn-default">运行任务</button><button class="btn btn-default" disabled>运行任务</button>
+    <span class="lab">outline</span><button class="btn btn-outline">取消</button><button class="btn btn-outline">取消</button><button class="btn btn-outline" disabled>取消</button>
+    <span class="lab">ghost</span><button class="btn btn-ghost">更多</button><button class="btn btn-ghost">更多</button><button class="btn btn-ghost" disabled>更多</button>
+    <span class="lab">destructive</span><button class="btn btn-destructive">删除</button><button class="btn btn-destructive">删除</button><button class="btn btn-destructive" disabled>删除</button>
+    <span class="lab">link</span><button class="btn btn-link">查看全部</button><button class="btn btn-link">查看全部</button><button class="btn btn-link" disabled>查看全部</button>
+  </div>
+  <div class="callout">focus-visible 统一规则：<span class="mono">2px var(--brand) ring + 2px offset</span>。用 <kbd>Tab</kbd> 在本页按钮间移动可验证。禁止 <span class="mono">outline:none</span> 裸奔。</div>
+</div>
+
+<h2><span class="num">07</span>StatusPill / Badge — 标签三分法</h2>
+<p class="sub">状态 / 归属 / 角色职位不得混用颜色体系；role 标签固定 h-4 px-1 text-[10px]，Lead 用 brand-100 / brand-700 紫色软底</p>
+<div class="spec-box">
+  <div class="tag-demo">
+    <div><div class="tag-label">status · 状态（语义色，禁止手配）</div><div class="tag-line"><span class="pill pill-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>done</span><span class="pill pill-running"><svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.2-8.6"/></svg>running</span><span class="pill pill-queued">queued</span><span class="pill pill-done">已连接</span><span class="pill pill-warn">配额告警</span><span class="pill pill-err">已断开</span></div></div>
+    <div><div class="tag-label">meta / 归属（非状态，不用语义色）</div><div class="tag-line"><span class="pill tag-brand">已派驻</span><span class="pill tag-brand">当前</span><span class="pill tag-outline">我的</span><span class="pill tag-outline">公开</span><span class="pill tag-neutral">共 12 项</span><span class="pill tag-neutral">v2.6</span></div></div>
+    <div><div class="tag-label">role / 角色职位（accent 分类色，类目区分；h-4 px-1 text-[10px]）</div><div class="tag-line"><span class="role-tag tag-role-lead">Lead</span><span class="role-tag tag-role-pink">产品经理</span><span class="role-tag tag-role-sky">设计师</span><span class="role-tag tag-role-teal">前后端开发</span><span class="role-tag tag-role-amber">QA</span><span class="role-tag tag-role-blue">文档处理</span></div></div>
+  </div>
+</div>
+
+<h2><span class="num">08</span>Input — 六状态</h2>
+<div class="spec-box">
+  <div class="input-demo">
+    <div class="field"><label>Placeholder</label><input placeholder="输入邮箱"><div class="hint">用于接收任务完成通知</div></div>
+    <div class="field"><label>Value</label><input value="team@valuz.ai"><div class="hint">用于接收任务完成通知</div></div>
+    <div class="field focus"><label>Focus</label><input value="team@valuz.ai"><div class="hint">边框 brand + 20% ring</div></div>
+    <div class="field err"><label>Error</label><input value="team@valuz"><div class="hint">邮箱格式不正确</div></div>
+    <div class="field dis"><label>Disabled</label><input disabled placeholder="不可用"><div class="hint">背景 fg-3 · 文字 fg-30</div></div>
+  </div>
+</div>
+
+<h2><span class="num">09</span>治理速查</h2>
+<table>
+  <tr><th>规则</th><th>说明</th></tr>
+  <tr><td>新颜色必须有出处</td><td>能回答"从哪个基色派生"，否则不准进代码 / 设计稿</td></tr>
+  <tr><td>暗色零特例</td><td>.dark 只许重定义基色；暗色不对修配方，不加 override</td></tr>
+  <tr><td>同语义同 token</td><td>次级文字只有 ink-body(fg-60) 一个名字</td></tr>
+  <tr><td>第二次出现即上提</td><td>重复的样式组合必须抽成 packages/ui 组件</td></tr>
+  <tr><td>财务色 ≠ 状态色</td><td>涨跌用 finance-up/down，错误成功用 error/success，色近义不近</td></tr>
+</table>
+
+<script>
+// 仅做暗色切换演示；产品内由 html.dark 类驱动
+</script>
+</body>
+</html>

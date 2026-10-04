@@ -1,0 +1,594 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import {
+  buildFileRef,
+  filesApi,
+  type ApiBaseRef,
+  type ArtifactContent,
+  type ArtifactDescriptor,
+  type PlatformCapabilities,
+} from "@valuz/core";
+import type { ArtifactOpenTarget } from "@valuz/ui";
+
+import {
+  downloadResolvedFile,
+  type DownloadOutcome,
+} from "../lib/download-file";
+import { resolvedToArtifactFile } from "../lib/resolve-artifact";
+
+export interface ArtifactFileLocation {
+  /** Absolute identity handed to the file-address resolver. */
+  absolutePath: string;
+  /** Stable path shown in the shell and kept in page URL state. */
+  relativePath: string;
+}
+
+/** One open document. ``path`` is the tab's identity — opening the same path
+ *  twice focuses the existing tab rather than duplicating it. */
+export interface ArtifactTab {
+  path: string;
+  /**
+   * Change token from the last read. The watcher compares it against a fresh
+   * resolve to decide whether anything is worth re-reading.
+   */
+  revision: string | null;
+  /** Label for the tab strip. Falls back to the last path segment until the
+   *  descriptor resolves, so a tab never renders nameless while loading. */
+  name: string;
+  artifact: ArtifactDescriptor | null;
+  content: ArtifactContent | null;
+  target: ArtifactOpenTarget | null;
+  loading: boolean;
+  error: string | null;
+}
+
+/**
+ * Upper bound on simultaneously open documents. Each tab holds its resolved
+ * content so switching is instant, and text previews are capped at 5 MiB
+ * apiece — without a ceiling a long session browsing a big repo would pin an
+ * unbounded amount of that in memory.
+ */
+export const MAX_OPEN_ARTIFACT_TABS = 10;
+
+interface UseArtifactFileOptions {
+  projectId: string | null;
+  platform: PlatformCapabilities;
+  locate: (path: string) => ArtifactFileLocation;
+  missingErrorMessage: string;
+  /**
+   * Entity that owns the file, for per-entity backend routing. Pass the id the
+   * surface already routes its own data with (conversation → session, task
+   * detail → task); defaults to the project. Without it a cloud-owned file
+   * would be resolved against the local backend and come back ``forbidden``.
+   */
+  baseRef?: ApiBaseRef;
+  /**
+   * Keep previously opened documents around as tabs instead of replacing the
+   * selection. Off by default: a surface without a tab strip would otherwise
+   * accumulate invisible tabs that the user has no way to close.
+   */
+  multiTab?: boolean;
+  /**
+   * Override the idle poll interval, in ms. ``0`` turns the watcher off
+   * entirely — for a surface showing a file nothing is expected to write to,
+   * or a test that does not want a timer.
+   */
+  watchIntervalMs?: number;
+}
+
+/**
+ * Poll cadence, in two gears — the same shape the other pollers in this app
+ * use (remote grants 5s/30s, devices 15s with a focused fast window).
+ *
+ * A file only really changes while an agent is working, so the fast gear is
+ * spent where it buys something and idle previews cost one small resolve every
+ * half minute. Nothing is transferred on a check either way: it compares a
+ * change token, and the conversation page separately pushes writes in as they
+ * are reported. So this is the ceiling on staleness, not the typical latency.
+ */
+export const ARTIFACT_WATCH_ACTIVE_MS = 4000;
+export const ARTIFACT_WATCH_IDLE_MS = 30_000;
+
+export interface UseArtifactFileResult {
+  /** Open documents, in the order they were opened (= tab strip order). */
+  tabs: ArtifactTab[];
+  /** Path of the focused tab, or null when nothing is open. */
+  activePath: string | null;
+  /** Focus an already-open tab. No-op for a path that isn't open. */
+  activate: (path: string) => void;
+  /** Close one tab; focus moves to its right neighbour, else its left. */
+  closeTab: (path: string) => void;
+  /** Fields of the focused tab, so single-document surfaces read unchanged. */
+  selectedPath: string | null;
+  artifact: ArtifactDescriptor | null;
+  content: ArtifactContent | null;
+  target: ArtifactOpenTarget | null;
+  loading: boolean;
+  error: string | null;
+  open: (path: string, target?: ArtifactOpenTarget | null) => Promise<void>;
+  reload: () => Promise<void>;
+  /**
+   * Save a file to the user's machine. Defaults to the focused tab; pass a path
+   * to download a file that isn't open (a list row, say) without opening it.
+   *
+   * Always re-resolves first. A remote address is short-lived, so the one a tab
+   * captured when it opened may be long expired — the same reason the viewer's
+   * retry buttons re-resolve rather than re-request.
+   */
+  download: (path?: string) => Promise<DownloadOutcome>;
+  /**
+   * Re-read the open tabs matching those absolute paths, in place — no focus
+   * change, no tab reordering, no blank frame. Surfaces watching an agent
+   * call this with whatever it just wrote.
+   */
+  refreshOpen: (absolutePaths: readonly string[]) => Promise<void>;
+  /**
+   * Tell the watcher whether the files are expected to be changing right now.
+   * A surface with a running agent turns this on; everything else polls at the
+   * idle cadence. Has no effect when the watcher is disabled.
+   */
+  setWatchActive: (active: boolean) => void;
+  /** Close every tab — the "dismiss the whole preview" action. */
+  close: () => void;
+}
+
+const fileNameOf = (path: string): string =>
+  path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+
+/**
+ * Shared artifact-loader state for project, task, and conversation surfaces.
+ *
+ * A monotonically increasing request id protects each tab's contents even when
+ * a transport ignores AbortSignal (notably the local Electron IPC read): a
+ * slower request for a path can never overwrite a later one for that same
+ * path. Ids are tracked per tab, so loading a second document never cancels
+ * the first one's in-flight read.
+ */
+export function useArtifactFile({
+  projectId,
+  platform,
+  locate,
+  missingErrorMessage,
+  baseRef,
+  multiTab = false,
+  watchIntervalMs = ARTIFACT_WATCH_IDLE_MS,
+}: UseArtifactFileOptions): UseArtifactFileResult {
+  const [tabs, setTabs] = useState<ArtifactTab[]>([]);
+  const [activePath, setActivePath] = useState<string | null>(null);
+  const requestIdsRef = useRef<Map<string, number>>(new Map());
+  const controllersRef = useRef<Map<string, AbortController>>(new Map());
+  /** Most-recently-viewed first. Drives which tab is evicted at the ceiling. */
+  const viewOrderRef = useRef<string[]>([]);
+
+  // Depend on the ids, not on the caller's object identity: an inline literal
+  // would otherwise rebuild ``open``/``reload`` on every render.
+  const hasBaseRef = baseRef !== undefined;
+  const {
+    sessionId,
+    projectId: refProjectId,
+    taskId,
+    automationId,
+    kbId,
+  } = baseRef ?? {};
+  const resolveBaseRef: ApiBaseRef = useMemo(
+    () =>
+      hasBaseRef
+        ? { sessionId, projectId: refProjectId, taskId, automationId, kbId }
+        : { projectId: projectId ?? undefined },
+    [
+      hasBaseRef,
+      sessionId,
+      refProjectId,
+      taskId,
+      automationId,
+      kbId,
+      projectId,
+    ],
+  );
+
+  const touchViewOrder = useCallback((path: string) => {
+    viewOrderRef.current = [
+      path,
+      ...viewOrderRef.current.filter((p) => p !== path),
+    ];
+  }, []);
+
+  const forgetTab = useCallback((path: string) => {
+    requestIdsRef.current.delete(path);
+    controllersRef.current.get(path)?.abort();
+    controllersRef.current.delete(path);
+    viewOrderRef.current = viewOrderRef.current.filter((p) => p !== path);
+  }, []);
+
+  const close = useCallback(() => {
+    for (const controller of controllersRef.current.values())
+      controller.abort();
+    requestIdsRef.current.clear();
+    controllersRef.current.clear();
+    viewOrderRef.current = [];
+    setTabs([]);
+    setActivePath(null);
+  }, []);
+
+  const activate = useCallback(
+    (path: string) => {
+      setTabs((prev) => {
+        if (!prev.some((tab) => tab.path === path)) return prev;
+        touchViewOrder(path);
+        setActivePath(path);
+        return prev;
+      });
+    },
+    [touchViewOrder],
+  );
+
+  const closeTab = useCallback(
+    (path: string) => {
+      forgetTab(path);
+      setTabs((prev) => {
+        const index = prev.findIndex((tab) => tab.path === path);
+        if (index === -1) return prev;
+        const next = prev.filter((tab) => tab.path !== path);
+        setActivePath((current) => {
+          if (current !== path) return current;
+          // Right neighbour first — that's where the eye already is after a
+          // close; fall back to the left one, then to nothing.
+          const successor = next[index] ?? next[index - 1] ?? null;
+          if (successor) touchViewOrder(successor.path);
+          return successor?.path ?? null;
+        });
+        return next;
+      });
+    },
+    [forgetTab, touchViewOrder],
+  );
+
+  /**
+   * Read one document into its tab. Split out of ``open`` so a background
+   * refresh can reuse the exact same read without ``open``'s side effects —
+   * it must not steal focus or reorder the LRU just because a file changed
+   * under a tab the user isn't looking at.
+   *
+   * ``silent`` keeps the current content on screen while the re-read is in
+   * flight. A refresh that flipped the tab to ``loading`` would blank the
+   * preview on every agent edit, which is the opposite of following along.
+   */
+  const loadDocument = useCallback(
+    async (
+      key: string,
+      location: ArtifactFileLocation,
+      openTarget: ArtifactOpenTarget | null,
+      options?: { silent?: boolean },
+    ) => {
+      if (!projectId) return;
+      const silent = options?.silent ?? false;
+
+      const requestId = (requestIdsRef.current.get(key) ?? 0) + 1;
+      requestIdsRef.current.set(key, requestId);
+      controllersRef.current.get(key)?.abort();
+      const controller = new AbortController();
+      controllersRef.current.set(key, controller);
+
+      const pending: ArtifactTab = {
+        path: key,
+        name: fileNameOf(key),
+        revision: null,
+        artifact: null,
+        content: null,
+        target: openTarget ?? null,
+        loading: true,
+        error: null,
+      };
+
+      let evicted: string | null = null;
+      setTabs((prev) => {
+        if (!multiTab) return [pending];
+        const index = prev.findIndex((tab) => tab.path === key);
+        if (index !== -1) {
+          const next = [...prev];
+          // A silent refresh keeps whatever is rendered; only the target and
+          // the in-flight marker move.
+          next[index] = silent
+            ? { ...next[index], target: openTarget ?? next[index].target }
+            : { ...next[index], ...pending };
+          return next;
+        }
+        const next = [...prev, pending];
+        if (next.length <= MAX_OPEN_ARTIFACT_TABS) return next;
+        // Over the ceiling: drop the least-recently-viewed tab that isn't the
+        // one being opened.
+        const victim = [...viewOrderRef.current]
+          .reverse()
+          .find((p) => p !== key && next.some((tab) => tab.path === p));
+        if (!victim) return next;
+        evicted = victim;
+        return next.filter((tab) => tab.path !== victim);
+      });
+      if (evicted) forgetTab(evicted);
+
+      const isStale = () => requestIdsRef.current.get(key) !== requestId;
+      const patch = (fields: Partial<ArtifactTab>) => {
+        if (isStale()) return;
+        setTabs((prev) =>
+          prev.map((tab) => (tab.path === key ? { ...tab, ...fields } : tab)),
+        );
+      };
+
+      try {
+        const descriptor = await filesApi.resolveOne(
+          buildFileRef(location.absolutePath),
+          { signal: controller.signal, baseRef: resolveBaseRef },
+        );
+        if (isStale()) return;
+        if (!descriptor || descriptor.error || !descriptor.exists) {
+          patch({ error: missingErrorMessage });
+          return;
+        }
+
+        const result = await resolvedToArtifactFile(descriptor, {
+          projectId,
+          relPath: key,
+          platform,
+          signal: controller.signal,
+        });
+        if (isStale()) return;
+        patch({
+          artifact: result.artifact,
+          content: result.content,
+          name: result.artifact?.name ?? fileNameOf(key),
+          revision: descriptor.revision,
+          error: null,
+        });
+      } catch (cause) {
+        if (
+          isStale() ||
+          controller.signal.aborted ||
+          (cause instanceof DOMException && cause.name === "AbortError")
+        ) {
+          return;
+        }
+        patch({
+          error: cause instanceof Error ? cause.message : String(cause),
+        });
+      } finally {
+        if (!isStale()) {
+          patch({ loading: false });
+          if (controllersRef.current.get(key) === controller) {
+            controllersRef.current.delete(key);
+          }
+        }
+      }
+    },
+    [
+      forgetTab,
+      missingErrorMessage,
+      multiTab,
+      platform,
+      projectId,
+      resolveBaseRef,
+    ],
+  );
+
+  const open = useCallback(
+    async (path: string, openTarget?: ArtifactOpenTarget | null) => {
+      if (!projectId) return;
+
+      const location = locate(path);
+      const key = location.relativePath;
+      const alreadyOpen = tabs.some((tab) => tab.path === key);
+
+      touchViewOrder(key);
+      setActivePath(key);
+
+      // Re-opening a document that's already loaded is a focus change, not a
+      // refetch — unless a target (e.g. a PDF page) has to be applied.
+      if (alreadyOpen && multiTab && !openTarget) return;
+
+      if (!multiTab) {
+        // Single-document mode replaces the selection outright, so anything
+        // still in flight for another path is now dead weight — drop it before
+        // it can burn a content read nobody will see.
+        for (const [path, inflight] of controllersRef.current) {
+          if (path === key) continue;
+          inflight.abort();
+          controllersRef.current.delete(path);
+          requestIdsRef.current.delete(path);
+        }
+        viewOrderRef.current = [key];
+      }
+
+      await loadDocument(key, location, openTarget ?? null);
+    },
+    [loadDocument, locate, multiTab, projectId, tabs, touchViewOrder],
+  );
+
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.path === activePath) ?? null,
+    [activePath, tabs],
+  );
+
+  const reload = useCallback(async () => {
+    if (!activeTab) return;
+    // Straight to the read: going through ``open`` would return early on an
+    // already-open tab in multi-tab mode and quietly do nothing.
+    await loadDocument(
+      activeTab.path,
+      locate(activeTab.path),
+      activeTab.target,
+    );
+  }, [activeTab, loadDocument, locate]);
+
+  // Read through a ref rather than capturing: ``activePath`` changes on every
+  // tab switch, and this callback is threaded into the context panel's memo —
+  // capturing it would rebuild the whole right rail each time a file is opened.
+  const activePathRef = useRef(activePath);
+  activePathRef.current = activePath;
+
+  const download = useCallback(
+    async (path?: string): Promise<DownloadOutcome> => {
+      const key = path ?? activePathRef.current;
+      if (!key) return { ok: false, reason: "unavailable" };
+      try {
+        const descriptor = await filesApi.resolveOne(
+          buildFileRef(locate(key).absolutePath),
+          { baseRef: resolveBaseRef },
+        );
+        if (!descriptor) return { ok: false, reason: "unavailable" };
+        return await downloadResolvedFile(descriptor, platform);
+      } catch (cause) {
+        return {
+          ok: false,
+          reason: "failed",
+          message: cause instanceof Error ? cause.message : String(cause),
+        };
+      }
+    },
+    [locate, platform, resolveBaseRef],
+  );
+
+  /**
+   * Re-read whichever open tabs those absolute paths point at.
+   *
+   * The caller passes what an agent just wrote — absolute paths, the way the
+   * tool reported them. Tabs are keyed by a surface-relative path, so both
+   * sides are normalized through ``locate`` before comparing; a write to a
+   * file nobody has open is simply ignored.
+   *
+   * Refreshes are silent: focus, tab order, and the rendered content all stay
+   * put until the new bytes arrive.
+   */
+  const refreshOpen = useCallback(
+    async (absolutePaths: readonly string[]) => {
+      if (absolutePaths.length === 0 || tabs.length === 0) return;
+      const wanted = new Set(absolutePaths);
+      const hits = tabs
+        .map((tab) => ({ tab, location: locate(tab.path) }))
+        .filter(({ location }) => wanted.has(location.absolutePath));
+      await Promise.all(
+        hits.map(({ tab, location }) =>
+          loadDocument(tab.path, location, tab.target, { silent: true }),
+        ),
+      );
+    },
+    [loadDocument, locate, tabs],
+  );
+
+  /**
+   * ── Watch the open documents for changes ──────────────────────────────
+   *
+   * One batched ``resolve`` on a timer, comparing each tab's change token.
+   * Nothing is downloaded here and nothing re-renders when the answer is "no
+   * change" — that is what makes it safe to run under an open preview. A tab
+   * whose token moved is then re-read silently, so the current bytes stay on
+   * screen until the new ones land.
+   *
+   * Why poll at all when the conversation already reports what the agent
+   * wrote: that signal only covers the file-editing tools. A shell redirect,
+   * an MCP server, a second session, or the user's own editor changes the
+   * file with nothing to announce it. Polling is indifferent to who wrote,
+   * and — because it rides the same resolve the preview already uses — works
+   * the same whether the file is local or on a cloud execution plane.
+   *
+   * Paused while the document is hidden: a background tab has no preview to
+   * keep fresh, and it comes back through the visibility listener.
+   */
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  // Fast gear while a caller reports its agent is working; idle otherwise.
+  // ``watchIntervalMs: 0`` disables the watcher outright and stays disabled.
+  const [watchActive, setWatchActive] = useState(false);
+  const effectiveIntervalMs =
+    watchIntervalMs === 0
+      ? 0
+      : watchActive
+        ? Math.min(ARTIFACT_WATCH_ACTIVE_MS, watchIntervalMs)
+        : watchIntervalMs;
+  useEffect(() => {
+    if (!projectId || !effectiveIntervalMs) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const tick = async () => {
+      const open = tabsRef.current;
+      // Nothing open, or the window is in the background: skip the round trip
+      // entirely and try again next tick.
+      if (
+        open.length > 0 &&
+        (typeof document === "undefined" || !document.hidden)
+      ) {
+        const located = open.map((tab) => ({
+          tab,
+          location: locate(tab.path),
+        }));
+        try {
+          const { results } = await filesApi.resolve(
+            located.map(({ location }) => buildFileRef(location.absolutePath)),
+            { baseRef: resolveBaseRef },
+          );
+          if (cancelled) return;
+          const byRef = new Map(results.map((item) => [item.ref, item]));
+          await Promise.all(
+            located.map(({ tab, location }) => {
+              const fresh = byRef.get(buildFileRef(location.absolutePath));
+              // Unknown, gone, or unchanged — leave the tab exactly as it is.
+              // A vanished file keeps its last content rather than blanking:
+              // an agent rewriting in place can be observed mid-swap.
+              if (!fresh || !fresh.exists || fresh.error) return undefined;
+              if (fresh.revision === null) return undefined;
+              if (fresh.revision === tab.revision) return undefined;
+              return loadDocument(tab.path, location, tab.target, {
+                silent: true,
+              });
+            }),
+          );
+        } catch {
+          // A failed poll is not worth surfacing — the tab still shows the
+          // content it has, and the next tick tries again.
+        }
+      }
+      if (cancelled) return;
+      timer = setTimeout(() => void tick(), effectiveIntervalMs);
+    };
+
+    timer = setTimeout(() => void tick(), effectiveIntervalMs);
+    const onVisible = () => {
+      // Coming back to the window is the moment staleness is most visible.
+      if (!document.hidden) void tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [effectiveIntervalMs, loadDocument, locate, projectId, resolveBaseRef]);
+
+  useEffect(
+    () => () => {
+      for (const controller of controllersRef.current.values())
+        controller.abort();
+      controllersRef.current.clear();
+      requestIdsRef.current.clear();
+    },
+    [],
+  );
+
+  return {
+    tabs,
+    activePath,
+    activate,
+    closeTab,
+    selectedPath: activePath,
+    artifact: activeTab?.artifact ?? null,
+    content: activeTab?.content ?? null,
+    target: activeTab?.target ?? null,
+    loading: activeTab?.loading ?? false,
+    error: activeTab?.error ?? null,
+    open,
+    reload,
+    download,
+    refreshOpen,
+    setWatchActive,
+    close,
+  };
+}

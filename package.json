@@ -9,44 +9,50 @@
   "scripts": {
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint",
-    "test": "turbo run test",
+    "lint": "turbo run lint && eslint scripts lint-staged.config.js commitlint.config.js",
+    "test": "VITEST_MAX_FORKS=4 VITEST_MAX_THREADS=4 turbo run test --concurrency=1",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm format:check && turbo run lint typecheck test",
+    "check": "pnpm format:check && pnpm i18n:check && pnpm lint && turbo run typecheck && pnpm test",
     "contract:coverage": "node scripts/contract-coverage.mjs",
-    "i18n:gen": "node scripts/i18n-gen-types.mjs",
-    "i18n:check": "node scripts/i18n-gen-types.mjs --check",
-    "prepare": "husky"
+    "i18n:gen": "node scripts/i18n.mjs gen",
+    "i18n:check": "node scripts/i18n.mjs check",
+    "prepare": "husky",
+    "design-audit": "node scripts/design-audit.mjs",
+    "design-audit:update": "node scripts/design-audit.mjs --update-baseline",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.6.0",
     "@commitlint/config-conventional": "^19.6.0",
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.59.1",
+    "@tailwindcss/vite": "^4.1.14",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.10.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "ajv": "^8.17.1",
     "eslint": "^9.39.1",
     "eslint-plugin-boundaries": "^5.0.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.4.0",
     "husky": "^9.1.7",
+    "jsdom": "26.1.0",
     "lint-staged": "^15.2.10",
     "prettier": "^3.4.2",
+    "tailwindcss": "^4.1.14",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "turbo": "^2.5.8",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.2",
+    "vite": "^7.1.12",
     "vitest": "^3.2.4",
     "yaml": "^2.6.1"
-  },
-  "lint-staged": {
-    "*.{ts,tsx,js,mjs,cjs}": [
-      "eslint --fix --no-warn-ignored",
-      "prettier --write"
-    ],
-    "*.{json,md,yml,yaml,css}": [
-      "prettier --write"
-    ]
   }
 }

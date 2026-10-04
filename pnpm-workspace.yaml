@@ -1,8 +1,6 @@
 packages:
-  - backend/packages/*
-  - backend/apps/*
-  - frontend/packages/*
-  - frontend/apps/*
+  - apps/*
+  - packages/*
 
 onlyBuiltDependencies:
   - esbuild

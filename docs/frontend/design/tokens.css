@@ -1,0 +1,318 @@
+/* ============================================================================
+ * Valuz Design Tokens v2.6 — 2026-06-15
+ *
+ * 用途：替换 frontend/packages/ui/src/styles/project.css 中
+ *      @theme 块（原 17–146 行）、:root 规范变量块（原 151–170 行）
+ *      与 .dark 覆盖块（原 366–461 行）。
+ *      其余部分（@source、base 样式、滚动条、动画）保持不变。
+ *
+ * 架构：手选基色（每模式 18 个：9 基色 + 1 蓝灰极 + 8 点缀）→ 其余全部 color-mix 派生
+ *      → 语义别名（兼容全部旧 token 名，组件零改动迁移）。
+ *
+ * 裁决记录（2026-06-11，与设计端共同拍板）：
+ *   brand        #725cf9  Figma 色板钦定主色。废止 #6d5cff / #533afd / #965cf9。
+ *   warning      #ef8b0c  v2.4 提亮（原裁决 #d97706 发脏；三件套后基色卸下文字职责）。废止 #ff8710 / #d97706。
+ *   success      #16a34a  状态绿（连接成功、完成态）。
+ *   finance-down #53bc76  财务绿（跌），与状态绿语义分离。
+ *                         #53cb76 确认为色板标签笔误，全面废止。
+ *   accent-pink  #ec4899  色板色块误填 #ef5da8，以标签与代码为准。
+ *
+ * 治理规则：禁止新增任何手选灰色/浅底色——浅端从 --foreground、中段从 --slate 派生。
+ * 色彩空间：color-mix 统一用 oklab（oklch 在近中性色间混合时色相会坍缩为 none，导致灰阶偏暖）。
+ * ========================================================================== */
+
+:root {
+  /* ===== 基色 —— 全文件唯一允许手选颜色的地方 ===== */
+  --background:   #f8f9fb;
+  --foreground:   #131313;
+  --surface:      #ffffff;
+  --brand:        #725cf9;
+  --success:      #16a34a;
+  --warning:      #ef8b0c; /* v2.4 提亮：三件套后基色不再承担文字职责；取 #ff8710 与 #d97706 之间。
+                              注意：实底/图标必须配文字说明，纯图标单独传达信息时用 warning-text */
+  --error:        #e5484d; /* 替换 #dc2626；白字 ≈3.9:1，达 AA Large/UI(3:1)，未达正文 AA(4.5:1)，小字白底实底慎用 */
+  --finance-up:   #f54b4b; /* 红涨（中国市场惯例），仅用于财务数据 */
+  --finance-down: #53bc76; /* 绿跌，仅用于财务数据 */
+  --slate:        #444b54; /* 蓝灰极（=v1 neutral/700）：灰阶中段的派生轴，让中性灰带冷调 */
+
+  /* 点缀 / 图表分类色（同一亮度饱和度区间，只动色相）。
+   * 图表系列固定取色顺序：sky → teal → amber → pink → blue → lime → orange → fuchsia，
+   * 超过 8 个系列后用 fg-50 中性灰归并为"其他"。amber 是点缀，不得当 warning 用。
+   * role / 角色职位 tag 使用这些 accent 软底作类目区分；Lead 例外使用 brand-100 / brand-700。 */
+  --accent-sky:     #0ea5e9;
+  --accent-teal:    #14b8a6;
+  --accent-amber:   #eab308;
+  --accent-pink:    #ec4899;
+  --accent-blue:    #3b82f6;
+  --accent-lime:    #84cc16;
+  --accent-orange:  #f97316;
+  --accent-fuchsia: #d946ef;
+
+  /* ===== 灰阶 —— 派生，禁止手选 ===== */
+  --fg-1:  color-mix(in oklab, var(--foreground) 1%,  var(--background)); /* ≈旧 #f7f8fa surface-soft */
+  --fg-2:  color-mix(in oklab, var(--foreground) 2%,  var(--background)); /* List Item 选中态专用 */
+  --fg-3:  color-mix(in oklab, var(--foreground) 3%,  var(--background)); /* ≈旧 #f3f4f6 surface-muted */
+  --fg-5:  color-mix(in oklab, var(--foreground) 5%,  var(--background)); /* ≈旧 #f5f5f4 surface-2 */
+  --fg-8:  color-mix(in oklab, var(--foreground) 8%,  var(--background)); /* ≈旧 #e6e7e9 border */
+  --fg-12: color-mix(in oklab, var(--foreground) 12%, var(--background)); /* ≈旧 #dbdbdb border-strong */
+  /* 中段（30~80）沿蓝灰轴派生：蓝调中间最饱满、两端归中性（同 v1 色板结构）。
+   * 档位名表示深度，不再等于 foreground 混合百分比。 */
+  --fg-30: color-mix(in oklab, var(--slate) 37%, var(--background)); /* 实测渲染 #b1b5ba（v1 旧 ink-muted 约 #b6b7bc） */
+  --fg-50: color-mix(in oklab, var(--slate) 60%, var(--background)); /* ≈旧 #898f9c neutral-500 */
+  --fg-60: color-mix(in oklab, var(--slate) 75%, var(--background)); /* ≈旧 #6e7481 ink-body */
+  --fg-80: var(--slate);                                             /* =旧 #444b54 neutral-700 */
+
+  /* ===== 品牌色阶（Figma 色板钦定，700 为补档） ===== */
+  --brand-50:  #f3f2ff;
+  --brand-100: #eae6ff;
+  --brand-200: #d1c8ff;
+  --brand-300: #b29ff7;
+  --brand-500: var(--brand);
+  --brand-600: #5d46e8; /* hover / active */
+  --brand-700: #4936c2; /* 深端补档：active 按压、暗底强调文字 */
+  --brand-gradient: linear-gradient(135deg, var(--brand-600) 0%, var(--brand-300) 100%);
+
+  /* ===== 状态色三件套 —— 派生 ===== */
+  --success-soft:   color-mix(in oklab, var(--success) 10%, var(--background));
+  --success-border: color-mix(in oklab, var(--success) 35%, var(--background));
+  --success-text:   color-mix(in oklab, var(--success) 65%, var(--foreground));
+  --warning-soft:   color-mix(in oklab, var(--warning) 10%, var(--background));
+  --warning-border: color-mix(in oklab, var(--warning) 35%, var(--background));
+  --warning-text:   color-mix(in oklab, var(--warning) 65%, var(--foreground));
+  --error-soft:     color-mix(in oklab, var(--error) 10%,   var(--background));
+  --error-border:   color-mix(in oklab, var(--error) 35%,   var(--background));
+  --error-text:     color-mix(in oklab, var(--error) 65%,   var(--foreground));
+  --error-strong:   color-mix(in oklab, var(--error) 88%,   #000); /* 实底白字专用：error 白字仅 ≈3.9:1（未达正文 AA），混 12% 黑压到 ≈5.3:1（暗色 ≈5.1）。仅用于「实心红底 + 白字」场景（destructive 按钮）；soft/border/text 与图标圆底仍用 error 本体 */
+  --error-hover:    color-mix(in oklab, var(--error-strong) 92%, #000); /* destructive hover：在 error-strong 基础上再加深一档（≈8% 黑），明暗两端同向加深，无需分模式特例 */
+  /* 财务涨跌的「文字档」—— 派生，与状态三件套同理（mix 65% foreground）。
+   * 基色 finance-up/down 太亮：作 ≤14px 正文时 finance-up 白底仅 ≈3.5:1、finance-down ≈2.4:1，均未达 AA。
+   * 故凡「小字数字/涨跌幅」用以下文字档（白底 up ≈6.7:1 / down ≈5.0:1，过正文 AA）；
+   * 基色本体仅留给 ≥18px 大数字、图形、实底场景。 */
+  --finance-up-text:   color-mix(in oklab, var(--finance-up) 65%,   var(--foreground)); /* ≈#9f3a38 light */
+  --finance-down-text: color-mix(in oklab, var(--finance-down) 65%, var(--foreground)); /* ≈#3e7b51 light */
+
+  /* Info 复用品牌紫（裁决：不引入第五个状态色相） */
+  --info:        var(--brand);
+  --info-soft:   var(--brand-50); /* 对齐 Info 卡 / callout / note 实际用法（均 brand-50）；v2.6.8 由 brand-100 改 */
+  --info-border: color-mix(in oklab, var(--info) 35%, var(--background));
+  --info-text:   var(--brand-700);
+
+  /* ===== 阴影 —— 从前景色派生，明暗两端自动协调 =====
+   * v2.6 分层（设计裁决）：阴影是否带 1px spread 环，取决于元素自身有没有边框。
+   *   --shadow-outline：纯投影，无环。给「自带 fg-8 边框」的元素（outline 按钮等），
+   *                     避免环 + 边框叠成双描边（v2.5 曾整体去环，但那样卡片也失去了立体感）。
+   *   --shadow-1：投影 + fg-3 浅环。给「无边框」的容器（卡片 / popover / toast），
+   *               环代替边框、更立体。 */
+  --shadow-rgb: 19 19 19; /* = --foreground，CSS 暂无法从 var 提取通道，与基色同步改 */
+  --shadow-border-a: 0.06;
+  --shadow-blur-a: 0.07;
+  --shadow-outline: 0 1px 2px rgb(var(--shadow-rgb) / var(--shadow-blur-a)); /* 有边框元素：纯投影 y1 blur2 */
+  --shadow-1: 0 1px 2px rgb(var(--shadow-rgb) / calc(var(--shadow-blur-a) * 1.35)),
+              0 0 0 1px var(--fg-3); /* 无边框容器：投影增强 + fg-3 浅环 */
+  --shadow-2: 0 4px 10px rgb(var(--shadow-rgb) / var(--shadow-blur-a)),
+              0 1px 2px rgb(var(--shadow-rgb) / var(--shadow-blur-a)); /* 悬浮卡片 / sidebar active */
+  --shadow-3: 0 12px 32px -8px rgb(var(--shadow-rgb) / calc(var(--shadow-blur-a) * 2)),
+              0 2px 6px rgb(var(--shadow-rgb) / var(--shadow-blur-a)); /* popover / dropdown */
+  --shadow-4: 0 24px 48px rgb(var(--shadow-rgb) / calc(var(--shadow-blur-a) * 2.4)),
+              0 0 0 1px rgb(var(--shadow-rgb) / var(--shadow-border-a)); /* 浮层 / modal / 应用外壳 */
+
+  /* ===== z-index 阶梯 ===== */
+  --z-base: 0;
+  --z-sticky: 20;
+  --z-titlebar: 40;
+  --z-panel: 50;
+  --z-dropdown: 100;
+  --z-tooltip: 150;
+  --z-modal: 200;
+  --z-toast: 300;
+
+  /* ===== 动效 ===== */
+  --duration-fast: 120ms; /* hover、背景切换 */
+  --duration-base: 200ms; /* 折叠、滑入 */
+  --duration-slow: 250ms; /* 布局列宽变化 */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ===== 旧规范名兼容（DESIGN.md v1 / 直接 var() 的组件） ===== */
+  --bg: var(--background);
+  --surface-2: var(--fg-5);
+  --border: var(--fg-8);
+  --border-strong: var(--fg-12);
+  --text: var(--foreground);
+  --text-2: var(--fg-60);
+  --text-3: var(--fg-30);
+  --accent: var(--brand);
+  --accent-2: var(--brand-300);
+  --accent-soft: var(--brand-100);
+  --context-icon: var(--brand);
+  --color-shell-glow: #e0e1ea;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* ===== 暗色模式 —— 只重定义基色，其余全部自动重算 ===== */
+.dark {
+  --background:   #0f1012;
+  --foreground:   #e4e4e7;
+  --surface:      #17181c;
+  --brand:        #8b7afc; /* #725cf9 的暗底补偿亮度版 */
+  --success:      #22c55e;
+  --warning:      #f59e0b;
+  --error:        #ef4444;
+  --finance-up:   #ff6b6b;
+  --finance-down: #5fd389;
+  --slate:        #a8b1bf; /* 暗色下蓝灰极反转为冷浅灰 */
+  --accent-sky:     #38bdf8;
+  --accent-teal:    #2dd4bf;
+  --accent-amber:   #facc15;
+  --accent-pink:    #f472b6;
+  --accent-blue:    #60a5fa;
+  --accent-lime:    #a3e635;
+  --accent-orange:  #fb923c;
+  --accent-fuchsia: #e879f9;
+
+  /* 暗色下品牌浅阶反向派生（深底上的"浅紫"是紫混背景） */
+  --brand-50:  color-mix(in oklab, var(--brand) 10%, var(--background));
+  --brand-100: color-mix(in oklab, var(--brand) 16%, var(--background));
+  --brand-200: color-mix(in oklab, var(--brand) 28%, var(--background));
+  --brand-300: color-mix(in oklab, var(--brand) 45%, var(--background));
+  --brand-600: color-mix(in oklab, var(--brand) 85%, white);
+  --brand-700: color-mix(in oklab, var(--brand) 70%, white);
+  /* error-strong / error-hover 不再分模式特例：均引用 var(--error) 与黑色混合，暗色下自动用暗 error 重算 */
+
+  --shadow-rgb: 0 0 0;
+  --shadow-border-a: 0.18;
+  --shadow-blur-a: 0.30;
+  --color-shell-glow: #15161a;
+}
+
+/* ===== Tailwind v4 工具类映射 —— 兼容全部现有类名 ===== */
+@theme inline {
+  --font-sans: "PingFang SC", -apple-system, "Helvetica Neue", sans-serif;
+  --font-serif: "PingFang SC", serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: "Newsreader", "Noto Serif SC", "Songti SC", serif; /* 仅 onboarding 大标题 */
+
+  /* shadcn 语义层 */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--brand);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--fg-5);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--fg-1);
+  --color-muted-foreground: var(--fg-60);
+  --color-accent: var(--brand-100);
+  --color-accent-foreground: var(--brand-700);
+  --color-border: var(--fg-8);
+  --color-input: var(--fg-8);
+  --color-ring: var(--brand);
+  --color-destructive: var(--error-strong); /* 实底白字按钮取压深版，保证白字 ≥ 正文 AA */
+  --color-destructive-foreground: #ffffff;
+
+  /* Valuz 语义层（ink-* / surface-*，681 处引用零改动） */
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-600);
+  --color-brand-light: var(--brand-100);
+  --color-brand-secondary: var(--brand-300);
+  --color-brand-50: var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
+
+  --color-accent-sky: var(--accent-sky);
+  --color-accent-teal: var(--accent-teal);
+  --color-accent-amber: var(--accent-amber);
+  --color-accent-pink: var(--accent-pink);
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-lime: var(--accent-lime);
+  --color-accent-orange: var(--accent-orange);
+  --color-accent-fuchsia: var(--accent-fuchsia);
+  --color-context-icon: var(--brand);
+
+  --color-ink-heading: var(--foreground);
+  --color-ink-label: var(--foreground);
+  --color-ink-body: var(--fg-60);
+  --color-ink-meta: var(--fg-60);
+  --color-ink-muted: var(--fg-30);
+  --color-ink-section: var(--fg-60);
+  --color-ink-disabled: var(--fg-30); /* v1 为 #e6e7e9（对比度 1.3:1），提档到 fg-30 保证可读 */
+
+  --color-surface: var(--surface);
+  --color-surface-soft: var(--fg-1);
+  --color-surface-2: var(--fg-5);
+  --color-surface-muted: var(--fg-3);
+  --color-surface-border: var(--fg-8);
+  --color-surface-border-strong: var(--fg-12);
+  --color-surface-border-hover: var(--fg-12);
+
+  --color-success: var(--success);
+  --color-success-light: var(--success-soft);
+  --color-success-text: var(--success-text);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-light: var(--warning-soft);
+  --color-warning-border: var(--warning-border);
+  --color-warning-text: var(--warning-text);
+  --color-error: var(--error);
+  --color-error-light: var(--error-soft);
+  --color-error-border: var(--error-border);
+  --color-error-text: var(--error-text);
+  --color-error-strong: var(--error-strong);
+  --color-error-hover: var(--error-hover);
+  --color-info: var(--info);
+  --color-info-light: var(--info-soft);
+  --color-info-border: var(--info-border);
+  --color-info-text: var(--info-text);
+
+  --color-finance-up: var(--finance-up);
+  --color-finance-down: var(--finance-down);
+  --color-finance-up-text: var(--finance-up-text);     /* ≤14px 涨跌数字用文字档（基色未达 AA） */
+  --color-finance-down-text: var(--finance-down-text);
+
+  /* 字阶 —— 8 档整数，0.5px 档位全部废止（迁移见 DESIGN-v2.md §9） */
+  --text-micro: 0.625rem;  /* 10px badge/最小标识，仅图形场景 */
+  --text-2xs: 0.6875rem;   /* 11px section label / 表头 */
+  --text-xs: 0.75rem;      /* 12px meta / 按钮标签 / code */
+  --text-sm: 0.8125rem;    /* 13px sidebar / composer / 列表 */
+  --text-base: 0.875rem;   /* 14px 正文 / 标题栏 */
+  --text-lg: 0.9375rem;    /* 15px 面板主标题 */
+  --text-xl: 1.125rem;     /* 18px 页面标题 */
+  --text-2xl: 1.5rem;      /* 24px onboarding / 大数字 */
+
+  /* 圆角 —— 6 档（2/3/7/14px 废止：≤4→sm，7→md，14→2xl） */
+  --radius-sm: 0.25rem;   /* 4px 标签、badge、kbd */
+  --radius-md: 0.375rem;  /* 6px 小按钮、行项 */
+  --radius-lg: 0.5rem;    /* 8px 按钮、composer、工具卡片 */
+  --radius-xl: 0.625rem;  /* 10px popover、输入框内层 */
+  --radius-2xl: 0.75rem;  /* 12px 主面板、浮层、下拉菜单 */
+  --radius-full: 9999px;
+
+  /* 阴影别名（旧名 → 新 4 级） */
+  --color-shadow-outline: var(--shadow-outline); /* 有边框元素（outline 按钮 / input）专用，纯投影无环 */
+  --shadow-button: var(--shadow-outline);        /* 语义别名：按钮用纯投影 */
+  --shadow-sm: var(--shadow-1);
+  --shadow: var(--shadow-1);
+  --shadow-md: var(--shadow-2);
+  --shadow-lg: var(--shadow-3);
+  --shadow-xl: var(--shadow-4);
+  --shadow-app: var(--shadow-4);
+  --shadow-floating: var(--shadow-4);
+  --shadow-dropdown: var(--shadow-3);
+  --shadow-popover: var(--shadow-3);
+  --shadow-sidebar-active: var(--shadow-2);
+  --shadow-tweaks: var(--shadow-4);
+
+  /* sidebar（shadcn Sidebar 组件读取） */
+  --color-sidebar: transparent;
+  --color-sidebar-foreground: var(--foreground);
+  --color-sidebar-primary: var(--brand);
+  --color-sidebar-primary-foreground: #ffffff;
+  --color-sidebar-accent: var(--fg-3);
+  --color-sidebar-accent-foreground: var(--foreground);
+  --color-sidebar-border: var(--fg-3);
+  --color-sidebar-ring: var(--brand);
+}

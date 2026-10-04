@@ -1,0 +1,14 @@
+{
+  "name": "@valuz/tui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/index.ts",
+    "build": "tsc --noEmit -p tsconfig.json",
+    "test": "cd ../.. && vitest run --passWithNoTests --config vitest.config.ts apps/tui/src",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint src",
+    "clean": "rm -rf dist"
+  }
+}

@@ -1,0 +1,85 @@
+/**
+ * V5+1aae940 / A2 — inline reject reason composer.
+ *
+ * Slides down below the main action row when the user clicks
+ * "Reject". Carries an optional ``message`` that the kernel hands to
+ * the runtime (Claude ``PermissionResultDeny.message``, DeepAgents
+ * ``RejectDecision.message``; codex 0.116.0a1 logs only). Empty
+ * textarea = bare reject, same as v1.
+ *
+ * Submit / Cancel are explicit buttons so a stray "Enter" while the
+ * user is composing doesn't fire the decision mid-thought.
+ */
+import { memo, useState } from "react";
+import { XCircle } from "lucide-react";
+
+import { Textarea } from "../ui/textarea";
+import { Button } from "../ui/button";
+import { cn } from "../../lib/utils";
+import { useI18n } from "../../hooks/use-i18n";
+import { Spinner } from "../ui/spinner";
+
+interface ApprovalRejectInlineProps {
+  submitting?: boolean;
+  onSubmit: (reason: string) => void;
+  onCancel: () => void;
+  /**
+   * Subject-aware copy overrides (already-translated strings). The
+   * default copy speaks generic "reject" language; the plan-review
+   * card overrides both so the flow reads coherently with its
+   * "keep planning" verb (the feedback is a revision request, not a
+   * refusal). Omitted → generic reject copy.
+   */
+  placeholder?: string;
+  submitLabel?: string;
+}
+
+export const ApprovalRejectInline = memo(function ApprovalRejectInline({
+  submitting,
+  onSubmit,
+  onCancel,
+  placeholder,
+  submitLabel,
+}: ApprovalRejectInlineProps) {
+  const { t } = useI18n();
+  const [reason, setReason] = useState("");
+
+  return (
+    <div className={cn("space-y-2 rounded-md bg-rose-50/60 p-2.5")}>
+      <Textarea
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        disabled={submitting}
+        placeholder={
+          placeholder ?? t("conversation.approvalRejectReasonPlaceholder")
+        }
+        className="min-h-[64px] resize-y text-xs leading-snug"
+        spellCheck={false}
+        autoFocus
+      />
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onCancel}
+          disabled={submitting}
+        >
+          {t("conversation.approvalRejectCancel")}
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => onSubmit(reason.trim())}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <Spinner className="mr-1.5" />
+          ) : (
+            <XCircle className="mr-1.5 h-3 w-3" />
+          )}
+          {submitLabel ?? t("conversation.approvalRejectSubmit")}
+        </Button>
+      </div>
+    </div>
+  );
+});

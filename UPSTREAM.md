@@ -1,0 +1,32 @@
+# Upstream
+
+The frontend (`apps/{webui,desktop,tui}`, `packages/{app,core,ui,shared,a2ui,parser-plugins,desktop-network-egress}`,
+`e2e/`, `i18n/`, `docs/frontend/`) and `api/openapi.yaml` were carried over from **valuz-agent @ 9d8582a2d**.
+In valuz-agent they live under `frontend/`; here the repository is flat, so every path is one level shallower.
+Keep changes in those directories to the documented seams so upstream can be re-synced.
+
+## Deliberate differences from upstream
+
+- **Flat layout.** `frontend/apps/*` → `apps/*`, `frontend/packages/*` → `packages/*`; the frontend's root files
+  (`tsconfig.base.json`, `vitest.config.ts`, `vitest.setup.ts`, `eslint.config.js`) are the repository's root files.
+- **One task graph.** The frontend's own `turbo.json`, `pnpm-workspace.yaml`, and lockfile are gone; the root owns them.
+- **Lint scripts** drop `--config ../../eslint.config.js`. With an explicit `--config`, ESLint resolves the config's
+  `files` patterns against the working directory, so the per-file overrides never matched when run from a package.
+- **Paths that counted directory levels** were shortened by one: the locale imports in `packages/shared/src/i18n/index.ts`,
+  the monorepo root in `packages/shared/src/vite/preset.ts`, the repo root in `packages/core/src/api/request-usage.test.ts`.
+- **No Python.** `i18n/scripts/*.py` became `scripts/i18n.mjs` (same output), and the Vite i18n HMR plugin runs it with Node.
+- **`api/openapi.yaml`**: a duplicated `"422"` response key was removed (it made the file invalid YAML for strict parsers).
+- Tauri/Python-sidecar leftovers (`frontend/scripts/build-*.sh`, `frontend/sidecar-services/`) were not carried over.
+- `apps/webui/eslint.config.js` (a Vite template leftover that upstream bypassed with `--config`) was removed so it
+  cannot shadow the root config.
+- A few lint rules are warnings for the carried-over directories (see the "Lint debt" block in `eslint.config.js`):
+  upstream does not gate on lint, and this repository does.
+- **Test scripts are scoped.** Upstream's per-package `test` scripts all point at the shared root config, whose
+  `include` covers every package — fine when run once from the root, but under a task runner each package re-ran the
+  whole suite. Each script now passes its own `src` directory as the filter.
+- `packages/ui/src/components/connectors/ConnectorDetailPanel.test.tsx`: "places edit after the overlay actions…"
+  failed upstream as written — Edit is an icon-only button and the test looked for it by text. It now reads the
+  accessible name. Worth sending upstream.
+- `packages/app/src/components/TemplatePrefillDialogs.test.tsx`: the test still asserted the old `border-brand`
+  selected style after the action-kind picker became a `SegmentedControl`. It now asserts that control's selected
+  style. Worth sending upstream.

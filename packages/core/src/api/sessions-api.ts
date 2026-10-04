@@ -1,0 +1,1118 @@
+import type {
+  ActionResolvedEvent,
+  EffortLevel,
+  RequiresActionEvent,
+  RequiresActionSubject,
+  SessionDetail,
+  SessionEventDTO,
+  SessionListItem,
+  SessionMode,
+  SessionPermissionMode,
+  SessionRulePreview,
+  TodoItem,
+  WorkflowAgentProgress,
+  WorkflowProgressEvent,
+  WorkflowState,
+} from "@valuz/shared";
+
+export type {
+  ActionResolvedEvent,
+  EffortLevel,
+  RequiresActionEvent,
+  RequiresActionSubject,
+  SessionDetail,
+  SessionEventDTO,
+  SessionListItem,
+  SessionMode,
+  SessionPermissionMode,
+  SessionRulePreview,
+  TodoItem,
+  WorkflowAgentProgress,
+  WorkflowProgressEvent,
+  WorkflowState,
+};
+
+/** Wire event type the host emits for kernel ``todo_update`` events. */
+export const SESSION_TODOS_UPDATE_EVENT = "session.todos.update" as const;
+
+/**
+ * Wire event types the host emits for the kernel V5+1aae940 approval
+ * contract. ``session.requires_action`` parks the turn waiting for a
+ * user decision; ``session.action_resolved`` carries the resolution.
+ * The host JSON-stringifies the structured payload + answers blobs to
+ * honour the legacy ``Record<string,string>`` SSE shape — the helpers
+ * below decode them.
+ */
+export const SESSION_REQUIRES_ACTION_EVENT = "session.requires_action" as const;
+export const SESSION_ACTION_RESOLVED_EVENT = "session.action_resolved" as const;
+
+/**
+ * Wire event type the host emits for kernel ``workflow_progress`` events —
+ * live progress of a Claude dynamic-workflow (``Workflow`` tool) run. The
+ * host JSON-stringifies the nested ``state`` snapshot to honour the legacy
+ * ``Record<string,string>`` SSE shape; ``parseWorkflowProgress`` decodes it.
+ */
+export const SESSION_WORKFLOW_PROGRESS_EVENT =
+  "session.workflow_progress" as const;
+
+const _safeJson = <T>(raw: unknown, fallback: T): T => {
+  if (typeof raw !== "string" || !raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed === null || parsed === undefined ? fallback : (parsed as T);
+  } catch {
+    return fallback;
+  }
+};
+
+/**
+ * Pull a structured ``requires_action`` event out of an SSE frame, or
+ * ``null`` if the frame isn't a ``session.requires_action``. The host
+ * JSON-stringifies ``payload`` + ``available_decisions`` so we re-parse
+ * here; parse failure returns the default (``{}`` / ``[]``) rather than
+ * propagating an error — a renderer can still show the pending_id and
+ * subject even when the payload shape is unknown.
+ */
+export function parseRequiresAction(
+  event: SessionEventDTO,
+): RequiresActionEvent | null {
+  if (event.event.event_type !== SESSION_REQUIRES_ACTION_EVENT) return null;
+  const payload = event.event.payload;
+  // V5+d008b53: ``session_rule_preview`` and ``original_input`` are
+  // JSON-stringified by the host SSE adapter to honour the legacy
+  // ``Record<string,string>`` wire contract. Decode to the structured
+  // shape (or ``null`` when the kernel sent an empty object — every
+  // subject that doesn't carry a rule, plus older kernels).
+  const rulePreviewRaw = _safeJson<Record<string, unknown>>(
+    payload?.session_rule_preview,
+    {},
+  );
+  const sessionRulePreview =
+    typeof rulePreviewRaw.kind === "string" &&
+    typeof rulePreviewRaw.display === "string"
+      ? ({
+          kind: rulePreviewRaw.kind,
+          display: rulePreviewRaw.display,
+          runtime_kind:
+            typeof rulePreviewRaw.runtime_kind === "string"
+              ? rulePreviewRaw.runtime_kind
+              : "exact",
+          rule_data:
+            typeof rulePreviewRaw.rule_data === "object" &&
+            rulePreviewRaw.rule_data !== null
+              ? (rulePreviewRaw.rule_data as Record<string, unknown>)
+              : {},
+        } as SessionRulePreview)
+      : null;
+  const originalInputRaw = _safeJson<Record<string, unknown>>(
+    payload?.original_input,
+    {},
+  );
+  const originalInput =
+    Object.keys(originalInputRaw).length > 0 ? originalInputRaw : null;
+  return {
+    message_id: payload?.message_id ?? "",
+    pending_id: payload?.pending_id ?? "",
+    subject: (payload?.subject ?? "tool_input") as RequiresActionSubject,
+    runtime_provider: payload?.runtime_provider ?? "",
+    available_decisions: _safeJson<string[]>(payload?.available_decisions, []),
+    payload: _safeJson<Record<string, unknown>>(payload?.payload, {}),
+    expires_at: payload?.expires_at ?? "",
+    session_rule_preview: sessionRulePreview,
+    original_input: originalInput,
+  };
+}
+
+/**
+ * Pull a structured ``action_resolved`` event out of an SSE frame, or
+ * ``null`` when the frame is a different type. The kernel emits this
+ * for every terminal state — user decision, system-synthesised
+ * ``expired`` (host restart), and ``interrupted`` (Stop press).
+ *
+ * V5+d008b53: also surfaces ``approve_for_session`` /
+ * ``approve_with_changes`` user verbs and ``auto_approved`` (kernel
+ * cache-hit) with the matching rule-id back-pointers.
+ */
+export function parseActionResolved(
+  event: SessionEventDTO,
+): ActionResolvedEvent | null {
+  if (event.event.event_type !== SESSION_ACTION_RESOLVED_EVENT) return null;
+  const payload = event.event.payload;
+  // ``rule_id`` / ``auto_resolved_by_rule_id`` arrive as empty strings
+  // when absent (the SSE adapter's ``_stringify(... or "")``); coerce
+  // back to ``null`` so the consumer guards on a single shape.
+  const ruleId = payload?.rule_id;
+  const autoRuleId = payload?.auto_resolved_by_rule_id;
+  return {
+    message_id: payload?.message_id ?? "",
+    pending_id: payload?.pending_id ?? "",
+    decision: (payload?.decision ??
+      "expired") as ActionResolvedEvent["decision"],
+    resolved_by: (payload?.resolved_by ??
+      "system") as ActionResolvedEvent["resolved_by"],
+    message: payload?.message ?? "",
+    answers: _safeJson<Record<string, string | string[]>>(payload?.answers, {}),
+    rule_id: typeof ruleId === "string" && ruleId.length > 0 ? ruleId : null,
+    auto_resolved_by_rule_id:
+      typeof autoRuleId === "string" && autoRuleId.length > 0
+        ? autoRuleId
+        : null,
+  };
+}
+
+/**
+ * Pull a refreshed TODO list out of a SSE event, or ``null`` if the
+ * event isn't a ``session.todos.update`` frame.
+ *
+ * The host's SSE adapter JSON-stringifies the todos array to keep the
+ * legacy ``Record<string,string>`` payload contract; this helper re-
+ * parses it. Malformed payloads return ``null`` (silently dropped —
+ * the prior snapshot stays on screen).
+ */
+export function parseTodosUpdate(event: SessionEventDTO): TodoItem[] | null {
+  if (event.event.event_type !== SESSION_TODOS_UPDATE_EVENT) return null;
+  const raw = event.event.payload?.todos;
+  if (!raw || typeof raw !== "string") return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed
+      .filter(
+        (t): t is { content: unknown; status: unknown; activeForm?: unknown } =>
+          typeof t === "object" && t !== null,
+      )
+      .map((t) => ({
+        content: typeof t.content === "string" ? t.content : "",
+        status: typeof t.status === "string" ? t.status : "pending",
+        activeForm: typeof t.activeForm === "string" ? t.activeForm : undefined,
+      }))
+      .filter((t) => t.content.length > 0);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pull a structured workflow-progress snapshot out of an SSE frame, or
+ * ``null`` if the frame isn't a ``session.workflow_progress``. The host
+ * JSON-stringifies the nested ``state`` blob; we re-parse it and normalize
+ * the well-known fields. Unknown extras on ``state`` (e.g. a richer terminal
+ * snapshot) are preserved. Parse failure / a missing ``id`` returns ``null``
+ * (silently dropped — the prior snapshot stays on screen).
+ */
+export function parseWorkflowProgress(
+  event: SessionEventDTO,
+): WorkflowProgressEvent | null {
+  if (event.event.event_type !== SESSION_WORKFLOW_PROGRESS_EVENT) return null;
+  const payload = event.event.payload;
+  const id = payload?.id;
+  if (!id || typeof id !== "string") return null;
+  const raw = _safeJson<Record<string, unknown>>(payload?.state, {});
+  const progressRaw = Array.isArray(raw.workflowProgress)
+    ? (raw.workflowProgress as unknown[])
+    : [];
+  const workflowProgress: WorkflowAgentProgress[] = progressRaw
+    .filter(
+      (a): a is Record<string, unknown> => typeof a === "object" && a !== null,
+    )
+    .map((a) => ({
+      type: typeof a.type === "string" ? a.type : undefined,
+      agentId: typeof a.agentId === "string" ? a.agentId : "",
+      state: typeof a.state === "string" ? a.state : "progress",
+      label: typeof a.label === "string" ? a.label : undefined,
+      phase: typeof a.phase === "string" ? a.phase : undefined,
+    }))
+    .filter((a) => a.agentId.length > 0);
+  const state: WorkflowState = {
+    runId: typeof raw.runId === "string" ? raw.runId : (payload?.run_id ?? ""),
+    workflowName:
+      typeof raw.workflowName === "string" ? raw.workflowName : null,
+    status: typeof raw.status === "string" ? raw.status : "running",
+    agentCount: typeof raw.agentCount === "number" ? raw.agentCount : 0,
+    agentsDone: typeof raw.agentsDone === "number" ? raw.agentsDone : 0,
+    workflowProgress,
+    scriptPath: typeof raw.scriptPath === "string" ? raw.scriptPath : undefined,
+    script: typeof raw.script === "string" ? raw.script : undefined,
+    statePath: typeof raw.statePath === "string" ? raw.statePath : undefined,
+    resultQuestion:
+      typeof raw.resultQuestion === "string" ? raw.resultQuestion : undefined,
+    resultSummary:
+      typeof raw.resultSummary === "string" ? raw.resultSummary : undefined,
+  };
+  return {
+    id,
+    run_id: payload?.run_id ?? state.runId,
+    state,
+    message_id: payload?.message_id ?? "",
+  };
+}
+
+import { resolveApiBase } from "./base-resolver";
+import { fanOutTargets, getListFanOutTargets } from "../edition/list-fanout";
+import { recordEntityOrigins } from "../edition/entity-origin";
+import { createFetchJson, ApiError } from "./fetch-json";
+import { invalidateRequestCache, requestRaw } from "./request";
+
+let _apiBase =
+  (import.meta as unknown as Record<string, Record<string, string> | undefined>)
+    .env?.VITE_API_BASE_URL || "http://localhost:8000";
+
+export const setSessionsApiBase = (url: string): void => {
+  _apiBase = url;
+};
+
+export interface SessionEventsResponse {
+  session_id: string;
+  items: SessionEventDTO[];
+}
+
+export interface SessionEventWindowResponse {
+  session_id: string;
+  /** Events in this window, ordered ASC by seq — prepend straight in. */
+  items: SessionEventDTO[];
+  /** True iff at least one ``user_message`` row exists strictly older
+   * than ``items[0].seq``. Cursor for the next page is ``items[0].seq``. */
+  has_more: boolean;
+}
+
+export interface SessionRunResponse {
+  session: SessionDetail;
+  events: SessionEventDTO[];
+}
+
+/**
+ * Internal runtime enum — matches kernel ``Session.runtime_provider``.
+ * Stable wire id; the user-facing label comes from
+ * ``RuntimeListItem.display_name`` (Claude Agent / Codex Agent / Valuz
+ * Agent).
+ */
+export type { RuntimeId } from "@valuz/shared";
+
+import type { RuntimeId } from "@valuz/shared";
+import type {
+  FeedbackList,
+  FeedbackRecord,
+  RecordFeedbackRequest,
+} from "@valuz/shared";
+
+export interface SessionCreateRequest {
+  project_id: string;
+  title?: string | null;
+  // V5: ``model`` is locked at session creation. Either pass an explicit model
+  // id, or pass a provider id and let the backend pick its default model.
+  model_id?: string | null;
+  provider_id?: string | null;
+  /**
+   * REP-107: explicit Runtime Agent for this session. ``null`` /
+   * undefined lets the backend derive the runtime from the provider
+   * (backwards compatible). Unknown values return 422.
+   */
+  runtime_id?: RuntimeId | null;
+  // Slugs of MCP data sources to enable for this session. Resolved by
+  // ``adapters.mcp_resolver`` into kernel ``McpServerConfig`` rows. The user
+  // selects these via the data-source picker before creating the session.
+  mcp_provider_slugs?: string[];
+  /**
+   * Approval mode for the new session (kernel V5+1aae940; live-
+   * reconcile since V5+bba3014). The backend falls back to
+   * ``full_access`` when omitted. ``"auto_review"`` is rejected (400)
+   * for DeepAgents sessions — only the Claude tier ships the LLM
+   * classifier today. Mutable post-create via
+   * ``PATCH /v1/sessions/{id}/permission-mode``.
+   */
+  permission_mode?: SessionPermissionMode | null;
+  /**
+   * Initial reasoning-effort budget for the new session (kernel
+   * V5+bba3014 ``ModelSettings.effort``). ``null`` / undefined lets
+   * the runtime fall through to its SDK default. Mutable post-create
+   * via ``PATCH /v1/sessions/{id}/effort``.
+   */
+  effort?: EffortLevel | null;
+  /**
+   * Agent to bind this conversation to. When set, instructions / skills /
+   * connectors come from the agent, and runtime / model / provider / effort
+   * default to the agent's brain. An explicit model_id / provider_id /
+   * runtime_id / effort above OVERRIDES the agent's default for this one
+   * session only — the agent itself is never modified. ``null`` keeps the
+   * classic model-picker path.
+   */
+  agent_slug?: string | null;
+  /**
+   * Opt-in worktree isolation: presence of the object (even empty `{}`)
+   * runs the session in an isolated git worktree of the project repo on
+   * its own branch; omitted/``null`` runs in the main workspace. Requires
+   * the project cwd to be inside a git repository — the backend 422s
+   * otherwise (no silent fallback). ``name`` reuses/labels the worktree
+   * (auto-generated when omitted).
+   */
+  worktree?: { name?: string | null } | null;
+}
+
+/**
+ * Client-declared host location of a message — which product surface the
+ * conversation panel is attached to for this turn (e.g. an edition
+ * workbench page). Pure context: the backend re-validates the reference
+ * under the calling user; it never grants access.
+ */
+export interface SessionMessageHostRef {
+  host_type: string;
+  host_id: string;
+  slot?: string;
+}
+
+export interface SessionMessageRequest {
+  prompt: string;
+  /** Staged attachments this turn claims. See ``sendMessage``. */
+  attachment_ids?: string[];
+  provider_id?: string | null;
+  model_id?: string | null;
+  host_ref?: SessionMessageHostRef | null;
+}
+
+/**
+ * Verbs the user submits on ``POST /v1/sessions/{id}/actions``
+ * (kernel V5+d008b53). Kernel-only verbs (``auto_approved`` /
+ * ``expired`` / ``interrupted``) are intentionally absent — the
+ * server-side Pydantic validator rejects them.
+ */
+export type SessionActionDecision =
+  | "approve"
+  | "approve_with_changes"
+  | "approve_for_session"
+  | "reject"
+  | "answer";
+
+export interface SessionActionRequest {
+  pending_id: string;
+  decision: SessionActionDecision;
+  /**
+   * Optional rejection reason; surfaced back to the agent on
+   * ``reject`` (Claude ``PermissionResultDeny.message``,
+   * DeepAgents ``RejectDecision.message``; codex logs only).
+   */
+  message?: string | null;
+  /** Required iff ``decision === "answer"``; otherwise must be omitted (422). */
+  answers?: Record<string, string | string[]> | null;
+  /**
+   * V5+d008b53 / A1: replacement tool args. Required iff
+   * ``decision === "approve_with_changes"``; otherwise must be
+   * omitted (422). Same shape as the matching
+   * ``RequiresActionEvent.original_input``.
+   */
+  modified_input?: Record<string, unknown> | null;
+}
+
+export interface SessionActionResponse {
+  session_id: string;
+  pending_id: string;
+  decision: SessionActionDecision;
+  accepted_at: number;
+  idempotent: boolean;
+  /**
+   * V5+d008b53: UUID of the just-committed session-scoped rule.
+   * Non-null only when ``decision === "approve_for_session"``;
+   * idempotent retries surface the *original* rule_id so a WS/SSE
+   * reconnect doesn't think it created a new rule.
+   */
+  rule_id?: string | null;
+}
+
+export interface SessionAttachmentItem {
+  id: string;
+  /** ``null`` while staged — bound by the turn that ships it. */
+  session_id: string | null;
+  filename: string;
+  /**
+   * Where the bytes are, as stored: a data-dir-relative key for a local
+   * upload, an absolute path for a ``kb_doc`` row. Not openable on its own —
+   * use {@link ref}.
+   */
+  stored_path: string;
+  parsed_path?: string | null;
+  /**
+   * Stable file identity for the original the user attached
+   * (``valuz-file://<abs>``). Pass it to ``filesApi.resolve`` to get an access
+   * address (local path or signed URL) and preview it — same contract as
+   * {@link SessionArtifactItem.ref}. Empty string when the row carries no
+   * usable path; absent on a backend older than this field.
+   */
+  ref?: string;
+  /** Same, for the markdown text extract. ``null`` until a parse succeeds. */
+  parsed_ref?: string | null;
+  parse_status?: string;
+  size_bytes: number;
+  mime_type: string | null;
+  created_at: number;
+  /**
+   * Origin of the attachment. ``local`` is a multipart upload the host
+   * owns under ``~/.valuz-oss/attachments/{session_id}/``; ``kb_doc``
+   * is a live reference to a global knowledge-base document — the
+   * row's ``stored_path``/``parsed_path`` reuse KB-owned paths
+   * directly, no copy. Drives the panel icon + source label + delete
+   * cleanup path.
+   */
+  source_kind?: "local" | "kb_doc";
+  source_kb_id?: string | null;
+  source_kb_doc_id?: string | null;
+  /**
+   * Per-turn lifecycle marker. ``null`` = pending (staged for the next
+   * turn); Unix epoch milliseconds (UTC) = already shipped with a turn.
+   * The panel's "uploaded files" section shows every attachment as
+   * session history; the composer's staging chips + the upload-cap
+   * count filter to the pending (``consumed_at == null``) subset.
+   */
+  consumed_at?: number | null;
+}
+
+/**
+ * One version of a deliverable the **agent** produced via the built-in
+ * ``deliver_artifacts`` MCP tool — the inverse of {@link SessionAttachmentItem}
+ * (user uploads). Rendered as the read-only "产物" panel list.
+ *
+ * This is a *version*, not a deliverable: ``id`` is a revision id and
+ * ``file_path`` is that version's immutable snapshot, so it keeps working after
+ * the agent edits its working copy. Re-delivering the same file appends a
+ * version instead of replacing one, which is why the same ``artifact_id`` can
+ * appear more than once in a session's list.
+ */
+export interface SessionArtifactItem {
+  id: string;
+  session_id: string;
+  file_path: string;
+  /**
+   * Stable file identity (``valuz-file://<file_path>``). Pass it to
+   * ``filesApi.resolve`` to get an access address (local path or signed URL);
+   * derived by the backend, not stored. See files-api.ts.
+   */
+  ref: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string | null;
+  created_at: number;
+  /** Stable identity of the deliverable this is a version of. */
+  artifact_id: string;
+  /** 1-based version number within that deliverable. */
+  version_no: number;
+  /**
+   * Whether this is still the latest version. False once another session (or a
+   * later turn) delivered a newer one — the panel marks those so a superseded
+   * version is not mistaken for the deliverable.
+   */
+  is_current: boolean;
+  /** Artifact kind. ``"skill"`` rows are versions of a library skill the
+   *  product recorded on the user's behalf, not files this conversation
+   *  produced — the generated-files panel filters them out. */
+  kind?: string;
+}
+
+const fetchJson = createFetchJson(() => _apiBase);
+
+/** Entity-scoped base: the edition resolver may pin a session to another
+ *  backend (multi-target routing); falls back to the module base. */
+const sessionBase = (sessionId: string): string =>
+  resolveApiBase({ sessionId }, _apiBase);
+
+export type SessionStreamCallback = (event: SessionEventDTO) => void;
+
+// Global-list (Recents) cache: the sidebar refetches on every navigation, and
+// on multi-target editions each refetch also round-trips the CLOUD backend.
+// A short TTL absorbs rapid navigations without changing what the list shows;
+// list-shape mutations (create / rename / cancel / delete) invalidate so a
+// new or removed conversation appears immediately. Project-scoped lists keep
+// their uncached path (project pages own their refresh cadence).
+const SESSIONS_LIST_TAG = "sessions-list";
+const SESSIONS_LIST_CACHE = { ttlMs: 10_000, tags: [SESSIONS_LIST_TAG] };
+
+function invalidateSessionsList(): void {
+  invalidateRequestCache({ tags: [SESSIONS_LIST_TAG] });
+}
+
+export const sessionsApi = {
+  async list(
+    projectId?: string,
+    init?: { signal?: AbortSignal },
+  ): Promise<{ sessions: SessionListItem[] }> {
+    const qs = new URLSearchParams();
+    if (projectId) qs.set("project_id", projectId);
+    const suffix = qs.toString() ? `?${qs}` : "";
+    // Project-scoped lists live entirely on the project's backend — route by
+    // the project's observed origin instead of fanning out.
+    if (projectId) {
+      return fetchJson(`/v1/sessions${suffix}`, {
+        ...init,
+        baseUrl: resolveApiBase({ projectId }, _apiBase),
+      });
+    }
+    // Global list on a multi-target edition: fan out, tag ``exec_origin``,
+    // feed the origin index. Zero targets (OSS) keeps the single-backend
+    // path unchanged. ``init`` (e.g. an ``AbortSignal``) is forwarded.
+    if (getListFanOutTargets().length === 0) {
+      return fetchJson(`/v1/sessions${suffix}`, {
+        ...init,
+        cache: SESSIONS_LIST_CACHE,
+      });
+    }
+    const outcome = await fanOutTargets((target, signal) =>
+      fetchJson<{ sessions: SessionListItem[] }>(`/v1/sessions${suffix}`, {
+        ...init,
+        cache: SESSIONS_LIST_CACHE,
+        baseUrl: target.baseUrl,
+        signal,
+      }),
+    );
+    const seen = new Set<string>();
+    const merged: SessionListItem[] = [];
+    for (const { target, value } of outcome.values) {
+      recordEntityOrigins(value.sessions.map((row) => [row.id, target.id]));
+      for (const session of value.sessions) {
+        if (seen.has(session.id)) continue;
+        seen.add(session.id);
+        merged.push({ ...session, exec_origin: target.id });
+      }
+    }
+    return { sessions: merged };
+  },
+
+  get(sessionId: string): Promise<SessionDetail> {
+    return fetchJson(`/v1/sessions/${encodeURIComponent(sessionId)}`, {
+      baseUrl: sessionBase(sessionId),
+    });
+  },
+
+  prepare(sessionId: string): Promise<{ ready: boolean }> {
+    return fetchJson(`/v1/sessions/${encodeURIComponent(sessionId)}/prepare`, {
+      method: "POST",
+      baseUrl: sessionBase(sessionId),
+      timeoutMs: 120_000,
+    });
+  },
+
+  async create(
+    payload: SessionCreateRequest,
+    opts?: { baseUrl?: string },
+  ): Promise<SessionDetail> {
+    const created = await fetchJson<SessionDetail>("/v1/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      baseUrl: opts?.baseUrl,
+    });
+    invalidateSessionsList();
+    return created;
+  },
+
+  /**
+   * Fork a session into a new independent one (openapi ``forkSession``).
+   * With ``messageId`` the cut is inclusive at that message; without it
+   * the whole session forks at its tail. The source session is never
+   * modified. Synchronous by design — the runtime-native fork runs inside
+   * this call (~1–2s): 409 invalid anchor / turn in flight, 422 runtime
+   * unsupported, 502 native fork failed (nothing created).
+   */
+  async fork(
+    sessionId: string,
+    messageId?: string | null,
+  ): Promise<SessionDetail> {
+    const forked = await fetchJson<SessionDetail>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/fork`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(messageId ? { message_id: messageId } : {}),
+        baseUrl: sessionBase(sessionId),
+        timeoutMs: 120_000,
+      },
+    );
+    invalidateSessionsList();
+    return forked;
+  },
+
+  /**
+   * HISTORY read — ``afterSeq`` and every returned item's ``seq`` are in
+   * the DURABLE store's seq space (never the kernel's local/live space).
+   * Items carry ``event_uid`` for cross-segment dedup against live frames;
+   * the raw JSON flows through unchanged.
+   */
+  listEvents(
+    sessionId: string,
+    afterSeq?: number,
+  ): Promise<SessionEventsResponse> {
+    const qs = new URLSearchParams();
+    if (afterSeq !== undefined && afterSeq > 0)
+      qs.set("after_seq", String(afterSeq));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return fetchJson(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/events${suffix}`,
+      { baseUrl: sessionBase(sessionId) },
+    );
+  },
+
+  /**
+   * Turn-aligned page of historical events for the conversation scroller.
+   *
+   * - Initial load: omit ``beforeSeq`` → server returns the most recent
+   *   ``turnLimit`` turns.
+   * - Scroll-up "load earlier turns": pass the previous response's
+   *   ``items[0].seq`` as ``beforeSeq``. Loop until ``has_more`` is false.
+   *
+   * Each response always starts on a ``user_message`` boundary —
+   * never a partial turn — so the renderer can prepend without trim.
+   */
+  listEventsWindow(
+    sessionId: string,
+    opts: { beforeSeq?: number | null; turnLimit?: number } = {},
+  ): Promise<SessionEventWindowResponse> {
+    const qs = new URLSearchParams();
+    if (opts.beforeSeq !== undefined && opts.beforeSeq !== null) {
+      qs.set("before_seq", String(opts.beforeSeq));
+    }
+    qs.set("turn_limit", String(opts.turnLimit ?? 20));
+    return fetchJson(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/events/window?${qs}`,
+      { baseUrl: sessionBase(sessionId) },
+    );
+  },
+
+  sendMessage(
+    sessionId: string,
+    prompt: string,
+    providerId?: string | null,
+    modelId?: string | null,
+    hostRef?: SessionMessageHostRef | null,
+    attachmentIds?: string[] | null,
+  ): Promise<SessionDetail> {
+    const body: SessionMessageRequest = { prompt };
+    if (providerId) body.provider_id = providerId;
+    if (modelId) body.model_id = modelId;
+    if (hostRef) body.host_ref = hostRef;
+    // The staged files this turn claims. Server-minted ids handed back, not
+    // an identifier the client invented — and named explicitly so sending in
+    // one composer cannot swallow another's staged files.
+    if (attachmentIds?.length) body.attachment_ids = attachmentIds;
+    return fetchJson(`/v1/sessions/${encodeURIComponent(sessionId)}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      baseUrl: sessionBase(sessionId),
+    });
+  },
+
+  /**
+   * Open the session SSE stream. ``afterSeq`` is a HISTORY-space cursor
+   * (durable-store seq): the server backfills persisted events strictly
+   * after it, then streams live frames. Live frames carry the kernel's
+   * LOCAL seq — a different space — so callers must not feed live frame
+   * seqs back into ``afterSeq``; dedup across the two spaces keys on
+   * ``event_uid``.
+   *
+   * ``onHistoryCursor`` (optional) reports the server's HISTORY cursor as
+   * carried by heartbeat frames (``{"seq": N}`` with no ``event_type``).
+   * Backfill and live frames are NOT distinguishable on the wire, so
+   * heartbeats are the only frames whose ``seq`` is safe to persist as a
+   * reconnect cursor.
+   */
+  subscribeEvents(
+    sessionId: string,
+    onEvent: SessionStreamCallback,
+    afterSeq?: number,
+    signal?: AbortSignal,
+    onHistoryCursor?: (seq: number) => void,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const qs = new URLSearchParams();
+      if (afterSeq !== undefined && afterSeq > 0)
+        qs.set("after_seq", String(afterSeq));
+      const suffix = qs.toString() ? `?${qs}` : "";
+      requestRaw(
+        `/v1/sessions/${encodeURIComponent(sessionId)}/events/stream${suffix}`,
+        {
+          baseUrl: sessionBase(sessionId),
+          headers: { Accept: "text/event-stream" },
+          signal,
+        },
+      )
+        .then((res) => {
+          const reader = res.body?.getReader();
+          if (!reader) {
+            reject(new Error("No response body"));
+            return;
+          }
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          function processChunk(): Promise<void> {
+            return reader!.read().then(({ done, value }) => {
+              if (done) {
+                resolve();
+                return;
+              }
+              buffer += decoder.decode(value, { stream: true });
+              // SSE frames are delimited by blank lines; lines within a
+              // frame each begin with a field name (``data:``, ``event:``).
+              // We only need ``data:`` because the JSON envelope already
+              // carries ``seq`` + ``event_type``.
+              const lines = buffer.split("\n");
+              buffer = lines.pop() ?? "";
+
+              for (const line of lines) {
+                if (line.startsWith("data:")) {
+                  const raw = line.slice(5).trim();
+                  if (!raw) continue;
+                  try {
+                    const parsed = JSON.parse(raw) as {
+                      seq?: number;
+                      event_type?: string;
+                      payload?: Record<string, string>;
+                      timestamp?: string;
+                      event_uid?: string | null;
+                    };
+                    // Heartbeat frames ({"seq": N}) carry no event_type.
+                    // Their ``seq`` is the server's HISTORY cursor — the
+                    // one frame kind whose seq is guaranteed history-space
+                    // — so surface it to the caller, then skip rendering.
+                    if (!parsed.event_type) {
+                      if (typeof parsed.seq === "number") {
+                        onHistoryCursor?.(parsed.seq);
+                      }
+                      continue;
+                    }
+                    onEvent({
+                      seq: typeof parsed.seq === "number" ? parsed.seq : 0,
+                      event: {
+                        event_type: parsed.event_type,
+                        payload: parsed.payload ?? {},
+                      },
+                      timestamp:
+                        typeof parsed.timestamp === "number"
+                          ? parsed.timestamp
+                          : undefined,
+                      event_uid:
+                        typeof parsed.event_uid === "string"
+                          ? parsed.event_uid
+                          : null,
+                    });
+                  } catch {
+                    // Skip malformed SSE data lines
+                  }
+                }
+              }
+              return processChunk();
+            });
+          }
+
+          processChunk().catch(reject);
+        })
+        .catch((err) => {
+          if (signal?.aborted) {
+            resolve();
+          } else {
+            reject(err);
+          }
+        });
+    });
+  },
+
+  interrupt(sessionId: string): Promise<SessionDetail> {
+    return fetchJson(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/interrupt`,
+      {
+        method: "POST",
+        baseUrl: sessionBase(sessionId),
+      },
+    );
+  },
+
+  async cancel(sessionId: string): Promise<SessionDetail> {
+    const detail = await fetchJson<SessionDetail>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/cancel`,
+      {
+        method: "POST",
+        baseUrl: sessionBase(sessionId),
+      },
+    );
+    invalidateSessionsList();
+    return detail;
+  },
+
+  regenerate(sessionId: string): Promise<SessionDetail> {
+    return fetchJson(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/regenerate`,
+      {
+        method: "POST",
+        baseUrl: sessionBase(sessionId),
+      },
+    );
+  },
+
+  async rename(sessionId: string, name: string): Promise<SessionDetail> {
+    const qs = new URLSearchParams({ name });
+    const detail = await fetchJson<SessionDetail>(
+      `/v1/sessions/${encodeURIComponent(sessionId)}?${qs}`,
+      {
+        method: "PATCH",
+        baseUrl: sessionBase(sessionId),
+      },
+    );
+    invalidateSessionsList();
+    return detail;
+  },
+
+  async delete(sessionId: string): Promise<void> {
+    try {
+      await fetchJson(`/v1/sessions/${encodeURIComponent(sessionId)}`, {
+        method: "DELETE",
+        baseUrl: sessionBase(sessionId),
+      });
+    } catch (err) {
+      // DELETE is idempotent: a session that's already gone is a successful
+      // outcome, not an error. This happens with a stale list/feed row, a
+      // double-click, or an empty draft the user is trying to clear — the
+      // backend returns 404 "session not found". Swallow it so the caller still
+      // drops the row instead of surfacing "no session" and leaving it stuck.
+      if (err instanceof ApiError && err.status === 404) {
+        invalidateSessionsList();
+        return;
+      }
+      throw err;
+    }
+    invalidateSessionsList();
+  },
+
+  // Per-session attached skill list. skill-creator is always active and is
+  // not included in this list.
+  getExtraSkills(sessionId: string): Promise<{ skill_ids: string[] }> {
+    return fetchJson(`/v1/sessions/${encodeURIComponent(sessionId)}/skills`, {
+      baseUrl: sessionBase(sessionId),
+    });
+  },
+
+  setExtraSkills(
+    sessionId: string,
+    skillIds: string[],
+  ): Promise<{ skill_ids: string[] }> {
+    return fetchJson(`/v1/sessions/${encodeURIComponent(sessionId)}/skills`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skill_ids: skillIds }),
+      baseUrl: sessionBase(sessionId),
+    });
+  },
+
+  /**
+   * Upload a file with no session attached to it.
+   *
+   * Uploading needed nothing from a session — the bytes land in the owner's
+   * store and the parse is a server-side job — but requiring one meant
+   * attaching a file had to CREATE one, and in cloud mode creating a session
+   * provisions a sandbox: about three and a half seconds of nothing happening.
+   * The turn that ships the file binds it (``sendMessage({attachmentIds})``).
+   *
+   * ``baseUrl`` is explicit because there is no session to route on; pass the
+   * project's / target's base, the same one the eventual create will use.
+   */
+  uploadAttachment(
+    file: File,
+    opts?: { baseUrl?: string },
+  ): Promise<SessionAttachmentItem> {
+    const form = new FormData();
+    form.append("file", file);
+    return fetchJson("/v1/attachments", {
+      method: "POST",
+      body: form,
+      baseUrl: opts?.baseUrl,
+    });
+  },
+
+  /** This owner's staged (not yet sent) attachments. */
+  listStagedAttachments(opts?: {
+    baseUrl?: string;
+  }): Promise<{ items: SessionAttachmentItem[] }> {
+    return fetchJson("/v1/attachments", { baseUrl: opts?.baseUrl });
+  },
+
+  /** Everything ever attached to ``sessionId`` — the conversation's history. */
+  listAttachments(
+    sessionId: string,
+  ): Promise<{ items: SessionAttachmentItem[] }> {
+    return fetchJson(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/attachments`,
+      { baseUrl: sessionBase(sessionId) },
+    );
+  },
+
+  /**
+   * List the versions the agent delivered in ``sessionId`` (the "产物"
+   * panel list), recorded by the built-in ``deliver_artifacts`` MCP tool.
+   *
+   * Session-scoped: it answers "what did this conversation produce", so a
+   * revision another session made to the same deliverable is not included.
+   * Use ``artifactsApi`` for the workspace-wide view and for history.
+   */
+  listArtifacts(sessionId: string): Promise<{ items: SessionArtifactItem[] }> {
+    return fetchJson(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/artifacts`,
+      { baseUrl: sessionBase(sessionId) },
+    );
+  },
+
+  /**
+   * Attach one or more knowledge-base documents to ``sessionId`` as
+   * live references (no file copy). Same panel slot as local
+   * uploads. ``doc_ids`` already attached to the session are
+   * silently dropped server-side; missing doc ids return 400.
+   */
+  addKbAttachments(
+    docIds: string[],
+    opts?: { baseUrl?: string },
+  ): Promise<{ items: SessionAttachmentItem[] }> {
+    return fetchJson("/v1/attachments/kb", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ doc_ids: docIds }),
+      baseUrl: opts?.baseUrl,
+    });
+  },
+
+  /**
+   * Remove a single session attachment. For ``source_kind="local"``
+   * the backend also unlinks the underlying file; for
+   * ``source_kind="kb_doc"`` only the row is deleted (the KB
+   * document survives for other sessions).
+   */
+  deleteAttachment(
+    attachmentId: string,
+    opts?: { baseUrl?: string },
+  ): Promise<void> {
+    return fetchJson(`/v1/attachments/${encodeURIComponent(attachmentId)}`, {
+      method: "DELETE",
+      baseUrl: opts?.baseUrl,
+    });
+  },
+
+  /**
+   * Change the approval mode for an existing session (kernel V5+1aae940;
+   * live-reconcile since V5+bba3014). The new mode applies on the next
+   * Send: Claude uses the live ``set_permission_mode`` mutator (with
+   * fork-on-rebuild for the bypass tier); Codex threads
+   * approval_policy / sandbox_policy per-turn via ``turn_kwargs``;
+   * DeepAgents drops its cached graph for a cold rebuild. DeepAgents
+   * sessions return 400 for ``"auto_review"``.
+   */
+  updatePermissionMode(
+    sessionId: string,
+    permissionMode: SessionPermissionMode,
+  ): Promise<SessionDetail> {
+    return fetchJson(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/permission-mode`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permission_mode: permissionMode }),
+        baseUrl: sessionBase(sessionId),
+      },
+    );
+  },
+
+  /**
+   * Change the reasoning-effort budget for an existing session (kernel
+   * V5+bba3014 ``ModelSettings.effort``). Live-reconcile: the new
+   * effort applies on the next Send. Claude cold-reloads the SDK
+   * client (effort is a build-time option); Codex drops it into
+   * ``turn_kwargs.reasoning_effort`` (survives ``--resume``);
+   * DeepAgents drops its cached graph so the next turn rebuilds the
+   * langchain chat client with the new value. ``effort=null`` resets
+   * to the SDK default. Returns 400 on an unknown value.
+   */
+  updateEffort(
+    sessionId: string,
+    effort: EffortLevel | null,
+  ): Promise<SessionDetail> {
+    return fetchJson(`/v1/sessions/${encodeURIComponent(sessionId)}/effort`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ effort }),
+      baseUrl: sessionBase(sessionId),
+    });
+  },
+
+  /**
+   * Enter or leave a session working mode (kernel ``Session.mode``,
+   * docs/design/session-modes.md). ``plan`` makes the runtime plan
+   * before touching anything — Claude applies the SDK's typed
+   * ``set_permission_mode("plan")`` mutator immediately and exits via
+   * the ``ExitPlanMode`` approval card; ``default`` exits the current
+   * mode. Same-mode re-set is idempotent. Only ``claude_agent`` /
+   * ``codex`` sessions accept non-default modes — the server 400s
+   * deepagents / deepseek_harness.
+   */
+  updateMode(sessionId: string, mode: SessionMode): Promise<SessionDetail> {
+    return fetchJson(`/v1/sessions/${encodeURIComponent(sessionId)}/mode`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+      baseUrl: sessionBase(sessionId),
+    });
+  },
+
+  /**
+   * Resolve a pending ``requires_action`` event with a user decision.
+   * Idempotent on ``(pending_id, decision)``: a repeat with the same
+   * decision returns the original ``accepted_at`` and
+   * ``idempotent: true``; a conflicting decision throws (server 409).
+   */
+  submitAction(
+    sessionId: string,
+    request: SessionActionRequest,
+  ): Promise<SessionActionResponse> {
+    return fetchJson(`/v1/sessions/${encodeURIComponent(sessionId)}/actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      baseUrl: sessionBase(sessionId),
+    });
+  },
+
+  // ── Feedback signals (docs/design/feedback-signals.md) ──────────────
+  // One row per (user, message, action); repeats bump ``occurrences``.
+  // Routed to the backend that serves the session (multi-target editions).
+
+  /** The caller's feedback rows in this session — rehydrates the 👍/👎 state. */
+  listFeedback(sessionId: string): Promise<FeedbackList> {
+    return fetchJson(`/v1/sessions/${encodeURIComponent(sessionId)}/feedback`, {
+      baseUrl: sessionBase(sessionId),
+    });
+  },
+
+  /** Upsert a ``rating`` / ``copy`` row on one of the session's messages. */
+  recordFeedback(
+    sessionId: string,
+    request: RecordFeedbackRequest,
+  ): Promise<FeedbackRecord> {
+    return fetchJson(`/v1/sessions/${encodeURIComponent(sessionId)}/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      baseUrl: sessionBase(sessionId),
+    });
+  },
+
+  /** Delete the caller's row (un-rate). Rejects with a 404 ``ApiError`` when none. */
+  withdrawFeedback(
+    sessionId: string,
+    params: {
+      message_id: string;
+      action: "rating" | "copy";
+      block_ref?: string;
+    },
+  ): Promise<void> {
+    const query = new URLSearchParams({
+      message_id: params.message_id,
+      action: params.action,
+      ...(params.block_ref ? { block_ref: params.block_ref } : {}),
+    });
+    return fetchJson(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/feedback?${query.toString()}`,
+      { method: "DELETE", baseUrl: sessionBase(sessionId) },
+    );
+  },
+};

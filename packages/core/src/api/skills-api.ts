@@ -1,0 +1,817 @@
+import { createFetchJson } from "./fetch-json";
+import { resolveApiBase } from "./base-resolver";
+import { invalidateRequestCache } from "./request";
+
+let _apiBase =
+  (import.meta as unknown as Record<string, Record<string, string> | undefined>)
+    .env?.VITE_API_BASE_URL || "http://localhost:8000";
+
+export const setSkillsApiBase = (url: string): void => {
+  _apiBase = url;
+};
+
+export type SkillTargetScope = "user" | "project" | "official" | "tenant";
+
+/**
+ * Where the skill came from — host-side bookkeeping the backend keeps
+ * in the ``valuz_skill_index`` DB row (never in SKILL.md):
+ *
+ * - ``"created"`` — built via the skill library dialog / skill-creator
+ *   AI session / "duplicate" action. Drives the "创建" badge in the
+ *   .agents group.
+ * - ``"imported"`` — pulled in via archive / URL / directory import.
+ *   Drives the "同步" badge.
+ * - ``"discovered"`` — found on disk by the filesystem scan (e.g.
+ *   hand-dropped or symlinked into ~/.agents/skills/), not originated
+ *   by Valuz. Renders no badge.
+ */
+export type SkillCreationOrigin = "created" | "imported" | "discovered";
+
+export interface SkillView {
+  id: string;
+  name: string;
+  description: string;
+  scope: SkillTargetScope;
+  source: string;
+  path: string;
+  enabled: boolean;
+  /** Global library switch (user-scoped, slug-keyed), independent of any
+   *  project. Scanned user skills default off; enabling makes the skill
+   *  available to new conversations and agent skill pickers. */
+  library_enabled?: boolean;
+  tags: string[];
+  slug?: string;
+  icon?: string | null;
+  status?: string;
+  readonly?: boolean;
+  deletable: boolean;
+  is_locked?: boolean;
+  lock_reason?: string | null;
+  /** Usable by every runtime, never disclosed. The catalog still lists the
+   *  skill — the user has to know the capability exists — but `path` and
+   *  `project_root` come back blank and every endpoint that would hand over
+   *  the package (file tree, file read, copy, export) answers 403. A client
+   *  renders the name and description and drops those affordances. */
+  protected?: boolean;
+  project_root?: string | null;
+  origin_label?: string | null;
+  argument_hint?: string | null;
+  context?: string | null;
+  content_hash?: string | null;
+  manifest_hash?: string | null;
+  version?: number | null;
+  /**
+   * Folder birthtime as Unix epoch milliseconds (UTC); format via
+   * ``new Date(ms)``. Drives the DESC sort on the skill management
+   * page — newest folder on top, name ASC as the tiebreaker. ``null``
+   * for legacy rows that weren't scanned with the new helper (e.g.
+   * immediately after the DB migration but before the next
+   * ``startup_scan``); the sort puts ``null`` last.
+   */
+  folder_created_at?: number | null;
+  /**
+   * See ``SkillCreationOrigin``. Drives the "创建" / "同步" badge in
+   * the .agents group on the skill management page; "discovered"
+   * renders no badge. Always present — the backend defaults it to
+   * "discovered".
+   */
+  creation_origin: SkillCreationOrigin;
+  /** Version lineage (the ``kind=skill`` artifact whose revisions are this
+   *  skill's saved versions), or null for a skill never saved through the
+   *  library. Drives the "versions" affordance on the detail page. */
+  artifact_id?: string | null;
+}
+
+/** Import provenance for a URL/GitHub-imported skill (mirrors the backend
+ * ``valuz_skill_index.origin_json``). Lets the detail UI show "Imported from …"
+ * and link back to the source. */
+export interface SkillOrigin {
+  type: "github" | "url";
+  source_url: string;
+  /** In-repo relative path when the skill came from a multi-skill
+   * collection/plugin; empty for a single-skill source. */
+  path: string;
+}
+
+export interface SkillDetail extends SkillView {
+  instructions_markdown?: string | null;
+  file_count?: number;
+  root_path?: string | null;
+  manifest_filename?: string | null;
+  metadata?: Record<string, unknown>;
+  /** Null/absent for skills not imported from a URL. */
+  origin?: SkillOrigin | null;
+}
+
+export interface SkillsCatalog {
+  project_id: string;
+  skills: SkillView[];
+}
+
+export interface SkillScanResponse {
+  discovered: number;
+}
+
+export interface SkillRescanResponse {
+  indexed: number;
+}
+
+export interface SkillListOptions {
+  libraryEnabled?: boolean;
+}
+
+export interface SkillCreateRequest {
+  name: string;
+  description?: string;
+  target_scope?: SkillTargetScope;
+  project_id?: string;
+  instructions_markdown?: string;
+  add_to_project?: boolean;
+}
+
+export interface SkillUpdateRequest {
+  name?: string;
+  description?: string;
+  instructions_markdown?: string;
+  tags?: string[];
+}
+
+export interface SkillCopyRequest {
+  new_name: string;
+  project_id?: string;
+  add_to_project?: boolean;
+}
+
+export interface SkillDeletePreview {
+  affected_projects: { project_id: string; name: string }[];
+  count: number;
+}
+
+export interface SkillImportPreviewFile {
+  path: string;
+  type: "file" | "directory";
+  size: number | null;
+  /** Directory entries carry nested ``children`` from the backend
+   * tree-walker (``_build_skill_file_tree``). The /skills/{id}/files
+   * endpoint always returns this shape; the import-preview tree uses
+   * the same node format. */
+  children?: SkillImportPreviewFile[];
+}
+
+/** One skill detected inside an import source. When a URL/archive points at a
+ * collection or plugin (multiple SKILL.md), the preview lists every candidate
+ * so the user can multi-select; each carries its own ``preview_id`` and confirm
+ * is called once per chosen skill. */
+export interface SkillImportCandidate {
+  preview_id: string;
+  name: string;
+  description: string;
+  file_count: number;
+  /** Location within the fetched tree (for display). */
+  relpath: string;
+}
+
+export interface SkillImportArchivePreview {
+  preview_id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  file_tree: SkillImportPreviewFile[];
+  validation_warnings: string[];
+  name_conflict: boolean;
+  suggested_name: string | null;
+  /** When the source contains MULTIPLE skills (a collection/plugin), this lists
+   * every detected skill (each with its own ``preview_id``). Length <= 1 → the
+   * top-level fields above ARE the single skill (backward compatible). */
+  skills: SkillImportCandidate[];
+}
+
+export interface SkillImportArchiveConfirmRequest {
+  preview_id: string;
+  name?: string;
+  target_scope?: SkillTargetScope;
+  project_id?: string;
+  add_to_project?: boolean;
+}
+
+export interface SkillImportDirectoryPreviewRequest {
+  directory_path: string;
+  target_scope?: SkillTargetScope;
+  project_id?: string;
+}
+
+const fetchJson = createFetchJson(() => _apiBase);
+const SKILLS_TAG = "skills";
+const SKILLS_CACHE_TTL_MS = 30_000;
+
+function skillsCatalogCache(
+  projectId?: string,
+  options: SkillListOptions = {},
+) {
+  const state =
+    options.libraryEnabled === undefined
+      ? "all"
+      : `library:${String(options.libraryEnabled)}`;
+  return {
+    ttlMs: SKILLS_CACHE_TTL_MS,
+    tags: [SKILLS_TAG, `skills:${projectId ?? "global"}:${state}`],
+  };
+}
+
+function invalidateSkills(): void {
+  invalidateRequestCache({ tags: [SKILLS_TAG] });
+}
+
+export const skillsApi = {
+  list(
+    projectId?: string,
+    options: SkillListOptions = {},
+  ): Promise<SkillsCatalog> {
+    const qs = new URLSearchParams();
+    if (projectId) qs.set("project_id", projectId);
+    if (options.libraryEnabled !== undefined) {
+      qs.set("library_enabled", String(options.libraryEnabled));
+    }
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    // Project-scoped catalog follows the project's execution origin
+    // (multi-target editions); the global catalog stays on the default.
+    return fetchJson(`/v1/skills${suffix}`, {
+      cache: skillsCatalogCache(projectId, options),
+      baseUrl: projectId
+        ? resolveApiBase({ projectId }, "") || undefined
+        : undefined,
+    });
+  },
+
+  get(skillId: string, projectId?: string): Promise<SkillDetail> {
+    const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+    return fetchJson(`/v1/skills/${encodeURIComponent(skillId)}${qs}`, {
+      baseUrl: projectId
+        ? resolveApiBase({ projectId }, "") || undefined
+        : undefined,
+    });
+  },
+
+  async create(payload: SkillCreateRequest): Promise<SkillView> {
+    const result = await fetchJson<SkillView>("/v1/skills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    invalidateSkills();
+    return result;
+  },
+
+  /** Re-scan the skill library on disk and refresh the index. Resolves with the
+   *  number of skills indexed. Emits SKILL_CHANGED server-side so open catalogs
+   *  refresh over SSE. */
+  async rescan(): Promise<SkillRescanResponse> {
+    const result = await fetchJson<SkillRescanResponse>("/v1/skills/scan", {
+      method: "POST",
+    });
+    invalidateSkills();
+    return result;
+  },
+
+  async update(
+    skillId: string,
+    payload: SkillUpdateRequest,
+    projectId?: string,
+  ): Promise<SkillView> {
+    const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+    const result = await fetchJson<SkillView>(
+      `/v1/skills/${encodeURIComponent(skillId)}${qs}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    invalidateSkills();
+    return result;
+  },
+
+  async copy(skillId: string, payload: SkillCopyRequest): Promise<SkillView> {
+    const result = await fetchJson<SkillView>(
+      `/v1/skills/${encodeURIComponent(skillId)}/copy`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    invalidateSkills();
+    return result;
+  },
+
+  /** Flip a skill's global library on/off switch (slug-keyed, user-scoped).
+   *  Off hides it from a new (non-project) conversation's inline `/` picker. */
+  async setLibraryState(skillId: string, enabled: boolean): Promise<SkillView> {
+    const result = await fetchJson<SkillView>(
+      `/v1/skills/${encodeURIComponent(skillId)}/library-state`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      },
+    );
+    invalidateSkills();
+    return result;
+  },
+
+  deleteDryRun(
+    skillId: string,
+    projectId?: string,
+  ): Promise<SkillDeletePreview> {
+    const qs = new URLSearchParams({ mode: "dry_run" });
+    if (projectId) qs.set("project_id", projectId);
+    return fetchJson(`/v1/skills/${encodeURIComponent(skillId)}?${qs}`, {
+      method: "DELETE",
+    });
+  },
+
+  async deleteConfirm(skillId: string, projectId?: string): Promise<void> {
+    const qs = new URLSearchParams({ mode: "confirm" });
+    if (projectId) qs.set("project_id", projectId);
+    await fetchJson(`/v1/skills/${encodeURIComponent(skillId)}?${qs}`, {
+      method: "DELETE",
+    });
+    invalidateSkills();
+  },
+
+  importArchivePreview(
+    file: File,
+    targetScope?: string,
+    projectId?: string,
+  ): Promise<SkillImportArchivePreview> {
+    const form = new FormData();
+    form.append("file", file);
+    if (targetScope) form.append("target_scope", targetScope);
+    if (projectId) form.append("project_id", projectId);
+    return fetchJson("/v1/skills/import/archive", {
+      method: "POST",
+      body: form,
+    });
+  },
+
+  async importArchiveConfirm(
+    payload: SkillImportArchiveConfirmRequest,
+  ): Promise<SkillView> {
+    const result = await fetchJson<SkillView>(
+      "/v1/skills/import/archive/confirm",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    invalidateSkills();
+    return result;
+  },
+
+  importDirectoryPreview(
+    payload: SkillImportDirectoryPreviewRequest,
+  ): Promise<SkillImportArchivePreview> {
+    return fetchJson("/v1/skills/import/directory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async importDirectoryConfirm(
+    payload: SkillImportArchiveConfirmRequest,
+  ): Promise<SkillView> {
+    const result = await fetchJson<SkillView>(
+      "/v1/skills/import/archive/confirm",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    invalidateSkills();
+    return result;
+  },
+
+  importUrlPreview(
+    url: string,
+    targetScope?: SkillTargetScope,
+    projectId?: string,
+  ): Promise<SkillImportArchivePreview> {
+    return fetchJson("/v1/skills/import/url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        target_scope: targetScope,
+        project_id: projectId,
+      }),
+    });
+  },
+
+  async importUrlConfirm(
+    payload: SkillImportArchiveConfirmRequest,
+  ): Promise<SkillView> {
+    const result = await fetchJson<SkillView>("/v1/skills/import/url/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    invalidateSkills();
+    return result;
+  },
+
+  listTags(projectId?: string): Promise<{ tags: string[] }> {
+    const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+    return fetchJson(`/v1/skills/tags${qs}`);
+  },
+
+  listFiles(
+    skillId: string,
+    projectId?: string,
+  ): Promise<SkillImportPreviewFile[]> {
+    const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+    return fetchJson(`/v1/skills/${encodeURIComponent(skillId)}/files${qs}`);
+  },
+
+  getFileContent(
+    skillId: string,
+    filePath: string,
+    projectId?: string,
+  ): Promise<{ path: string; content: string }> {
+    const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+    return fetchJson(
+      `/v1/skills/${encodeURIComponent(skillId)}/files/${filePath}${qs}`,
+    );
+  },
+
+  async updateFile(
+    skillId: string,
+    action: {
+      action: "create" | "rename" | "delete";
+      path: string;
+      new_path?: string;
+      content?: string;
+    },
+    projectId?: string,
+  ): Promise<{ path: string; content: string }> {
+    const qs = projectId ? `?project_id=${encodeURIComponent(projectId)}` : "";
+    const result = await fetchJson<{ path: string; content: string }>(
+      `/v1/skills/${encodeURIComponent(skillId)}/files${qs}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(action),
+      },
+    );
+    invalidateSkills();
+    return result;
+  },
+
+  projectCatalog(projectId: string): Promise<SkillsCatalog> {
+    return fetchJson(`/v1/projects/${encodeURIComponent(projectId)}/skills`, {
+      cache: skillsCatalogCache(projectId),
+      baseUrl: resolveApiBase({ projectId }, "") || undefined,
+    });
+  },
+
+  // Project skill *binding* (scan / setSkillState / overwrite) removed —
+  // skills bind on the Agent now (08-agents-module). ``projectCatalog``
+  // above stays: it feeds the conversation composer's skill-insert chips.
+
+  // Scenario B — AI 创建 Skill (chat-driven authoring) ──────────────────
+
+  startCreateChat(payload?: {
+    model_id?: string | null;
+    provider_id?: string | null;
+  }): Promise<SkillCreateChatStart> {
+    // Match SessionCreateRequest's nullable shape — undefined and null
+    // both fall through to the provider default on the backend; only an
+    // explicit string forces the override.
+    const hasBody =
+      payload != null &&
+      (payload.model_id != null || payload.provider_id != null);
+    return fetchJson("/v1/skills/create/chat/start", {
+      method: "POST",
+      headers: hasBody ? { "Content-Type": "application/json" } : undefined,
+      body: hasBody ? JSON.stringify(payload) : undefined,
+    });
+  },
+
+  /** Unified skill-creator launcher used by all three product entries
+   * (chat / project / skills_library). The backend stamps
+   * ``creation_context`` onto the kernel session so the ``submit_skill``
+   * confirm endpoint can decide which side-effects to apply. */
+  startCreate(
+    payload: SkillCreateStartRequest,
+  ): Promise<SkillCreateStartResponse> {
+    return fetchJson("/v1/skills/create/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** User accepts the skill the agent submitted via ``submit_skill``.
+   * Promotes the staged slug to ``~/.agents/skills/{slug}/`` and applies
+   * per-context side-effects (project entries also bind to the project). */
+  async confirmSubmission(
+    sessionId: string,
+    slug: string,
+    payload?: SkillSubmissionConfirmRequest,
+  ): Promise<SkillSubmissionConfirmResponse> {
+    const body = payload ?? {};
+    const result = await fetchJson<SkillSubmissionConfirmResponse>(
+      `/v1/skills/submissions/${encodeURIComponent(sessionId)}/${encodeURIComponent(slug)}/confirm`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+    invalidateSkills();
+    return result;
+  },
+
+  /** User discards the agent's submission. Cleans up the staged slug;
+   * idempotent — calling twice returns ``removed: false`` on the second
+   * call. */
+  dismissSubmission(
+    sessionId: string,
+    slug: string,
+  ): Promise<SkillSubmissionDismissResponse> {
+    return fetchJson(
+      `/v1/skills/submissions/${encodeURIComponent(sessionId)}/${encodeURIComponent(slug)}/dismiss`,
+      { method: "POST" },
+    );
+  },
+
+  // Staging (Scenario B + D3 accept path) ─────────────────────────────
+
+  scanStaging(sessionId: string): Promise<StagingScanResponse> {
+    return fetchJson(
+      `/v1/skills/staging/${encodeURIComponent(sessionId)}/scan`,
+    );
+  },
+
+  readStagingFile(
+    sessionId: string,
+    slug: string,
+    path: string,
+  ): Promise<{ path: string; content: string }> {
+    const qs = new URLSearchParams({ slug, path });
+    return fetchJson(
+      `/v1/skills/staging/${encodeURIComponent(sessionId)}/file?${qs}`,
+    );
+  },
+
+  async syncStaging(
+    sessionId: string,
+    payload: StagingSyncRequest,
+  ): Promise<StagingSyncResponse> {
+    const result = await fetchJson<StagingSyncResponse>(
+      `/v1/skills/staging/${encodeURIComponent(sessionId)}/sync`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    invalidateSkills();
+    return result;
+  },
+
+  // Versions ──────────────────────────────────────────────────────────
+
+  /** Saved versions of one skill, oldest first. A skill that was never
+   *  saved through the library has no lineage yet and returns an empty
+   *  list — not an error. */
+  listVersions(skillId: string): Promise<SkillVersionListResponse> {
+    return fetchJson(`/v1/skills/${encodeURIComponent(skillId)}/versions`);
+  },
+
+  /** One version and the files it holds. Read from the archive: which files
+   *  a version contains is part of what changed between versions. */
+  getVersion(skillId: string, revisionId: string): Promise<SkillVersionDetail> {
+    return fetchJson(
+      `/v1/skills/${encodeURIComponent(skillId)}/versions/${encodeURIComponent(revisionId)}`,
+    );
+  },
+
+  /** One file out of an archived version, read straight from the archive. */
+  readVersionFile(
+    skillId: string,
+    revisionId: string,
+    path: string,
+  ): Promise<SkillVersionFileResponse> {
+    const qs = new URLSearchParams({ path });
+    return fetchJson(
+      `/v1/skills/${encodeURIComponent(skillId)}/versions/${encodeURIComponent(revisionId)}/files?${qs}`,
+    );
+  },
+
+  /** Make the library copy equal to an earlier version. Recorded as a NEW
+   *  version on top of the history, never by rewriting it. */
+  async restoreVersion(
+    skillId: string,
+    revisionId: string,
+  ): Promise<SkillVersionRestoreResponse> {
+    const result = await fetchJson<SkillVersionRestoreResponse>(
+      `/v1/skills/${encodeURIComponent(skillId)}/versions/${encodeURIComponent(revisionId)}/restore`,
+      { method: "POST" },
+    );
+    invalidateSkills();
+    return result;
+  },
+
+  optimizeFromSkill(
+    sessionId: string,
+    sourceSkillId: string,
+  ): Promise<StagingOptimizeResponse> {
+    return fetchJson(
+      `/v1/skills/staging/${encodeURIComponent(sessionId)}/optimize`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_skill_id: sourceSkillId }),
+      },
+    );
+  },
+};
+
+export interface SkillCreateChatStart {
+  session_id: string;
+  authoring_project_id: string;
+}
+
+/** Where the user opened the skill-creator from. The backend persists
+ * this on the kernel session so the ``submit_skill`` confirm endpoint
+ * can apply the right side-effects on user approval. */
+export type SkillCreationKind = "chat" | "project" | "skills_library";
+
+export interface SkillCreationContext {
+  kind: SkillCreationKind;
+  /** Required when ``kind === "project"``; identifies the project the
+   * new skill should be bound to on confirm. */
+  project_id?: string;
+}
+
+export interface SkillCreateStartRequest {
+  context: SkillCreationContext;
+  /** Agent to bind the authoring conversation to. Omit to let the
+   *  backend prefer the built-in ``valurion`` agent, then the legacy default
+   *  assistant. Historical Helpers are ordinary Agents, not aliases. The
+   *  draft-first entry passes the composer's picked agent so the skill-creator
+   *  chat behaves exactly like 新对话. */
+  agent_slug?: string | null;
+  model_id?: string | null;
+  provider_id?: string | null;
+  /** Runtime explicitly picked by the user. Defaults to whatever the
+   *  session-service derives from the provider when omitted. */
+  runtime_id?: string | null;
+  /** Reasoning effort picked in the composer. Carried for the same reason
+   *  as ``runtime_id``: an agentless launch has no agent to inherit it. */
+  effort?: string | null;
+}
+
+export interface SkillCreateStartResponse {
+  session_id: string;
+  authoring_project_id: string;
+  creation_context: SkillCreationContext;
+}
+
+/** Body passed to ``POST /v1/skills/submissions/{session_id}/{slug}/confirm``.
+ * Frontend pulls these fields off the original ``submit_skill`` ``tool_use``
+ * event so they ride along to the audit log; the actual content lives in
+ * the staging dir. */
+export interface SkillSubmissionConfirmRequest {
+  summary?: string | null;
+  change_kind?: "create" | "update";
+  files_touched?: string[];
+}
+
+export interface SkillSubmissionConfirmResponse {
+  skill: SkillView;
+  creation_context: SkillCreationContext;
+  /** Populated when the submission was confirmed under a project entry —
+   * the new skill was bound to this project. ``null`` for chat /
+   * skills_library entries. */
+  bound_to_project_id?: string | null;
+}
+
+export interface SkillSubmissionDismissResponse {
+  session_id: string;
+  slug: string;
+  removed: boolean;
+}
+
+// Staging types ───────────────────────────────────────────────────────
+
+export type StagingConflictKind = "none" | "same_source" | "diverged";
+export type StagingSyncStrategy = "overwrite" | "fork" | "abort";
+
+export interface StagingFileNode {
+  path: string;
+  type: "file" | "directory";
+  size?: number | null;
+}
+
+export interface StagingSlugView {
+  slug: string;
+  name: string;
+  description: string;
+  file_count: number;
+  total_bytes: number;
+  files: StagingFileNode[];
+  conflict_kind: StagingConflictKind;
+  suggested_strategy: StagingSyncStrategy;
+  suggested_new_slug?: string | null;
+  source_skill_id?: string | null;
+  version?: number | null;
+  /** Still byte-identical to what ``prepare_skill_edit`` seeded — the agent
+   *  has not edited anything yet, so there is nothing to save. */
+  untouched?: boolean;
+}
+
+export interface StagingScanResponse {
+  session_id: string;
+  staging_path: string;
+  slugs: StagingSlugView[];
+}
+
+export interface StagingSyncItem {
+  slug: string;
+  strategy?: StagingSyncStrategy;
+  new_slug?: string | null;
+}
+
+export interface StagingSyncRequest {
+  items: StagingSyncItem[];
+  target_scope?: SkillTargetScope;
+  project_id?: string | null;
+}
+
+export interface StagingSyncItemResult {
+  slug: string;
+  strategy: StagingSyncStrategy;
+  written_path?: string | null;
+  new_slug?: string | null;
+  skipped: boolean;
+}
+
+export interface StagingSyncResponse {
+  session_id: string;
+  results: StagingSyncItemResult[];
+}
+
+export interface StagingOptimizeResponse {
+  session_id: string;
+  slug: string;
+  staging_path: string;
+}
+
+// Version types ───────────────────────────────────────────────────────
+
+export interface SkillVersionItem {
+  revision_id: string;
+  version_no: number;
+  created_at: number;
+  /** The session whose save produced this version, when known. */
+  source_session_id?: string | null;
+  /** ``"baseline"`` for content captured from the library directory right
+   *  before it was overwritten (it had never been saved through the
+   *  library); ``null`` for a regular save. */
+  created_by?: string | null;
+  byte_size: number;
+  content_hash: string;
+  is_current: boolean;
+}
+
+export interface SkillVersionFileNode {
+  path: string;
+  size: number;
+}
+
+export interface SkillVersionDetail extends SkillVersionItem {
+  files: SkillVersionFileNode[];
+}
+
+export interface SkillVersionListResponse {
+  skill_id: string;
+  artifact_id?: string | null;
+  items: SkillVersionItem[];
+}
+
+export interface SkillVersionFileResponse {
+  revision_id: string;
+  path: string;
+  content: string;
+  size: number;
+}
+
+export interface SkillVersionRestoreResponse {
+  skill: SkillView;
+  revision_id: string;
+  version_no: number;
+}

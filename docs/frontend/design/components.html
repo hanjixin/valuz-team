@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Valuz 组件库 v2.6 — 十七个高频组件</title>
+<style>
+:root {
+  --background:#f8f9fb; --foreground:#131313; --surface:#ffffff;
+  --brand:#725cf9; --success:#16a34a; --warning:#ef8b0c; --error:#e5484d;
+  --finance-up:#f54b4b; --finance-down:#53bc76; --slate:#444b54;
+  --accent-sky:#0ea5e9; --accent-teal:#14b8a6; --accent-amber:#eab308; --accent-pink:#ec4899; --accent-blue:#3b82f6;
+  --accent-lime:#84cc16; --accent-orange:#f97316; --accent-fuchsia:#d946ef;
+  --fg-1:color-mix(in oklab,var(--foreground) 1%,var(--background));
+  --fg-2:color-mix(in oklab,var(--foreground) 2%,var(--background));
+  --fg-3:color-mix(in oklab,var(--foreground) 3%,var(--background));
+  --fg-5:color-mix(in oklab,var(--foreground) 5%,var(--background));
+  --fg-8:color-mix(in oklab,var(--foreground) 8%,var(--background));
+  --fg-12:color-mix(in oklab,var(--foreground) 12%,var(--background));
+  --fg-30:color-mix(in oklab,var(--slate) 37%,var(--background));
+  --fg-50:color-mix(in oklab,var(--slate) 60%,var(--background));
+  --fg-60:color-mix(in oklab,var(--slate) 75%,var(--background));
+  --fg-80:var(--slate);
+  --brand-50:#f3f2ff; --brand-100:#eae6ff; --brand-200:#d1c8ff; --brand-300:#b29ff7; --brand-600:#5d46e8; --brand-700:#4936c2;
+  --success-soft:color-mix(in oklab,var(--success) 10%,var(--background));
+  --success-border:color-mix(in oklab,var(--success) 35%,var(--background));
+  --success-text:color-mix(in oklab,var(--success) 65%,var(--foreground));
+  --warning-soft:color-mix(in oklab,var(--warning) 10%,var(--background));
+  --warning-border:color-mix(in oklab,var(--warning) 35%,var(--background));
+  --warning-text:color-mix(in oklab,var(--warning) 65%,var(--foreground));
+  --error-soft:color-mix(in oklab,var(--error) 10%,var(--background));
+  --error-border:color-mix(in oklab,var(--error) 35%,var(--background));
+  --error-text:color-mix(in oklab,var(--error) 65%,var(--foreground));
+  --error-strong:color-mix(in oklab,var(--error) 88%,#000);
+  --error-hover:color-mix(in oklab,var(--error-strong) 92%,#000);
+  --finance-up-text:color-mix(in oklab,var(--finance-up) 65%,var(--foreground));
+  --finance-down-text:color-mix(in oklab,var(--finance-down) 65%,var(--foreground));
+  --shadow-rgb:19 19 19; --sba:0.06; --sla:0.07;
+  --shadow-outline:0 1px 2px rgb(var(--shadow-rgb)/var(--sla));
+  --shadow-1:0 1px 2px rgb(var(--shadow-rgb)/calc(var(--sla)*1.35)),0 0 0 1px var(--fg-3);
+  --shadow-2:0 4px 10px rgb(var(--shadow-rgb)/var(--sla)),0 1px 2px rgb(var(--shadow-rgb)/var(--sla));
+  --shadow-3:0 12px 32px -8px rgb(var(--shadow-rgb)/calc(var(--sla)*2)),0 2px 6px rgb(var(--shadow-rgb)/var(--sla));
+  --shadow-4:0 24px 48px rgb(var(--shadow-rgb)/calc(var(--sla)*2.4)),0 0 0 1px rgb(var(--shadow-rgb)/var(--sba));
+}
+html.dark {
+  --background:#0f1012; --foreground:#e4e4e7; --surface:#17181c;
+  --accent-sky:#38bdf8; --accent-teal:#2dd4bf; --accent-amber:#facc15; --accent-pink:#f472b6; --accent-blue:#60a5fa;
+  --accent-lime:#a3e635; --accent-orange:#fb923c; --accent-fuchsia:#e879f9;
+  --brand:#8b7afc; --success:#22c55e; --warning:#f59e0b; --error:#ef4444;
+  --finance-up:#ff6b6b; --finance-down:#5fd389; --slate:#a8b1bf;
+  --brand-50:color-mix(in oklab,var(--brand) 10%,var(--background));
+  --brand-100:color-mix(in oklab,var(--brand) 16%,var(--background));
+  --brand-200:color-mix(in oklab,var(--brand) 28%,var(--background));
+  --brand-300:color-mix(in oklab,var(--brand) 45%,var(--background));
+  --brand-600:color-mix(in oklab,var(--brand) 85%,white);
+  --brand-700:color-mix(in oklab,var(--brand) 70%,white);
+  --shadow-rgb:0 0 0; --sba:0.18; --sla:0.30;
+}
+* { box-sizing:border-box; margin:0; }
+body { font-family:"PingFang SC",-apple-system,sans-serif; background:var(--background); color:var(--foreground); font-size:14px; line-height:1.7; padding:40px 48px 96px; max-width:1100px; margin:0 auto; -webkit-font-smoothing:antialiased; transition:background .2s; }
+h1 { font-size:18px; font-weight:600; }
+.meta { color:var(--fg-60); font-size:12px; margin:4px 0 8px; }
+.note { background:var(--brand-50); border:1px solid var(--brand-200); border-radius:10px; padding:10px 16px; font-size:12px; color:var(--brand-700); margin:16px 0 32px; }
+.toggle { position:fixed; top:24px; right:24px; padding:6px 14px; font-size:12px; background:var(--surface); border:1px solid var(--fg-8); border-radius:8px; color:var(--foreground); cursor:pointer; box-shadow:var(--shadow-outline); font-family:inherit; z-index:10; }
+h2 { font-size:14px; font-weight:600; margin:40px 0 4px; padding-top:20px; border-top:1px solid var(--fg-8); }
+h2 .num { color:var(--fg-30); margin-right:8px; font-feature-settings:"tnum"; }
+.sub { color:var(--fg-60); font-size:12px; margin-bottom:14px; }
+.box { background:var(--surface); border:1px solid var(--fg-8); border-radius:12px; padding:22px; display:flex; gap:18px; flex-wrap:wrap; align-items:flex-start; }
+.col { display:flex; flex-direction:column; gap:10px; }
+.lab { font-size:11px; color:var(--fg-50); font-family:ui-monospace,Menlo,monospace; }
+.mono { font-family:ui-monospace,Menlo,monospace; }
+
+/* 01 Button -------------------------------------------------- */
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 14px; border-radius:8px; font-size:13px; font-weight:500; font-family:inherit; border:1px solid transparent; cursor:pointer; transition:all .12s cubic-bezier(.4,0,.2,1); }
+.btn-default { background:var(--brand); color:#fff; } .btn-default:hover { background:var(--brand-600); }
+.btn-outline { background:var(--surface); border-color:var(--fg-8); color:var(--foreground); box-shadow:var(--shadow-outline); } .btn-outline:hover { background:var(--fg-5); }
+.btn-ghost { background:transparent; color:var(--foreground); } .btn-ghost:hover { background:var(--fg-5); color:var(--foreground); }
+.btn-destructive { background:var(--error-strong); color:#fff; } .btn-destructive:hover { background:var(--error-hover); }
+.btn-link { background:none; color:var(--brand); text-decoration:underline; text-underline-offset:4px; }
+.btn:disabled { opacity:.5; pointer-events:none; }
+.btn:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }
+.btn-sm { height:26px; padding:0 10px; font-size:12px; border-radius:6px; }
+.btn-icon { width:32px; padding:0; }
+
+/* 02 Input --------------------------------------------------- */
+.field { width:230px; }
+.field label { display:block; font-size:12px; font-weight:500; margin-bottom:5px; }
+.field input { width:100%; height:32px; padding:0 10px; font:inherit; font-size:13px; color:var(--foreground); background:var(--surface); border:1px solid var(--fg-8); border-radius:8px; outline:none; }
+.field input::placeholder { color:var(--fg-60); }
+.field .hint { font-size:11px; color:var(--fg-60); margin-top:3px; }
+.field.focus input { border-color:var(--brand); box-shadow:0 0 0 3px color-mix(in oklab,var(--brand) 20%,transparent); }
+.field.err input { border-color:var(--error); } .field.err .hint { color:var(--error); }
+.field.dis input { background:var(--fg-3); color:var(--fg-30); }
+
+/* 03 Form Field / Section ------------------------------------ */
+.form-sec { position:relative; width:420px; background:var(--surface); border:1px solid var(--fg-8); border-radius:12px; box-shadow:var(--shadow-outline); }
+.form-sec .fhd { padding:18px 18px 4px; }
+.form-sec .fhd b { font-size:14px; font-weight:600; } .form-sec .fhd p { font-size:12px; color:var(--fg-60); margin-top:2px; }
+.form-sec .fbody { padding:14px 18px; display:flex; flex-direction:column; gap:14px; }
+.form-sec .ffoot { padding:4px 18px 16px; display:flex; justify-content:flex-end; gap:8px; }
+.req { color:var(--error); margin-left:2px; }
+.iclose { position:absolute; top:12px; right:12px; width:26px; height:26px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--fg-50); cursor:pointer; border:none; background:none; padding:0; }
+.iclose:hover { background:var(--fg-1); color:var(--foreground); }
+.iclose svg { width:15px; height:15px; }
+
+/* 04 Dropdown Menu ------------------------------------------- */
+.menu { width:220px; background:var(--surface); border:1px solid var(--fg-8); border-radius:12px; box-shadow:var(--shadow-3); padding:4px; font-size:13px; }
+.menu .hd { padding:7px 12px 5px; font-size:11px; font-weight:600; letter-spacing:.06em; color:var(--fg-60); }
+.mi { display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:6px; cursor:pointer; }
+.mi:hover, .mi.on { background:var(--fg-1); }
+.mi .desc { font-size:11px; color:var(--fg-60); margin-top:-2px; }
+.mi .check { margin-left:auto; color:var(--foreground); display:flex; }
+.mi .arrow { margin-left:auto; color:var(--fg-50); display:flex; }
+.menu-sep { height:1px; background:var(--fg-3); margin:4px 6px; }
+
+/* 05 Popover ------------------------------------------------- */
+.pop { width:250px; background:var(--surface); border:1px solid var(--fg-8); border-radius:12px; box-shadow:var(--shadow-3); padding:4px; font-size:13px; }
+.pop .ph { padding:7px 12px 5px; font-size:11px; font-weight:600; letter-spacing:.06em; color:var(--fg-60); }
+.pop .pi { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:6px; cursor:pointer; } .pop .pi:hover { background:var(--fg-1); }
+
+/* 06 Dialog / Modal ------------------------------------------ */
+.modal { position:relative; width:380px; background:var(--surface); border-radius:12px; box-shadow:var(--shadow-4); overflow:hidden; }
+.modal .mh { padding:18px 20px 0; } .modal .mh b { font-size:15px; font-weight:600; } .modal .mh p { font-size:13px; color:var(--fg-60); margin-top:6px; line-height:1.6; }
+.modal .mbody { padding:14px 20px; font-size:13px; }
+.modal .mf { padding:14px 20px; display:flex; justify-content:flex-end; gap:8px; }
+
+/* 07 StatusPill / Badge -------------------------------------- */
+.pill { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:4px; font-size:11px; font-weight:500; border:1px solid transparent; }
+.pill svg { width:11px; height:11px; flex-shrink:0; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.pill .spin { animation:spin 1.2s linear infinite; }
+.pill-done { background:var(--success-soft); border-color:var(--success-border); color:var(--success-text); }
+.pill-running { background:var(--brand-50); border-color:var(--brand-200); color:var(--brand-700); }
+.pill-queued { background:var(--fg-5); color:var(--fg-80); }
+.pill-warn { background:var(--warning-soft); border-color:var(--warning-border); color:var(--warning-text); }
+.pill-err { background:var(--error-soft); border-color:var(--error-border); color:var(--error-text); }
+.tag-brand { background:var(--brand-100); color:var(--brand-700); }
+.tag-outline { background:transparent; border-color:var(--fg-8); color:var(--fg-60); }
+.tag-neutral { background:var(--fg-5); color:var(--fg-80); }
+.role-tag { display:inline-flex; align-items:center; gap:4px; height:16px; padding:0 4px; border-radius:4px; font-size:10px; line-height:1; font-weight:400; border:1px solid transparent; }
+.tag-role-lead { background:var(--brand-100); color:var(--brand-700); }
+.tag-role-sky { background:color-mix(in oklab,var(--accent-sky) 14%,var(--background)); color:color-mix(in oklab,var(--accent-sky) 62%,var(--foreground)); }
+.tag-role-teal { background:color-mix(in oklab,var(--accent-teal) 14%,var(--background)); color:color-mix(in oklab,var(--accent-teal) 62%,var(--foreground)); }
+.tag-role-amber { background:color-mix(in oklab,var(--accent-amber) 16%,var(--background)); color:color-mix(in oklab,var(--accent-amber) 50%,var(--foreground)); } /* amber 最亮，文字档降到 50% 过 AA（其余角色色 62% 即达标） */
+.tag-role-pink { background:color-mix(in oklab,var(--accent-pink) 14%,var(--background)); color:color-mix(in oklab,var(--accent-pink) 62%,var(--foreground)); }
+.tag-role-blue { background:color-mix(in oklab,var(--accent-blue) 14%,var(--background)); color:color-mix(in oklab,var(--accent-blue) 62%,var(--foreground)); }
+.fbadge { display:inline-flex; align-items:center; justify-content:center; width:26px; height:20px; border-radius:4px; font-size:10px; font-weight:700; font-family:ui-monospace,Menlo,monospace; }
+/* 文件类型徽标 —— 用 accent 软底派生，不手填 hex（PDF 用 orange，避开 error 红的语义占用） */
+.fbadge-md  { background:color-mix(in oklab,var(--accent-blue) 14%,var(--background));   color:color-mix(in oklab,var(--accent-blue) 64%,var(--foreground)); }
+.fbadge-csv { background:color-mix(in oklab,var(--accent-teal) 14%,var(--background));   color:color-mix(in oklab,var(--accent-teal) 64%,var(--foreground)); }
+.fbadge-pdf { background:color-mix(in oklab,var(--accent-orange) 16%,var(--background)); color:color-mix(in oklab,var(--accent-orange) 64%,var(--foreground)); }
+
+/* 08 Toast --------------------------------------------------- */
+.toast { display:flex; align-items:flex-start; gap:10px; width:300px; background:var(--surface); border:1px solid var(--fg-8); border-radius:10px; box-shadow:var(--shadow-3); padding:11px 14px; font-size:13px; }
+.toast b { display:block; font-size:13px; font-weight:600; }
+.toast .d { font-size:12px; color:var(--fg-60); }
+.tic { width:18px; height:18px; border-radius:9999px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:11px; margin-top:2px; }
+.tic svg { width:11px; height:11px; }
+
+/* 09 Empty State --------------------------------------------- */
+.empty { width:300px; text-align:center; padding:32px 20px; border:1px dashed var(--fg-8); border-radius:12px; }
+.empty .ei { width:40px; height:40px; margin:0 auto 12px; border-radius:10px; background:var(--fg-3); display:flex; align-items:center; justify-content:center; color:var(--fg-50); }
+.empty .ei svg { width:20px; height:20px; }
+.empty b { font-size:13px; font-weight:600; display:block; } .empty p { font-size:12px; color:var(--fg-60); margin:4px 0 14px; line-height:1.6; }
+
+/* 10 List Item / Resource Row -------------------------------- */
+.lwrap { width:460px; background:var(--surface); border:1px solid var(--fg-8); border-radius:12px; box-shadow:var(--shadow-outline); overflow:hidden; }
+.lrow { display:flex; align-items:center; gap:12px; padding:11px 14px; border-bottom:1px solid var(--fg-3); cursor:pointer; }
+.lrow:last-child { border-bottom:none; }
+.lrow.hover { background:var(--fg-1); } .lrow.on { background:var(--fg-2); }
+.lrow .rstate { width:38px; flex-shrink:0; font-size:10px; color:var(--fg-60); font-family:ui-monospace,Menlo,monospace; }
+.lrow .lic { width:30px; height:30px; border-radius:8px; background:var(--fg-3); display:flex; align-items:center; justify-content:center; color:var(--fg-60); flex-shrink:0; }
+.lrow .ltxt { flex:1; min-width:0; } .lrow .ltxt b { font-size:13px; font-weight:500; display:block; } .lrow .ltxt span { font-size:11px; color:var(--fg-60); }
+.lrow .lact { display:flex; gap:6px; align-items:center; }
+
+/* 11 Settings Section ---------------------------------------- */
+.set-sec { width:520px; }
+.set-sec .shd { padding:0 0 8px; font-size:13px; font-weight:500; color:var(--foreground); }
+.set-card { background:var(--surface); border-radius:12px; box-shadow:var(--shadow-1); overflow:hidden; }
+.set-row { display:flex; align-items:center; gap:16px; padding:14px 18px; }
+.set-row + .set-row { border-top:1px solid var(--fg-3); margin:0 18px; padding:14px 0; }
+.set-row .sl { flex:1; line-height:1.6; } .set-row .sl b { font-size:13px; font-weight:500; display:block; } .set-row .sl span { font-size:12px; color:var(--fg-60); display:block; }
+.set-row .sr { flex-shrink:0; }
+.switch { width:36px; height:20px; border-radius:9999px; background:var(--brand); position:relative; cursor:pointer; }
+.switch::after { content:""; position:absolute; top:2px; left:18px; width:16px; height:16px; border-radius:9999px; background:#fff; }
+.switch.off { background:var(--fg-12); } .switch.off::after { left:2px; }
+
+/* 12 Tool Call Card ------------------------------------------ */
+.tool { width:430px; background:var(--fg-1); border:1px solid var(--fg-3); border-radius:8px; overflow:hidden; }
+.tool .th { display:flex; align-items:center; gap:8px; padding:9px 12px; }
+.tool .tname { font-family:ui-monospace,Menlo,monospace; font-size:12px; font-weight:500; }
+.tool .tlabel { font-size:12px; color:var(--fg-60); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tool .tdetail { font-family:ui-monospace,Menlo,monospace; font-size:11px; line-height:1.6; color:var(--fg-60); padding:0 12px 12px 32px; }
+
+/* 13 Sidebar ------------------------------------------------- */
+.side { width:220px; padding:8px; border-radius:12px; background:transparent; }
+.slabel { padding:6px 8px 4px 10px; font-size:11px; letter-spacing:.06em; color:var(--fg-60); display:flex; align-items:center; gap:5px; }
+.slabel svg { color:var(--fg-50); }
+.srow { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:6px; font-size:13px; cursor:pointer; }
+.srow svg { color:var(--fg-60); flex-shrink:0; }
+.srow.hover { background:var(--fg-3); }
+.srow.on { position:relative; z-index:1; background:var(--surface); box-shadow:var(--shadow-2); }
+.srow.on svg { color:var(--foreground); }
+
+/* 14 Chat Message -------------------------------------------- */
+.chat { width:480px; display:flex; flex-direction:column; gap:14px; }
+.u-msg { align-self:flex-end; max-width:78%; background:var(--fg-1); border-radius:12px; padding:12px 14px; font-size:14px; line-height:1.6; }
+.a-msg { font-size:14px; line-height:1.7; }
+.a-msg code { font-family:ui-monospace,Menlo,monospace; font-size:12px; padding:1px 5px; border-radius:4px; border:1px solid var(--fg-8); background:var(--fg-5); }
+.dots { display:flex; gap:5px; padding:10px 0; }
+.dots i { width:6px; height:6px; border-radius:9999px; background:var(--fg-30); animation:b 1.2s infinite; }
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes b { 0%,60%,100%{transform:none} 30%{transform:translateY(-4px)} }
+
+/* 15 Data Table ---------------------------------------------- */
+.dtable { width:480px; background:var(--surface); border:1px solid var(--fg-3); border-radius:8px; overflow:hidden; font-size:13px; }
+.dtable .cap { padding:9px 14px; font-size:11px; font-weight:600; letter-spacing:.06em; color:var(--fg-60); background:var(--fg-1); }
+.dtable table { width:100%; border-collapse:collapse; }
+.dtable th { text-align:right; font-size:11px; font-weight:500; color:var(--fg-60); padding:8px 14px; border-bottom:1px solid var(--fg-3); }
+.dtable th:first-child, .dtable td:first-child { text-align:left; }
+.dtable td { padding:9px 14px; border-bottom:1px solid var(--fg-3); text-align:right; font-feature-settings:"tnum"; }
+.dtable tr:last-child td { border-bottom:none; }
+.up { color:var(--finance-up-text); font-weight:500; } .down { color:var(--finance-down-text); font-weight:500; }
+
+/* 16 Tabs ---------------------------------------------------- */
+.tabs { display:flex; gap:0; border-bottom:1px solid var(--fg-8); }
+.tab { padding:8px 14px; font-size:13px; font-weight:500; color:var(--fg-60); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .12s cubic-bezier(.4,0,.2,1); }
+.tab:hover { color:var(--foreground); }
+.tab.on { color:var(--foreground); border-bottom-color:var(--brand); }
+
+/* 17 Tooltip ------------------------------------------------- */
+.tip-wrap { position:relative; display:inline-flex; }
+.tip { position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%); white-space:nowrap; padding:5px 10px; border-radius:6px; font-size:12px; background:var(--foreground); color:var(--background); box-shadow:var(--shadow-3); pointer-events:none; }
+</style>
+</head>
+<body>
+<button class="toggle" onclick="document.documentElement.classList.toggle('dark')">☀ / ☾ 切换暗色</button>
+<h1>Valuz 组件库 v2.6 — 十七个高频组件</h1>
+<p class="meta">基于 Design Spec v2.6 全 token 构建 · outline 按钮纯投影 · 容器统一 border + shadow-outline · 切换暗色验证派生体系 · 变体名与 packages/ui 代码 props 一致</p>
+<div class="note">这 17 个不是「组件库完整度」，而是「AI 开发防跑偏覆盖率」——按真实代码频次排：Dialog(53处) / Card(42) / Settings(26) / List(16) / Form(12) / Empty(6) 均已存在于 packages/ui，此处补视觉母版。搬进 Figma：插件 <b>html.to.design</b> → 导入本文件 → 框选组件 Create Component → Selection colors 绑定 Variables。</div>
+
+<h2><span class="num">01</span>Button</h2>
+<p class="sub">variant: default / outline / ghost / destructive / link · size: sm / default / icon</p>
+<div class="box">
+  <div class="col"><span class="lab">default</span><button class="btn btn-default">运行任务</button><button class="btn btn-default" disabled>运行任务</button></div>
+  <div class="col"><span class="lab">outline</span><button class="btn btn-outline">取消</button><button class="btn btn-outline" disabled>取消</button></div>
+  <div class="col"><span class="lab">ghost</span><button class="btn btn-ghost">更多</button><button class="btn btn-ghost" disabled>更多</button></div>
+  <div class="col"><span class="lab">destructive</span><button class="btn btn-destructive">删除</button><button class="btn btn-destructive" disabled>删除</button></div>
+  <div class="col"><span class="lab">link</span><button class="btn btn-link">查看全部</button><button class="btn btn-link" disabled>查看全部</button></div>
+  <div class="col"><span class="lab">sizes</span><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-default btn-sm">小按钮</button><button class="btn btn-default">默认</button><button class="btn btn-outline btn-icon">＋</button></div></div>
+</div>
+
+<h2><span class="num">02</span>Input</h2>
+<p class="sub">placeholder / value / focus / error / disabled</p>
+<div class="box">
+  <div class="field"><label>邮箱</label><input placeholder="输入邮箱"><div class="hint">用于接收任务完成通知</div></div>
+  <div class="field"><label>邮箱</label><input value="team@valuz.ai"><div class="hint">用于接收任务完成通知</div></div>
+  <div class="field focus"><label>Focus</label><input value="team@valuz.ai"><div class="hint">brand 边框 + 20% ring</div></div>
+  <div class="field err"><label>Error</label><input value="team@valuz"><div class="hint">邮箱格式不正确</div></div>
+  <div class="field dis"><label>Disabled</label><input disabled placeholder="不可用"><div class="hint">背景 fg-3 · 文字 fg-30</div></div>
+</div>
+
+<h2><span class="num">03</span>Form Field / Section（设置页表单块）</h2>
+<p class="sub">label + required + hint + error 统一 · section title + footer 按钮 · AI 写表单最易散，用此块约束</p>
+<div class="box">
+  <div class="form-sec">
+    <button class="iclose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <div class="fhd"><b>通知设置</b><p>配置任务完成后的提醒方式</p></div>
+    <div class="fbody">
+      <div class="field" style="width:100%"><label>接收邮箱<span class="req">*</span></label><input value="team@valuz.ai"><div class="hint">用于接收任务完成与异常通知</div></div>
+      <div class="field err" style="width:100%"><label>Webhook URL</label><input value="https://"><div class="hint">URL 格式不正确</div></div>
+    </div>
+    <div class="ffoot"><button class="btn btn-outline">取消</button><button class="btn btn-default">保存</button></div>
+  </div>
+</div>
+
+<h2><span class="num">04</span>Dropdown Menu（模型菜单）</h2>
+<p class="sub">圆角 2xl(12) · 阴影 shadow-3 · 选中/hover 底用 fg-1（最浅）· check 用 foreground 同文字色</p>
+<div class="box">
+  <div class="menu">
+    <div class="hd">模型</div>
+    <div class="mi on"><div><div>Claude Fable 5</div><div class="desc">最强推理，复杂任务</div></div><span class="check"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></div>
+    <div class="mi"><div><div>Claude Sonnet 4.6</div><div class="desc">均衡速度与质量</div></div></div>
+    <div class="mi"><div><div>Claude Haiku 4.5</div><div class="desc">轻量快速</div></div></div>
+    <div class="menu-sep"></div>
+    <div class="mi"><div>更多模型</div><span class="arrow"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span></div>
+  </div>
+</div>
+
+<h2><span class="num">05</span>Popover</h2>
+<p class="sub">与 Menu 统一：圆角 2xl(12) · padding 4px · hover fg-1 · Header 无灰底</p>
+<div class="box">
+  <div class="pop">
+    <div class="ph">引用文件</div>
+    <div class="pi"><span class="fbadge fbadge-md">MD</span>2026Q1-投研纪要.md</div>
+    <div class="pi"><span class="fbadge fbadge-csv">CSV</span>营收明细.csv</div>
+    <div class="pi"><span class="fbadge fbadge-pdf">PDF</span>招股说明书.pdf</div>
+  </div>
+</div>
+
+<h2><span class="num">06</span>Dialog / Modal（高风险组件）</h2>
+<p class="sub">阴影 shadow-4 · 圆角 2xl · 取消用次要 outline · footer 两态：普通确认走 default，危险删除走 destructive（对应代码 dialog / alert-dialog）· 运行时叠 40% 遮罩</p>
+<div class="box" style="gap:32px;background:var(--fg-1)">
+  <div class="col"><span class="lab">普通确认</span>
+    <div class="modal">
+      <button class="iclose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <div class="mh"><b>部署 Agent 团队</b><p>将把当前 3 个 Agent 部署到生产环境，部署后立即开始接收任务。</p></div>
+      <div class="mf"><button class="btn btn-outline">取消</button><button class="btn btn-default">确认部署</button></div>
+    </div>
+  </div>
+  <div class="col"><span class="lab">危险删除（alert-dialog）</span>
+    <div class="modal">
+      <div class="mh"><b>删除项目「新能源研究」</b><p>此操作不可撤销，项目下 12 个会话与全部知识库将被永久删除。</p></div>
+      <div class="mf"><button class="btn btn-outline">取消</button><button class="btn btn-destructive">永久删除</button></div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="num">07</span>StatusPill / Badge</h2>
+<p class="sub">三类标签，语义分明、不可混用：<b>状态</b>（语义色，表示运行/连接状态）· <b>meta/归属</b>（品牌或灰，表示选中/归属/分类）· <b>角色/职位</b>（accent 分类色，区分类目）</p>
+<div class="box" style="flex-direction:column;align-items:stretch;gap:14px">
+  <div class="col"><span class="lab">status · 状态（语义色，禁止手配）</span><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="pill pill-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>done</span><span class="pill pill-running"><svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.2-8.6"/></svg>running</span><span class="pill pill-queued">queued</span><span class="pill pill-done">已连接</span><span class="pill pill-warn">配额告警</span><span class="pill pill-err">已断开</span></div></div>
+  <div class="col"><span class="lab">meta / 归属（非状态，不用语义色）</span><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="pill tag-brand">已派驻</span><span class="pill tag-brand">当前</span><span class="pill tag-outline">我的</span><span class="pill tag-outline">公开</span><span class="pill tag-neutral">共 12 项</span><span class="pill tag-neutral">v2.6</span></div></div>
+  <div class="col"><span class="lab">role / 角色职位（accent 分类色，类目区分；h-4 px-1 text-[10px]）</span><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="role-tag tag-role-lead">Lead</span><span class="role-tag tag-role-pink">产品经理</span><span class="role-tag tag-role-sky">设计师</span><span class="role-tag tag-role-teal">前后端开发</span><span class="role-tag tag-role-amber">QA</span><span class="role-tag tag-role-blue">文档处理</span></div></div>
+</div>
+
+<h2><span class="num">08</span>Toast</h2>
+<p class="sub">阴影 shadow-3 · 图标圆底用基色，正文用派生 text 色</p>
+<div class="box">
+  <div class="toast"><span class="tic" style="background:var(--success)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><div><b>任务完成</b><span class="d">研究报告已生成，共 24 页</span></div></div>
+  <div class="toast"><span class="tic" style="background:var(--error)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><div><b>连接失败</b><span class="d">API 密钥已过期，请到设置更新</span></div></div>
+  <div class="toast"><span class="tic" style="background:var(--brand)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="6" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><div><b>新版本可用</b><span class="d">v2.6 包含暗色模式与图表色改进</span></div></div>
+</div>
+
+<h2><span class="num">09</span>Empty State</h2>
+<p class="sub">固定四种，禁止自由发挥成营销卡/插画：无数据 / 无权限 / 加载失败 / 搜索无结果</p>
+<div class="box" style="gap:14px">
+  <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div><b>还没有项目</b><p>创建第一个项目，把 Agent 团队组织起来</p><button class="btn btn-default btn-sm">新建项目</button></div>
+  <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><b>无访问权限</b><p>该知识库仅团队管理员可见，请联系管理员开通</p><button class="btn btn-outline btn-sm">申请权限</button></div>
+  <div class="empty"><div class="ei" style="color:var(--error-text);background:var(--error-soft)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><b>加载失败</b><p>无法连接到数据源，请检查网络后重试</p><button class="btn btn-outline btn-sm">重试</button></div>
+  <div class="empty"><div class="ei"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><b>无匹配结果</b><p>没有找到「碳中和」相关的会话，换个关键词试试</p></div>
+</div>
+
+<h2><span class="num">10</span>List Item / Resource Row（通用列表行）</h2>
+<p class="sub">通用列表行：file / connector / agent / session 共用 · 下面三行是<b>同一种行的三个状态</b>（选中 / hover / 默认），不是三种不同样式 · 选中态 fg-2 灰底 · hover fg-1（不用品牌色）</p>
+<div class="box">
+  <div class="lwrap">
+    <div class="lrow on"><span class="rstate">选中</span><div class="lic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="9" cy="16" r="1"/><circle cx="15" cy="16" r="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div><div class="ltxt"><b>研究分析师 Agent</b><span>Claude Fable 5 · 4 个 skill · 2 个 connector</span></div><div class="lact"><span class="pill pill-running"><svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.2-8.6"/></svg>运行中</span></div></div>
+    <div class="lrow hover"><span class="rstate">hover</span><div class="lic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div><div class="ltxt"><b>Reportify Connector</b><span>已连接 · 投研数据源</span></div><div class="lact"><span class="pill pill-done">已连接</span><button class="btn btn-ghost btn-sm">配置</button></div></div>
+    <div class="lrow"><span class="rstate">默认</span><div class="lic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div><div class="ltxt"><b>招股说明书.pdf</b><span>2.4 MB · 3 天前</span></div><div class="lact"><span class="pill pill-queued">待解析</span></div></div>
+  </div>
+</div>
+
+<h2><span class="num">11</span>Settings Section（设置项）</h2>
+<p class="sub">左标题+说明，右控件/按钮/状态 badge · 固定布局防设置页发散</p>
+<div class="box">
+  <div class="set-sec">
+    <div class="shd">通用</div>
+    <div class="set-card">
+      <div class="set-row"><div class="sl"><b>深色模式</b><span>跟随系统或手动指定界面外观</span></div><div class="sr"><div class="switch"></div></div></div>
+      <div class="set-row"><div class="sl"><b>本地数据目录</b><span>~/Valuz/projects</span></div><div class="sr"><button class="btn btn-outline">更改</button></div></div>
+      <div class="set-row"><div class="sl"><b>遥测上报</b><span>不上报任何内容，全部本地运行</span></div><div class="sr"><div class="switch off"></div></div></div>
+      <div class="set-row"><div class="sl"><b>更新通道</b><span>当前为稳定版 v2.6</span></div><div class="sr"><span class="pill pill-done">最新</span></div></div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="num">12</span>Tool Call Card</h2>
+<p class="sub">底色 fg-1 · 边框 fg-3 · 圆角 lg(8) · 工具名等宽字体</p>
+<div class="box">
+  <div class="tool">
+    <div class="th"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--fg-60)"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span class="tname">WebSearch</span><span class="tlabel">"宁德时代 2026Q1 财报"</span><span class="pill pill-done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>done</span></div>
+  </div>
+  <div class="tool">
+    <div class="th"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--fg-60)"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="tname">Read</span><span class="tlabel">招股说明书.pdf · 第 12-18 页</span><span class="pill pill-running"><svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.2-8.6"/></svg>running</span></div>
+    <div class="tdetail">解析表格：主营业务收入构成（2023-2025）<br>提取 3 张表 · 42 行数据</div>
+  </div>
+</div>
+
+<h2><span class="num">13</span>Sidebar</h2>
+<p class="sub">行圆角 md(6) · 选中态 surface 白底 + shadow-2「浮起」（导航侧栏专用，区别于内容列表的灰填充）· hover fg-3 · Section Label 11px</p>
+<div class="box" style="background:var(--background)">
+  <div class="side">
+    <div class="slabel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>最近对话</div>
+    <div class="srow on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>新能源行业对比分析</div>
+    <div class="srow hover"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>季度财报要点提取（hover）</div>
+    <div class="srow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>调研纪要整理</div>
+  </div>
+</div>
+
+<h2><span class="num">14</span>Chat Message（对话气泡）</h2>
+<p class="sub">用户消息 fg-1 底 + 圆角 2xl(12) · Agent 消息无头像无气泡 · 正文 14px/1.7</p>
+<div class="box">
+  <div class="chat">
+    <div class="u-msg">帮我对比一下宁德时代和比亚迪最近三年的毛利率变化</div>
+    <div class="a-msg">两家公司的毛利率走势分化明显。宁德时代从 2023 年的 <code>22.9%</code> 回升至 2025 年的 <code>26.4%</code>，主要受益于碳酸锂成本下行；比亚迪则稳定在 20% 上下。</div>
+    <div class="dots"><i></i><i></i><i></i></div>
+  </div>
+</div>
+
+<h2><span class="num">15</span>Data Table（数据表格）</h2>
+<p class="sub">标题栏 fg-1 底 + 11px 大写字距 · 数字 tabular-nums · 涨跌用 finance 语义色</p>
+<div class="box">
+  <div class="dtable">
+    <div class="cap">营收对比（亿元）</div>
+    <table>
+      <tr><th>公司</th><th>2025 营收</th><th>同比</th><th>毛利率</th></tr>
+      <tr><td>宁德时代</td><td>4,213.5</td><td class="up">+18.2%</td><td>26.4%</td></tr>
+      <tr><td>比亚迪</td><td>7,802.1</td><td class="up">+24.6%</td><td>20.1%</td></tr>
+      <tr><td>国轩高科</td><td>412.8</td><td class="down">−3.4%</td><td>17.8%</td></tr>
+    </table>
+  </div>
+</div>
+
+<h2><span class="num">16</span>Tabs（选项卡）</h2>
+<p class="sub">下划线式 · 选中 brand 底线 2px · hover 仅文字变深 · 间距靠 padding 不靠 gap</p>
+<div class="box">
+  <div style="width:400px">
+    <div class="tabs">
+      <div class="tab on">概览</div>
+      <div class="tab">Agent 团队</div>
+      <div class="tab">知识库</div>
+      <div class="tab">设置</div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="num">17</span>Tooltip（提示气泡）</h2>
+<p class="sub">反色底（foreground 底 + background 字）· shadow-3 · 圆角 md(6) · 无三角 · 出现在触发元素下方居中</p>
+<div class="box" style="justify-content:center;padding:22px 22px 48px">
+  <div class="tip-wrap">
+    <button class="btn btn-outline btn-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
+    <div class="tip">查看帮助文档</div>
+  </div>
+  <div style="width:40px"></div>
+  <div class="tip-wrap">
+    <button class="btn btn-ghost btn-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+    <div class="tip">编辑项目名称</div>
+  </div>
+</div>
+</body>
+</html>

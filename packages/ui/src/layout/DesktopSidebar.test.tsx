@@ -1,0 +1,164 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it } from "vitest";
+import { DropdownMenuItem } from "../components/ui/dropdown-menu";
+import { DesktopSidebar } from "./DesktopSidebar";
+
+describe("DesktopSidebar", () => {
+  it("nests a project's chats/tasks under it and renders the Chats group", () => {
+    render(
+      <DesktopSidebar
+        // Active route is the project itself; the host resolves it to the owning
+        // project id, which pins that project's accordion open.
+        activePath="/projects/p1"
+        activeProjectId="p1"
+        projectGroups={[
+          {
+            id: "p1",
+            label: "英伟达 2025 深度研究",
+            href: "/projects/p1",
+            items: [
+              {
+                id: "s1",
+                title: "营收拆解",
+                href: "/conversation/s1",
+                kind: "chat",
+              },
+            ],
+          },
+        ]}
+        chats={[
+          {
+            id: "c1",
+            title: "临时问答",
+            href: "/conversation/c1",
+            kind: "chat",
+          },
+        ]}
+        bottomItems={[
+          {
+            id: "knowledge",
+            label: "知识库",
+            href: "/knowledge",
+            icon: "knowledge",
+            group: "library",
+          },
+          {
+            id: "skills",
+            label: "技能库",
+            href: "/skills",
+            icon: "skills",
+            group: "library",
+          },
+          {
+            id: "scheduled",
+            label: "定时任务",
+            href: "/scheduled",
+            icon: "scheduled",
+            group: "main",
+          },
+          {
+            id: "settings",
+            label: "设置",
+            href: "/settings",
+            icon: "settings",
+            group: "settings",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("新对话")).toBeTruthy();
+    expect(screen.getByText("项目")).toBeTruthy();
+    expect(screen.getByText("英伟达 2025 深度研究")).toBeTruthy();
+    // The active project auto-expands, so its nested chat is visible.
+    expect(screen.getByText("营收拆解")).toBeTruthy();
+    // Loose chats render in the "对话 / Chats" group.
+    expect(screen.getByText("临时问答")).toBeTruthy();
+    expect(screen.getByText("知识库")).toBeTruthy();
+  });
+
+  it("should hide section labels when collapsed", () => {
+    render(
+      <DesktopSidebar
+        activePath="/projects"
+        projectGroups={[
+          {
+            id: "p1",
+            label: "Project",
+            href: "/projects/p1",
+          },
+        ]}
+        bottomItems={[
+          {
+            id: "knowledge",
+            label: "知识库",
+            href: "/knowledge",
+            icon: "knowledge",
+            group: "library",
+          },
+        ]}
+        collapsed
+      />,
+    );
+
+    expect(screen.queryByText("项目")).toBeNull();
+    expect(screen.getAllByRole("link").length).toBeGreaterThan(0);
+  });
+
+  it("renders extension items in the project add dropdown", async () => {
+    render(
+      <DesktopSidebar
+        activePath="/projects"
+        projectGroups={[]}
+        bottomItems={[]}
+        onAddProject={() => {}}
+        onImportProject={() => {}}
+        projectAddMenuItems={<DropdownMenuItem>组织内导入</DropdownMenuItem>}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText("添加项目"));
+
+    expect(await screen.findByText("组织内导入")).toBeTruthy();
+  });
+
+  const manyProjects = Array.from({ length: 12 }, (_, i) => ({
+    id: `p${i + 1}`,
+    label: `工作区 ${i + 1}`,
+    href: `/projects/p${i + 1}`,
+  }));
+
+  it("caps the project list at ten behind a show-more toggle", async () => {
+    render(
+      <DesktopSidebar
+        activePath="/projects"
+        projectGroups={manyProjects}
+        bottomItems={[]}
+      />,
+    );
+
+    expect(screen.getByText("工作区 10")).toBeTruthy();
+    expect(screen.queryByText("工作区 11")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "展开" }));
+
+    expect(screen.getByText("工作区 12")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "收起" })).toBeTruthy();
+  });
+
+  it("holds the project list open when the active project sits past the cap", () => {
+    render(
+      <DesktopSidebar
+        activePath="/projects/p12"
+        activeProjectId="p12"
+        projectGroups={manyProjects}
+        bottomItems={[]}
+      />,
+    );
+
+    expect(screen.getByText("工作区 12")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "展开" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "收起" })).toBeNull();
+  });
+});

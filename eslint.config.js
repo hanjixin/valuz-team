@@ -1,50 +1,298 @@
 import js from "@eslint/js";
-import boundaries from "eslint-plugin-boundaries";
 import globals from "globals";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
+import boundaries from "eslint-plugin-boundaries";
 
-/**
- * Backend lint. The frontend keeps its own config (`frontend/eslint.config.js`,
- * carried over from valuz-agent) and is linted from there.
- */
 export default tseslint.config(
   {
-    ignores: [
-      "**/dist/**",
-      "**/node_modules/**",
-      ".turbo/**",
-      "legacy/**",
-      "frontend/**",
-      "i18n/**",
-      "**/generated/**",
-    ],
+    ignores: ["**/dist/**", "**/node_modules/**", ".turbo/**", "legacy/**", "**/generated/**", "**/dist-electron/**", "**/release/**"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["**/*.{ts,mts,mjs,js}"],
-    languageOptions: { ecmaVersion: "latest", sourceType: "module", globals: { ...globals.node } },
+    files: ["**/*.{ts,tsx}"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+    plugins: {
+      "react-hooks": reactHooks,
+      "react-refresh": reactRefresh,
+    },
     rules: {
-      // `_` marks a deliberately discarded binding, including rest-destructuring used to drop a field.
+      ...reactHooks.configs.recommended.rules,
+      "react-refresh/only-export-components": [
+        "warn",
+        { allowConstantExport: true },
+      ],
+      // 本仓库用 `_` 前缀表示"刻意丢弃"，并大量使用 rest 解构来剔除字段
+      // （`const { id: _id, ...props } = raw`）。规则默认两者都不豁免，
+      // 于是只能整文件关规则（历史上 combobox.tsx 就是这么做的）——
+      // 那会连真正的未使用变量一起放过。在这里把约定声明一次。
       "@typescript-eslint/no-unused-vars": [
         "error",
-        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", ignoreRestSiblings: true },
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
       ],
+    },
+  },
+  // ─────────────────────────────────────────────────────────────────
+  // 包边界硬门禁（Slice 2）
+  //
+  // 拓扑：shared ← ui ← core ← apps；apps 互不依赖。
+  // main / preload 是 Node 端，不能拉 React/Zustand。CLI 同理。
+  // 类型 import 在编译时被擦除，不计入运行时边界（allowTypeImports）。
+  // ─────────────────────────────────────────────────────────────────
+  {
+    files: ["packages/shared/src/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@valuz/core",
+                "@valuz/core/*",
+                "@valuz/ui",
+                "@valuz/ui/*",
+              ],
+              message:
+                "@valuz/shared 是最底层包，禁止 import 任何内部 @valuz/* 包",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["packages/ui/src/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@valuz/core", "@valuz/core/*"],
+              message:
+                "@valuz/ui 不允许 import @valuz/core 运行时（store / transport / hook 等）；类型用 import type 通过——堵的是状态耦合，不是类型依赖",
+              allowTypeImports: true,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["packages/core/src/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@valuz/ui", "@valuz/ui/*"],
+              message: "@valuz/core 不允许 import @valuz/ui",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: [
+      "apps/desktop/src/main/**/*.ts",
+      "apps/desktop/src/preload/**/*.ts",
+    ],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@valuz/core", "@valuz/core/*"],
+              message:
+                "desktop main/preload 不允许 import @valuz/core 运行时（含 React/Zustand）；类型用 import type 通过",
+              allowTypeImports: true,
+            },
+            {
+              group: ["@valuz/ui", "@valuz/ui/*"],
+              message: "desktop main/preload 不允许 import @valuz/ui",
+              allowTypeImports: true,
+            },
+            {
+              group: [
+                "react",
+                "react-dom",
+                "react-router-dom",
+                "zustand",
+                "sonner",
+              ],
+              message: "desktop main/preload 不允许 import React/路由/状态管理",
+              allowTypeImports: true,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["apps/cli/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "react",
+                "react-dom",
+                "react-router-dom",
+                "zustand",
+                "@valuz/ui",
+                "@valuz/ui/*",
+              ],
+              message: "CLI 不允许 import React / UI / Zustand",
+            },
+            {
+              group: ["@valuz/core", "@valuz/core/*"],
+              message:
+                "CLI 不允许 import @valuz/core；通用工具放 @valuz/shared（Slice 6 落地）",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // ─────────────────────────────────────────────────────────────────
+  // 历史 override（保留）
+  // ─────────────────────────────────────────────────────────────────
+  {
+    files: [
+      "packages/ui/src/components/ui/**/*.{ts,tsx}",
+      "packages/ui/src/hooks/use-mobile.ts",
+    ],
+    rules: {
+      "react-refresh/only-export-components": "off",
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/purity": "off",
+    },
+  },
+  {
+    files: ["packages/ui/src/components/ui/combobox.tsx"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
+  {
+    files: [
+      "packages/core/src/hooks/use-activity-feed.ts",
+      "packages/core/src/hooks/use-model-defaults.ts",
+      "packages/core/src/hooks/use-project-last-used.ts",
+      "packages/core/src/hooks/use-runtimes.ts",
+      "packages/core/src/hooks/use-session-events.ts",
+    ],
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
+  {
+    files: [
+      "packages/core/src/hooks/use-skill-events.ts",
+      "packages/core/src/hooks/use-stable-turns.ts",
+      "packages/core/src/hooks/use-task-events.ts",
+    ],
+    rules: {
+      "react-hooks/refs": "off",
+    },
+  },
+  {
+    files: ["packages/ui/src/**/*.{ts,tsx}"],
+    rules: {
+      "react-hooks/preserve-manual-memoization": "off",
+      "react-hooks/purity": "off",
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/set-state-in-render": "off",
+      "react-hooks/static-components": "off",
+      "react-hooks/use-memo": "off",
+    },
+  },
+  {
+    files: ["packages/app/src/**/*.{ts,tsx}"],
+    rules: {
+      "react-hooks/globals": "off",
+      "react-hooks/immutability": "off",
+      "react-hooks/preserve-manual-memoization": "off",
+      "react-hooks/purity": "off",
+      "react-hooks/refs": "off",
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/set-state-in-render": "off",
+      "react-hooks/static-components": "off",
+      "react-hooks/use-memo": "off",
+    },
+  },
+  {
+    files: ["apps/webui/src/**/*.{ts,tsx}", "src/pages/ChatPage.tsx"],
+    rules: {
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
+  // ─────────────────────────────────────────────────────────────────
+  // Lint debt inherited with the carried-over frontend (see UPSTREAM.md).
+  // Upstream does not gate on lint, so these fire in its code as it stands.
+  // They are warnings here rather than edits to code we re-sync from upstream;
+  // code written in this repository (the Node side below) gets no such leeway.
+  // ─────────────────────────────────────────────────────────────────
+  {
+    files: [
+      "apps/{webui,desktop,tui}/**/*.{ts,tsx}",
+      "packages/{app,core,ui,shared,a2ui,parser-plugins,desktop-network-egress}/**/*.{ts,tsx}",
+    ],
+    rules: {
+      "react-hooks/refs": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-refresh/only-export-components": "warn",
+      "no-control-regex": "warn",
+      "@typescript-eslint/no-unused-expressions": "warn",
+    },
+  },
+  // ─────────────────────────────────────────────────────────────────
+  // Node side (server, host, and their packages)
+  // ─────────────────────────────────────────────────────────────────
+  {
+    files: ["apps/{server,host}/**/*.ts", "packages/{db,test-utils,protocol,kernel}/**/*.ts"],
+    rules: {
       "@typescript-eslint/consistent-type-imports": ["error", { fixStyle: "inline-type-imports" }],
       "no-console": ["warn", { allow: ["warn", "error", "info"] }],
     },
   },
   {
-    // Module boundary contract for the server (the Node counterpart of valuz's `check-boundaries`):
-    // a module's repository is private to it; other modules go through its service.
-    files: ["backend/apps/server/src/**/*.ts"],
+    // Repository tooling: plain Node scripts and config files, which print to the terminal by design.
+    files: ["scripts/**/*.mjs", "*.{js,mjs}"],
+    languageOptions: { ecmaVersion: "latest", sourceType: "module", globals: { ...globals.node } },
+  },
+  {
+    // Module boundary contract for the server: a module's repository is private to it
+    // (other modules go through its service), and infra never depends on a module.
+    files: ["apps/server/src/**/*.ts"],
     plugins: { boundaries },
     settings: {
-      "boundaries/include": ["backend/apps/server/src/**/*"],
+      "boundaries/include": ["apps/server/src/**/*"],
       "boundaries/elements": [
-        { type: "repo", pattern: "backend/apps/server/src/modules/*/repo.ts", mode: "file", capture: ["module"] },
-        { type: "module", pattern: "backend/apps/server/src/modules/*", capture: ["module"] },
-        { type: "infra", pattern: "backend/apps/server/src/infra" },
+        { type: "repo", pattern: "apps/server/src/modules/*/repo.ts", mode: "file", capture: ["module"] },
+        { type: "module", pattern: "apps/server/src/modules/*", capture: ["module"] },
+        { type: "infra", pattern: "apps/server/src/infra" },
       ],
     },
     rules: {
@@ -53,11 +301,7 @@ export default tseslint.config(
         {
           default: "allow",
           rules: [
-            {
-              from: ["module"],
-              disallow: [["repo", { module: "!${from.module}" }]],
-              message: "Another module's repo is private — call its service instead.",
-            },
+            { from: ["module"], disallow: [["repo", { module: "!${from.module}" }]], message: "Another module's repo is private — call its service instead." },
             { from: ["infra"], disallow: ["module", "repo"], message: "infra must not depend on business modules." },
           ],
         },

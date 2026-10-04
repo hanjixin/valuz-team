@@ -1,0 +1,166 @@
+protocols:
+  name: Valuz OSS
+  schemes:
+    - valuz-oss
+appId: io.valuz.oss.desktop
+productName: Valuz
+# Drives the executable basename on every platform: the macOS .app bundle
+# name (so Finder/Dock show `Valuz`, not the bundle filename), the Windows
+# `.exe`, and on Linux the `.desktop` filename, `Icon=` field, and hicolor
+# PNG filename. Pinned to `Valuz` so all three platforms present "Valuz".
+# (Without it, electron-builder would derive the name from package.json's
+# `name: "@valuz/desktop"` → `@valuzdesktop`, whose leading `@` violates the
+# freedesktop icon-name regex [A-Za-z0-9._-]+ and leaves Linux with no
+# launcher icon.) `Valuz` is a valid freedesktop name, so Linux lands as
+# `/usr/share/applications/Valuz.desktop`, `Icon=Valuz`,
+# `/usr/share/icons/hicolor/NxN/apps/Valuz.png`.
+executableName: Valuz
+# Distribution-package artifact name template. Edition comes from
+# VALUZ_EDITION (build-desktop.sh:94); platform+arch from VALUZ_DIST_TAG
+# (build-desktop.sh:137, no edition — keeps the tag arch-only).
+# Result examples (per docs/STRUCTURE.md §"Distribution Model"):
+#   valuz-oss-v0.1.6-darwin-arm64.dmg
+#   valuz-enterprise-v0.1.6-darwin-arm64.dmg
+# The installed command stays ``valuz`` regardless of edition.
+artifactName: "valuz-${env.VALUZ_EDITION}-v${version}-${env.VALUZ_DIST_TAG}.${ext}"
+directories:
+  output: release
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+  # Large renderer-only packages are already bundled into dist/ by Vite.
+  # Keep node_modules available for runtime dependencies, but don't ship these
+  # source packages again inside app.asar.
+  - "!node_modules/@fontsource/**"
+  - "!node_modules/mermaid/**"
+  - "!node_modules/@mermaid-js/**"
+  - "!node_modules/lucide-react/**"
+  - "!node_modules/date-fns/**"
+  - "!node_modules/date-fns-jalali/**"
+  - "!node_modules/@shikijs/**"
+  - "!node_modules/shiki/**"
+  - "!node_modules/@base-ui/**"
+  - "!node_modules/@reduxjs/**"
+  - "!node_modules/react-dom/**"
+  - "!node_modules/recharts/**"
+  - "!node_modules/xlsx/**"
+  - "!node_modules/codepage/**"
+  - "!node_modules/cytoscape/**"
+  - "!node_modules/cytoscape-fcose/**"
+  - "!node_modules/zod/**"
+  - "!node_modules/@radix-ui/**"
+  - "!node_modules/langium/**"
+  - "!node_modules/katex/**"
+  - "!node_modules/react-router/**"
+  - "!node_modules/@valuz/**"
+  - "!node_modules/@codemirror/**"
+  - "!node_modules/lodash-es/**"
+  - "!node_modules/react-day-picker/**"
+  - "!node_modules/react-hook-form/**"
+  - "!node_modules/@hookform/**"
+  - "!node_modules/dayjs/**"
+  - "!node_modules/chevrotain/**"
+  - "!node_modules/@lezer/**"
+  - "!node_modules/victory-vendor/**"
+  - "!node_modules/@babel/**"
+  - "!node_modules/es-toolkit/**"
+  # Runtime-loaded icons read via `path.join(app.getAppPath(), "build", …)`
+  # — the macOS menu-bar tray (iconTemplate), the dock setIcon + window icon
+  # (iconRounded), and the Windows tray (icon.ico). Without these in the asar
+  # the paths resolve in dev (project dir) but not in the packaged app, so the
+  # tray showed up blank. nativeImage reads them straight from app.asar.
+  - build/iconTemplate.png
+  - build/iconTemplate@2x.png
+  - build/iconRounded.png
+  - build/icon.ico
+extraResources:
+  # User-facing binaries (the valuz Go CLI). On PATH after install.
+  - from: resources/bin/
+    to: bin/
+    filter:
+      - "**/*"
+  # Internal helpers (valuz-server PyInstaller bundle, rg, future valuz-tui).
+  # Not on the user PATH — invoked by valuz / Electron main process.
+  - from: resources/libexec/
+    to: libexec/
+    filter:
+      - "**/*"
+  # Third-party attribution notices (generated at build time by
+  # scripts/gen-third-party-notices.sh). Required to satisfy bundled
+  # dependencies' license terms. Lands at Valuz.app/Contents/Resources/.
+  - from: resources/THIRD-PARTY-NOTICES.txt
+    to: THIRD-PARTY-NOTICES.txt
+asar: true
+# Keep the runtime-loaded icons as real files on disk (app.asar.unpacked/)
+# so nativeImage.createFromPath reads them reliably — the path stays
+# `app.getAppPath()/build/…`, which Electron transparently redirects to the
+# unpacked copy. Belt-and-suspenders for the tray icon (was blank when only
+# inside the asar).
+asarUnpack:
+  - build/iconTemplate.png
+  - build/iconTemplate@2x.png
+  - build/iconRounded.png
+  - build/icon.ico
+mac:
+  target:
+    - dmg
+    - dir
+    # zip is what electron-updater downloads to apply a macOS auto-update
+    # (Squirrel.Mac). Without it latest-mac.yml lists only the dmg and the
+    # updater fails with "ZIP file not provided". dmg stays for manual install.
+    - zip
+  # No prefix — electron-builder forbids it. Substring match resolves to the
+  # Developer ID Application cert in CSC_LINK / login keychain.
+  identity: "Beijing Xiaobang Information Technology Co., Ltd. (UUHLDZ2S48)"
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # libexec/ holds PyInstaller's many .so / .dylib helpers + the ripgrep
+  # binary, none of which are built by us; skip individual signing.
+  # bin/valuz (Go CLI) is built by us and will be signed normally.
+  signIgnore:
+    - "/Contents/Resources/libexec/"
+  icon: build/iconRounded.png
+  # Notarization is handled by afterSign.cjs (@electron/notarize), not by
+  # electron-builder's built-in flow. Disable the built-in check to avoid
+  # "Env vars APPLE_API_KEY … need to be set" when using custom env var names.
+  notarize: false
+linux:
+  target:
+    - AppImage
+    - deb
+  # A directory of pre-sized PNGs, not a single file. electron-builder does
+  # NOT auto-resize a single PNG source for Linux (it only auto-generates
+  # from an SVG). With `icon: build/iconRounded.png` the deb shipped just
+  # /usr/share/icons/hicolor/1024x1024/apps/<name>.png — GNOME/KDE/XFCE
+  # couldn't find the smaller sizes they actually look up (16/24/32/48…)
+  # and fell back to a generic icon, so the launcher showed nothing even
+  # though Icon=<name> was valid. Files match the NxN.png pattern required
+  # by the freedesktop Icon Theme Spec.
+  icon: build/icons/
+  category: Development
+win:
+  target:
+    - nsis
+  icon: build/icon.ico
+afterSign: build/afterSign.cjs
+# Auto-update channel. electron-builder writes app-update.yml into the
+# packaged app from this block and emits latest-mac.yml / latest.yml /
+# latest-linux*.yml next to each artifact. electron-updater
+# (src/main/updater.ts) reads app-update.yml at runtime unless
+# VALUZ_UPDATER_URL overrides it.
+#
+# Live feed is hosted on Tencent COS + Tencent CDN (files.valuz.cn). The
+# generic provider only stamps app-update.yml with the feed URL — it does
+# NOT perform HTTP uploads (unlike the GitHub provider). CI uploads the
+# artifacts and manifests via scripts/upload-to-cos.sh (wrapping coscli).
+# See docs/superpowers/specs/2026-06-22-tencent-cos-auto-update-design.md.
+#
+# VALUZ_UPDATER_URL defaults to https://files.valuz.cn/${EDITION}/ (set in
+# scripts/build-desktop.sh) — the same ${EDITION}/ prefix upload-to-cos.sh
+# writes to. Override locally for testing.
+publish:
+  provider: generic
+  url: "${env.VALUZ_UPDATER_URL}"

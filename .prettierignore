@@ -6,8 +6,25 @@ release
 pnpm-lock.yaml
 legacy
 coverage
-# Carried over from valuz-agent unchanged, so it can be re-synced without noise.
-frontend
-i18n
-api/openapi.yaml
 **/generated/**
+# Carried over from valuz-agent unchanged (see UPSTREAM.md), so it can be re-synced without noise.
+apps/webui
+apps/desktop
+apps/tui
+packages/app
+packages/core
+packages/ui
+packages/shared
+packages/a2ui
+packages/parser-plugins
+packages/desktop-network-egress
+e2e
+i18n
+docs/frontend
+api/openapi.yaml
+vitest.config.ts
+vitest.setup.ts
+tsconfig.base.json
+eslint.config.js
+scripts/design-audit.mjs
+scripts/design-audit-baseline.json

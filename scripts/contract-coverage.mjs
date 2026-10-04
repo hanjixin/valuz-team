@@ -32,7 +32,7 @@ if (unnamed.length) {
   process.exit(1);
 }
 
-const modulesDir = path.join(root, "backend/apps/server/src/modules");
+const modulesDir = path.join(root, "apps/server/src/modules");
 const implemented = new Set();
 for (const name of readdirSync(modulesDir, { withFileTypes: true }).filter((d) => d.isDirectory())) {
   let source;

@@ -1,0 +1,1401 @@
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { toast } from "sonner";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Beaker,
+  BookOpen,
+  BrainCircuit,
+  BriefcaseBusiness,
+  ChartBar,
+  ChevronRight,
+  Code2,
+  Database,
+  FileText,
+  Folder,
+  FolderKanban,
+  FolderOpen,
+  FolderPlus,
+  Globe2,
+  GraduationCap,
+  HeartPulse,
+  Image as ImageIcon,
+  Music,
+  Palette,
+  Plus,
+  RotateCw,
+  Scale,
+  ShieldCheck,
+  Trash2,
+  Upload,
+  Users,
+  Video,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  Button,
+  DeleteConfirmDialog,
+  Badge,
+  DocumentDetailPanel,
+  EmptyState,
+  IndexingStatusBadge,
+  PageLoader,
+  SearchInput,
+  cn,
+  type DocumentPreviewSlice,
+} from "@valuz/ui";
+import {
+  docsApi,
+  getExecutionTargets,
+  kbApi,
+  recordEntityOrigin,
+  usePanelStore,
+  filesApi,
+} from "@valuz/core";
+import { ResourceActionSlot } from "../components/ResourceActionSlot";
+import type {
+  DocDetail,
+  DocsHealth,
+  KbDetail,
+  KbListItem,
+  KbTreeNode,
+} from "@valuz/core";
+import { useProjectOutlet } from "@valuz/app/layout";
+import type { DirectoryFieldMode } from "@valuz/app/layout";
+import { usePlatform } from "@valuz/app/platform";
+import { useTranslation, useResourceCategories } from "@valuz/core";
+import type { ResourceCategory } from "@valuz/shared";
+import { CreateKbDialog } from "../components";
+import { useCardGridColumns } from "../hooks/use-card-grid-columns";
+import { useKbTreePolling } from "../hooks/use-kb-tree-polling";
+import { OriginIcon } from "../components/ExecutionLocationPicker";
+
+type UiStatus = "ready" | "indexing" | "failed" | "queued" | "missing";
+
+const KB_ICON_RULES: Array<{ keywords: string[]; icon: LucideIcon }> = [
+  {
+    keywords: ["ai", "agent", "智能", "模型", "大模型", "机器人"],
+    icon: BrainCircuit,
+  },
+  {
+    keywords: ["code", "api", "sdk", "dev", "代码", "开发", "前端", "后端"],
+    icon: Code2,
+  },
+  {
+    keywords: ["设计", "视觉", "品牌", "ui", "ux", "design"],
+    icon: Palette,
+  },
+  {
+    keywords: ["数据", "分析", "指标", "报表", "analytics", "metrics"],
+    icon: ChartBar,
+  },
+  {
+    keywords: ["数据库", "db", "sql", "data warehouse"],
+    icon: Database,
+  },
+  {
+    keywords: ["研究", "实验", "论文", "research", "paper", "science"],
+    icon: Beaker,
+  },
+  {
+    keywords: ["法律", "合同", "法务", "legal", "contract"],
+    icon: Scale,
+  },
+  {
+    keywords: ["医疗", "健康", "health", "medical"],
+    icon: HeartPulse,
+  },
+  {
+    keywords: ["安全", "权限", "security", "auth"],
+    icon: ShieldCheck,
+  },
+  {
+    keywords: ["教育", "课程", "学习", "培训", "course", "learning"],
+    icon: GraduationCap,
+  },
+  {
+    keywords: ["项目", "产品", "需求", "roadmap", "project", "product"],
+    icon: FolderKanban,
+  },
+  {
+    keywords: ["客户", "用户", "销售", "市场", "crm", "sales", "marketing"],
+    icon: Users,
+  },
+  {
+    keywords: ["商业", "业务", "公司", "business", "company"],
+    icon: BriefcaseBusiness,
+  },
+  {
+    keywords: ["图片", "图像", "image", "photo"],
+    icon: ImageIcon,
+  },
+  {
+    keywords: ["视频", "影像", "video"],
+    icon: Video,
+  },
+  {
+    keywords: ["音频", "音乐", "audio", "music"],
+    icon: Music,
+  },
+  {
+    keywords: ["网站", "国际", "全球", "web", "global"],
+    icon: Globe2,
+  },
+];
+
+const KB_ICON_FALLBACKS: LucideIcon[] = [
+  BookOpen,
+  Folder,
+  FileText,
+  FolderOpen,
+  BrainCircuit,
+  Code2,
+  Palette,
+  ChartBar,
+  Database,
+  Beaker,
+  Scale,
+  HeartPulse,
+  ShieldCheck,
+  GraduationCap,
+  FolderKanban,
+  Users,
+  BriefcaseBusiness,
+  ImageIcon,
+  Video,
+  Music,
+  Globe2,
+];
+
+function getKbIconCandidates(name: string): LucideIcon[] {
+  const normalized = name.toLowerCase();
+  const matched = KB_ICON_RULES.filter(({ keywords }) =>
+    keywords.some((keyword) => normalized.includes(keyword.toLowerCase())),
+  ).map(({ icon }) => icon);
+  return [...matched, ...KB_ICON_FALLBACKS];
+}
+
+/**
+ * Built-in KB list categories. A single catch-all bucket by default (the
+ * grid renders headerless when it is the only one, so the OSS view is
+ * unchanged); overlays inject additional categories at runtime via
+ * ``useResourceCategories`` — same seam as skills/agents/connectors.
+ */
+function buildKbCategories(
+  t: ReturnType<typeof useTranslation>["t"],
+): ResourceCategory<KbListItem>[] {
+  return [
+    {
+      id: "personal",
+      label: t("knowledge.groupPersonal" as Parameters<typeof t>[0]),
+      order: 0,
+      filter: () => true,
+    },
+  ];
+}
+
+/**
+ * Mirror of ``CategorizedList``'s bucketing: categories claim items in
+ * order; non-multiAssign categories consume what they match.
+ */
+function bucketizeKbs(
+  kbs: KbListItem[],
+  categories: ResourceCategory<KbListItem>[],
+): { category: ResourceCategory<KbListItem>; items: KbListItem[] }[] {
+  const assigned = new Set<string>();
+  const buckets: {
+    category: ResourceCategory<KbListItem>;
+    items: KbListItem[];
+  }[] = [];
+  for (const cat of categories) {
+    const items = kbs.filter((kb) => !assigned.has(kb.id) && cat.filter(kb));
+    if (cat.sort) items.sort(cat.sort);
+    if (items.length > 0) {
+      buckets.push({ category: cat, items });
+      if (!cat.multiAssign) for (const kb of items) assigned.add(kb.id);
+    }
+  }
+  return buckets;
+}
+
+function getUniqueKbIcons(kbs: KbListItem[]): Record<string, LucideIcon> {
+  const used = new Set<LucideIcon>();
+  const icons: Record<string, LucideIcon> = {};
+
+  for (const kb of kbs) {
+    const candidates = getKbIconCandidates(kb.name);
+    const icon =
+      candidates.find((candidate) => !used.has(candidate)) ?? BookOpen;
+    icons[kb.id] = icon;
+    used.add(icon);
+  }
+
+  return icons;
+}
+
+function toUiStatus(status: string): UiStatus {
+  if (status === "processing") return "indexing";
+  if (
+    status === "ready" ||
+    status === "failed" ||
+    status === "queued" ||
+    status === "missing"
+  ) {
+    return status;
+  }
+  return "queued";
+}
+
+function formatExt(mime: string | null): string {
+  if (!mime) return "";
+  const sub = mime.split("/").pop();
+  return sub?.toUpperCase() ?? "";
+}
+
+function kbStatusLabel(
+  status: KbListItem["status"],
+  t: (key: string) => string,
+): {
+  text: string;
+  variant: "success" | "brand" | "warning";
+} {
+  switch (status) {
+    case "all_ready":
+      return { text: t("knowledge.allReady"), variant: "success" };
+    case "has_processing":
+      return { text: "解析中", variant: "brand" };
+    case "has_missing":
+      return { text: t("knowledge.hasMissing"), variant: "warning" };
+  }
+}
+
+/** Prefer the server's own reason over a generic "import failed".
+ *  ``fetchJson`` already lifts FastAPI's ``{detail}`` into ``Error.message``,
+ *  so the upload endpoint's explanation of WHICH file it could not read reaches
+ *  the toast. Falls back to the generic string for network errors and anything
+ *  else without a message. Module-level and pure, so it adds no hook
+ *  dependencies at the call sites. */
+const uploadErrorMessage = (error: unknown, fallback: string): string => {
+  const detail = error instanceof Error ? error.message.trim() : "";
+  return detail || fallback;
+};
+
+export const KnowledgePage = ({
+  directoryFieldMode = "picker",
+  managedRootAutoDiscovers = true,
+}: {
+  directoryFieldMode?: DirectoryFieldMode;
+  /** See ``CreateKbDialog`` — whether a managed root is one the owning
+   * backend rescans on a timer. */
+  managedRootAutoDiscovers?: boolean;
+} = {}) => {
+  const { t } = useTranslation();
+  const platform = usePlatform();
+  const { copyFiles } = platform;
+  const [kbs, setKbs] = useState<KbListItem[]>([]);
+  const [health, setHealth] = useState<DocsHealth | null>(null);
+  const [loading, setLoading] = useState(true);
+  const kbIcons = useMemo(() => getUniqueKbIcons(kbs), [kbs]);
+  const { ref: kbGridRef, columns: kbGridColumns } = useCardGridColumns(
+    kbs.length,
+  );
+  const kbCategories = useResourceCategories<KbListItem>(
+    "kb",
+    useMemo(() => buildKbCategories(t), [t]),
+  );
+  const kbBuckets = useMemo(
+    () => bucketizeKbs(kbs, kbCategories),
+    [kbs, kbCategories],
+  );
+
+  const [activeKb, setActiveKb] = useState<KbDetail | null>(null);
+  const [rootNodes, setRootNodes] = useState<KbTreeNode[]>([]);
+  const [childrenMap, setChildrenMap] = useState<Record<string, KbTreeNode[]>>(
+    {},
+  );
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [treeLoading, setTreeLoading] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
+
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<DocDetail | null>(null);
+  const [preview, setPreview] = useState<DocumentPreviewSlice | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const [deleteKbOpen, setDeleteKbOpen] = useState(false);
+  const [deleteDocOpen, setDeleteDocOpen] = useState(false);
+
+  const [dragOver, setDragOver] = useState(false);
+  // Covers BOTH upload entry points — the header button and the drop zone.
+  // ``dropping`` used to exist for the drop path alone, and even there it was
+  // unreachable: ``handleDrop`` clears ``dragOver`` before setting it, and the
+  // only thing that read it lived inside the ``dragOver &&`` overlay.
+  const [uploading, setUploading] = useState(false);
+  const dragCounterRef = useRef(0);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+
+  const {
+    setRightPanel,
+    setHeader,
+    setHeaderClassName,
+    setContentInnerClassName,
+    setRightPanelDefaultSize,
+  } = useProjectOutlet();
+  const panelSetCollapsed = usePanelStore((s) => s.setCollapsed);
+
+  // ── Load KB list ──────────────────────────────────────────────────
+
+  const loadKbs = useCallback(async () => {
+    try {
+      const [kbRes, healthRes] = await Promise.all([
+        kbApi.list(),
+        docsApi.health(),
+      ]);
+      setKbs(kbRes.knowledge_bases);
+      setHealth(healthRes);
+    } catch {
+      toast.error(t("knowledge.cannotLoadList" as Parameters<typeof t>[0]));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(loadKbs);
+  }, [loadKbs]);
+
+  // ── Enter / exit KB detail ────────────────────────────────────────
+
+  const enterKb = useCallback(async (kbId: string) => {
+    setTreeLoading(true);
+    try {
+      const [kb, tree] = await Promise.all([kbApi.get(kbId), kbApi.tree(kbId)]);
+      setActiveKb(kb);
+      setRootNodes(tree.nodes);
+      setChildrenMap({});
+      setExpanded(new Set());
+      setSelectedDocId(null);
+      setSelectedDoc(null);
+      setPreview(null);
+      setSearchQuery("");
+    } catch {
+      toast.error(t("knowledge.cannotLoad" as Parameters<typeof t>[0]));
+    } finally {
+      setTreeLoading(false);
+    }
+  }, []);
+
+  // Re-read the tree in place: same KB, same expansion, same selection.
+  //
+  // Deliberately not ``enterKb`` — that one resets ``expanded`` /
+  // ``selectedDoc`` / ``searchQuery``, which is right when the user opens a
+  // library and wrong when this fires underneath them every few seconds.
+  //
+  // Expanded folders are re-read too. Refreshing only the root would leave a
+  // document *inside* a folder frozen at "等待中" — the same bug one level
+  // down, and the harder one to notice.
+  const refreshTree = useCallback(async () => {
+    if (!activeKb) return;
+    const folderIds = [...expanded];
+    const [root, ...children] = await Promise.all([
+      kbApi.tree(activeKb.id),
+      ...folderIds.map((id) => kbApi.tree(activeKb.id, id)),
+    ]);
+    setRootNodes(root.nodes);
+    if (folderIds.length > 0) {
+      setChildrenMap((prev) => {
+        const next = { ...prev };
+        folderIds.forEach((id, i) => {
+          next[id] = children[i].nodes;
+        });
+        return next;
+      });
+    }
+  }, [activeKb, expanded]);
+
+  // Poll only while something is actually parsing; a settled library costs
+  // nothing. ``missing`` is terminal too — it means the source file is gone,
+  // which no amount of waiting fixes.
+  const treeIsSettling = useMemo(() => {
+    const inFlight = (n: KbTreeNode) =>
+      n.kind === "document" &&
+      (n.status === "queued" || n.status === "processing");
+    return (
+      rootNodes.some(inFlight) ||
+      Object.values(childrenMap).some((nodes) => nodes.some(inFlight))
+    );
+  }, [rootNodes, childrenMap]);
+
+  useKbTreePolling({ active: treeIsSettling, refresh: refreshTree });
+
+  const exitKb = useCallback(() => {
+    setActiveKb(null);
+    setRootNodes([]);
+    setChildrenMap({});
+    setExpanded(new Set());
+    setSelectedDocId(null);
+    setSelectedDoc(null);
+    setPreview(null);
+    setRightPanel(null);
+    setSearchQuery("");
+    loadKbs();
+  }, [loadKbs, setRightPanel]);
+
+  // ── Tree interactions ─────────────────────────────────────────────
+
+  const toggleFolder = useCallback(
+    async (folderId: string) => {
+      if (expanded.has(folderId)) {
+        setExpanded((prev) => {
+          const n = new Set(prev);
+          n.delete(folderId);
+          return n;
+        });
+        return;
+      }
+      if (!childrenMap[folderId] && activeKb) {
+        try {
+          const res = await kbApi.tree(activeKb.id, folderId);
+          setChildrenMap((prev) => ({ ...prev, [folderId]: res.nodes }));
+        } catch {
+          toast.error(t("knowledge.cannotLoadDir" as Parameters<typeof t>[0]));
+          return;
+        }
+      }
+      setExpanded((prev) => new Set(prev).add(folderId));
+    },
+    [expanded, childrenMap, activeKb],
+  );
+
+  const selectDoc = useCallback(
+    async (docId: string) => {
+      setSelectedDocId(docId);
+      try {
+        const [doc, prev] = await Promise.all([
+          docsApi.get(docId, activeKb?.id),
+          docsApi
+            .preview(docId, activeKb?.id)
+            .catch(() => ({
+              document_id: docId,
+              markdown: "",
+              offset: 0,
+              returned_bytes: 0,
+              total_bytes: 0,
+              truncated: false,
+            })),
+        ]);
+        setSelectedDoc(doc);
+        // The whole response, not just the text: ``truncated`` is what lets the
+        // panel say a large document is only partly shown instead of silently
+        // presenting a window as the document.
+        setPreview(prev.markdown ? prev : null);
+      } catch {
+        toast.error(t("knowledge.cannotLoadDetail" as Parameters<typeof t>[0]));
+      }
+    },
+    [activeKb],
+  );
+
+  // ── Right panel ───────────────────────────────────────────────────
+
+  // Asked for once per page, NOT per selection — and that distinction is the
+  // whole point of this being its own effect.
+  //
+  // The shell remounts its panel group when this value changes (``key=
+  // {rightPanelDefaultSize}`` in AppShell), and the main route is rendered
+  // inside that group. So a page that flips the size while mounted remounts
+  // itself: every piece of state here resets, ``activeKb`` goes back to null,
+  // and the user lands on the library list. That is precisely what happened —
+  // clicking a document threw you back to the list of knowledge bases.
+  //
+  // Declaring it for the page instead makes the value change only when this
+  // page mounts and unmounts, where a remount is what happens anyway. Nothing
+  // is lost visually: the list view has no right panel, so a 70% right panel
+  // has nothing to size until a document opens.
+  useEffect(() => {
+    // The detail is the thing being read once a document is selected — the
+    // parsed markdown, error text — while the list is just where the click
+    // came from. 3:7 in the detail's favor; back to the shell default when
+    // the page goes away, so no other page inherits this width.
+    //
+    // A panel size, not a width class. The shell's aside is laid out by the
+    // panel group and carries ``w-full`` — a ``w-[70%]`` class still reaches
+    // the element and is still overridden there, so the page silently got the
+    // 345px default while looking like it had asked for 70%.
+    setRightPanelDefaultSize("70%");
+    return () => setRightPanelDefaultSize(undefined);
+  }, [setRightPanelDefaultSize]);
+
+  useEffect(() => {
+    if (!selectedDoc) {
+      setRightPanel(null);
+      return;
+    }
+    setRightPanel(
+      <DocumentDetailPanel
+        doc={{
+          name: selectedDoc.filename,
+          format: formatExt(selectedDoc.mime_type),
+          status: toUiStatus(selectedDoc.status),
+          chunks: selectedDoc.chunk_count,
+          preview: preview ?? undefined,
+        }}
+        meta={{
+          kbName: activeKb?.name,
+          relativePath: selectedDoc.relative_path ?? undefined,
+          sourcePath: selectedDoc.source_path ?? undefined,
+          fileSize: selectedDoc.file_size_bytes,
+          importedAt: selectedDoc.created_at ?? undefined,
+        }}
+        parse={{
+          parserMode: selectedDoc.parser_mode,
+          // Camel-case the wire shape so the UI package stays
+          // independent of the api layer's snake_case.
+          attempts: selectedDoc.parser_attempts.map((a) => ({
+            pluginId: a.plugin_id,
+            error: a.error,
+            occurredAt: a.occurred_at,
+            ok: a.ok,
+          })),
+          lastErrorCode: selectedDoc.last_error_code,
+          lastErrorMessage: selectedDoc.last_error_message,
+        }}
+        onRegenerate={() => {
+          // Reindex is a background task on the backend — the POST
+          // returns as soon as the task is queued, so the toast fires
+          // on submit, not on parse completion. The auto-poll below
+          // then surfaces live ``processing`` → ``ready`` status.
+          const docId = selectedDoc.id;
+          // Routed like every other per-document call. Unrouted, a cloud
+          // library's retry posted to the local backend and failed every time.
+          const docKbId = selectedDoc.kb_id ?? activeKb?.id;
+          docsApi
+            .reindex([docId], docKbId)
+            .then(() => {
+              toast.success(
+                t("knowledge.reindexStarted" as Parameters<typeof t>[0]),
+              );
+              // Flip local status to ``processing`` so the auto-poll below
+              // kicks in and refreshes status + attempts + preview when the
+              // background parse finishes. Without this nudge the doc stays
+              // at its previous ``ready`` and the poll guard never fires —
+              // the panel then shows stale content until a manual reload.
+              setSelectedDoc((prev) =>
+                prev && prev.id === docId
+                  ? { ...prev, status: "processing" }
+                  : prev,
+              );
+              // Refresh the tree IN PLACE. ``enterKb`` here threw the whole
+              // page away — selection, expansion, the panel — to update one
+              // badge, which read as "重建索引 kicked me back to the list".
+              void refreshTree();
+            })
+            .catch(() => {
+              toast.error(t("common.failed" as Parameters<typeof t>[0]));
+            });
+        }}
+        onDelete={() => setDeleteDocOpen(true)}
+        onViewSource={
+          selectedDoc.source_path
+            ? () => void openSourceFile(selectedDoc.source_path as string)
+            : undefined
+        }
+      />,
+    );
+    // The panel and the widened aside live in the LAYOUT, not in this page —
+    // so without this they outlive the page. Settings is not an overlay
+    // route: navigating there unmounts this page, and the document detail
+    // stayed on screen next to the settings content.
+    return () => {
+      setRightPanel(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshTree/openSourceFile change identity per render; the panel only needs the ones current when it was handed over
+  }, [selectedDoc, preview, setRightPanel, activeKb]);
+
+  // Auto-poll the doc detail while the parse is in flight so the
+  // panel reflects live state without a manual refresh. Polls every
+  // 3s while ``status`` is ``queued`` or ``processing``; stops when
+  // it lands on a terminal state (``ready`` / ``failed`` /
+  // ``missing``) OR the user navigates to a different doc. The
+  // polled fetch reuses ``setSelectedDoc`` so the right-panel useEffect
+  // above re-renders with fresh parser_attempts + last_error_message —
+  // a stuck-in-indexing PDF will surface its actual progress here.
+  useEffect(() => {
+    if (!selectedDoc) return;
+    const inFlight =
+      selectedDoc.status === "queued" || selectedDoc.status === "processing";
+    if (!inFlight) return;
+    const docId = selectedDoc.id;
+    // The library this document lives in — the poll has to be routed exactly
+    // like the read that opened the panel. It was not, so on a CLOUD library
+    // every tick asked the LOCAL backend for a document it has never heard of,
+    // the 404 fell into the catch below, and the panel sat frozen while the
+    // list beside it — routed correctly — updated every three seconds.
+    const docKbId = selectedDoc.kb_id ?? undefined;
+    const handle = window.setInterval(async () => {
+      try {
+        const fresh = await docsApi.get(docId, docKbId);
+        // Race guard: the user may have switched docs between the
+        // ``setInterval`` fire and the await resolving. Drop the
+        // stale fetch so we don't briefly clobber the new doc's
+        // detail with the old doc's data.
+        if (selectedDocId !== docId) return;
+        setSelectedDoc(fresh);
+        // When the parse settles, the preview file has been rewritten with
+        // the new engine's output — re-fetch it so the rendered content
+        // (not just status / attempts) reflects the re-index without a
+        // manual reload. Fires once: this tick flips ``inFlight`` false, so
+        // the effect re-runs and clears the interval.
+        const settled =
+          fresh.status !== "queued" && fresh.status !== "processing";
+        if (settled) {
+          try {
+            const freshPreview = await docsApi.preview(docId, docKbId);
+            if (selectedDocId === docId) {
+              setPreview(freshPreview.markdown ? freshPreview : null);
+            }
+          } catch {
+            // Preview re-fetch failed — keep the old content; non-fatal.
+          }
+        }
+      } catch {
+        // Transient fetch failure — swallow; next tick retries.
+      }
+    }, 3000);
+    return () => window.clearInterval(handle);
+  }, [selectedDoc, selectedDocId]);
+
+  // Auto-expand the right panel whenever the user selects a doc. The
+  // layout-global ``rightPanelCollapsed`` defaults to ``true`` and the
+  // conversation page actively re-collapses it on every session
+  // switch — so without this nudge, navigating from a conversation
+  // into the KB and clicking a doc would correctly call
+  // ``setRightPanel(<DocumentDetailPanel>)`` but the layout would
+  // still render ``aside={null}`` because the collapse atom is true.
+  // Mirror the conversation page's "expand once on data" behaviour:
+  // expand when ``selectedDocId`` transitions to a non-null id;
+  // we deliberately do NOT collapse on null so a user who manually
+  // toggled the panel keeps their preference for the next click.
+  useEffect(() => {
+    if (selectedDocId) {
+      panelSetCollapsed(false);
+    }
+  }, [selectedDocId, panelSetCollapsed]);
+
+  // ── KB actions ────────────────────────────────────────────────────
+
+  const handleRescan = useCallback(async () => {
+    if (!activeKb) return;
+    setRescanning(true);
+    try {
+      await kbApi.rescan(activeKb.id);
+      toast.success(t("knowledge.rescanStarted" as Parameters<typeof t>[0]));
+      await enterKb(activeKb.id);
+    } catch {
+      toast.error(t("knowledge.rescanFailed" as Parameters<typeof t>[0]));
+    } finally {
+      setRescanning(false);
+    }
+  }, [activeKb, enterKb]);
+
+  // Open the document's ORIGINAL file — the uploaded pdf/xlsx, not the parsed
+  // markdown the panel previews. Resolution reuses the file surface every
+  // artifact click already goes through: local + desktop reveals in the
+  // Finder, remote opens the presigned URL (the browser renders pdf/images
+  // natively), and a plain browser on a local file can only say so.
+  const openSourceFile = useCallback(
+    async (sourcePath: string) => {
+      try {
+        // Routed to the library's own backend — the same per-call routing the
+        // detail poll and the retry needed: a cloud-owned path sent to the
+        // local default fails its owner-root allowlist as ``forbidden``.
+        const d = await filesApi.resolveOne(`valuz-file://${sourcePath}`, {
+          baseRef: activeKb ? { kbId: activeKb.id } : {},
+        });
+        // Say which failure it is BEFORE trying to act on the descriptor. A
+        // resolve can succeed as a call and still describe a file that is not
+        // there — ``kind`` and ``absPath`` are filled in either way, so acting
+        // on those alone hands a dead path to the OS and gets back silence.
+        // A knowledge base whose folder was cleaned out (a library under
+        // ``/tmp``, a moved directory) is exactly that shape, and "the button
+        // does nothing" is the worst way to learn it.
+        if (d?.error === "not_found" || d?.exists === false) {
+          toast.error(
+            t("knowledge.statusSourceMissing" as Parameters<typeof t>[0]),
+          );
+          return;
+        }
+        if (d?.error) {
+          toast.error(t("common.failed" as Parameters<typeof t>[0]));
+          return;
+        }
+        if (d?.kind === "local" && d.absPath && platform.isElectron) {
+          // ``revealInFinder`` hands back whatever the OS complained about —
+          // no association for the extension, quarantine, a path that vanished
+          // between the stat above and this call. Empty means it opened.
+          const failure = await platform.revealInFinder(d.absPath);
+          if (failure) toast.error(failure);
+          return;
+        }
+        if (d?.url) {
+          window.open(d.url, "_blank", "noopener,noreferrer");
+          return;
+        }
+        toast.error(t("common.failed" as Parameters<typeof t>[0]));
+      } catch {
+        toast.error(t("common.failed" as Parameters<typeof t>[0]));
+      }
+    },
+    [platform, activeKb],
+  );
+
+  // Multipart upload into the KB root — used by both the explicit
+  // header button and the drag-drop fallback (when Electron's
+  // ``File.path`` is unavailable, i.e. browser or cloud-managed KB).
+  // The backend writes the bytes and kicks the rescan itself.
+  const uploadKbFiles = useCallback(
+    async (files: File[]): Promise<void> => {
+      if (!activeKb || files.length === 0) return;
+      // The header button's path had no progress state at all: a 3 MB PDF
+      // simply did nothing visible until the toast landed, which reads as a
+      // click that missed.
+      setUploading(true);
+      try {
+        await kbApi.uploadFiles(activeKb.id, files);
+        toast.success(
+          t("knowledge.imported" as Parameters<typeof t>[0], {
+            count: String(files.length),
+          }),
+        );
+        await enterKb(activeKb.id);
+      } catch (error) {
+        // Surface the server's reason, not just "import failed". The upload
+        // endpoint rejects unsupported extensions with a 400 naming them; a
+        // bare `catch {}` swallowed that and left the user guessing — which
+        // was the whole point of making the rejection explicit.
+        toast.error(
+          uploadErrorMessage(
+            error,
+            t("knowledge.importFailed" as Parameters<typeof t>[0]),
+          ),
+        );
+      } finally {
+        setUploading(false);
+      }
+    },
+    [activeKb, enterKb],
+  );
+
+  const handleDeleteKb = async () => {
+    if (!activeKb) return;
+    try {
+      await kbApi.delete(activeKb.id);
+      toast.success(
+        t("knowledge.deleted" as Parameters<typeof t>[0], {
+          name: activeKb.name,
+        }),
+      );
+      setDeleteKbOpen(false);
+      exitKb();
+    } catch {
+      toast.error(t("knowledge.deleteFailed" as Parameters<typeof t>[0]));
+    }
+  };
+
+  const handleDeleteDoc = async () => {
+    if (!selectedDoc) return;
+    try {
+      await docsApi.delete(selectedDoc.id, selectedDoc.kb_id ?? undefined);
+      toast.success(t("knowledge.docDeleted" as Parameters<typeof t>[0]));
+      setDeleteDocOpen(false);
+      setSelectedDocId(null);
+      setSelectedDoc(null);
+      setPreview(null);
+      if (activeKb) enterKb(activeKb.id);
+    } catch {
+      toast.error(t("knowledge.docDeleteFailed" as Parameters<typeof t>[0]));
+    }
+  };
+
+  // ── Drag & drop ────────────────────────────────────────────────────
+
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!activeKb) return;
+      dragCounterRef.current++;
+      if (e.dataTransfer.types.includes("Files")) {
+        setDragOver(true);
+      }
+    },
+    [activeKb],
+  );
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setDragOver(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounterRef.current = 0;
+      setDragOver(false);
+
+      if (!activeKb) return;
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length === 0) return;
+
+      setUploading(true);
+      try {
+        // Electron exposes ``File.path``; when present, copy the local
+        // file straight into the KB root (fast — no upload). When absent
+        // (browser, or a cloud-managed KB whose root the client can't
+        // reach), fall back to the multipart endpoint ``POST /v1/kb/{id}/files``
+        // — the backend writes the bytes into the KB root and kicks the
+        // rescan itself, so no separate ``kbApi.rescan`` is needed.
+        const paths = files
+          .map((f) => (f as File & { path?: string }).path)
+          .filter(Boolean) as string[];
+        if (paths.length > 0) {
+          const result = await copyFiles(paths, activeKb.root_path);
+          if (result.errors.length > 0) {
+            toast.error(
+              t("knowledge.copyFailedCount" as Parameters<typeof t>[0], {
+                count: String(result.errors.length),
+              }),
+            );
+          }
+          if (result.copied > 0) {
+            toast.success(
+              t("knowledge.imported" as Parameters<typeof t>[0], {
+                count: String(result.copied),
+              }),
+            );
+            await kbApi.rescan(activeKb.id);
+            await enterKb(activeKb.id);
+          }
+        } else {
+          await uploadKbFiles(files);
+        }
+      } catch (error) {
+        toast.error(
+          uploadErrorMessage(
+            error,
+            t("knowledge.importFailed" as Parameters<typeof t>[0]),
+          ),
+        );
+      } finally {
+        setUploading(false);
+      }
+    },
+    [activeKb, enterKb, uploadKbFiles],
+  );
+
+  // ── Tree search filter ────────────────────────────────────────────
+
+  const filterNodes = useCallback(
+    (nodes: KbTreeNode[], q: string): KbTreeNode[] => {
+      if (!q) return nodes;
+      const lq = q.toLowerCase();
+      return nodes.filter((n) => n.name.toLowerCase().includes(lq));
+    },
+    [],
+  );
+
+  const filteredRootNodes = useMemo(
+    () => filterNodes(rootNodes, searchQuery),
+    [rootNodes, searchQuery, filterNodes],
+  );
+
+  // ── Render: tree nodes ────────────────────────────────────────────
+
+  const renderNodes = (nodes: KbTreeNode[], depth: number) =>
+    nodes.map((node) => (
+      <Fragment key={node.id}>
+        {node.kind === "folder" ? (
+          <button
+            type="button"
+            onClick={() => toggleFolder(node.id)}
+            style={{
+              paddingLeft: `${depth * 24 + 12}px`,
+              paddingRight: "12px",
+            }}
+            className={cn(
+              "mx-5 flex w-[calc(100%-40px)] items-center gap-2 rounded-lg border-b border-[#f7f8fa] py-2.5 text-left transition-colors",
+              node.status === "missing"
+                ? "opacity-60"
+                : "hover:bg-surface-soft",
+            )}
+          >
+            <ChevronRight
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-ink-muted transition-transform",
+                expanded.has(node.id) && "rotate-90",
+              )}
+            />
+            {expanded.has(node.id) ? (
+              <FolderOpen className="h-4 w-4 shrink-0 text-ink-muted" />
+            ) : (
+              <Folder className="h-4 w-4 shrink-0 text-ink-muted" />
+            )}
+            <span className="min-w-0 truncate text-sm text-ink-heading">
+              {node.name}
+            </span>
+            <span className="ml-auto shrink-0 text-xs text-ink-meta">
+              {node.document_count}{" "}
+              {t("knowledge.docColumn" as Parameters<typeof t>[0])}
+            </span>
+            {node.status === "missing" && (
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning-text" />
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => selectDoc(node.id)}
+            style={{
+              paddingLeft: `${depth * 24 + 12}px`,
+              paddingRight: "12px",
+            }}
+            className={cn(
+              "mx-5 flex w-[calc(100%-40px)] items-center gap-2 rounded-lg border-b border-[#f7f8fa] py-2.5 text-left transition-colors",
+              selectedDocId === node.id
+                ? "bg-brand-light/35"
+                : "hover:bg-surface-soft",
+              node.status === "missing" && "opacity-60",
+            )}
+          >
+            <span className="w-3.5 shrink-0" />
+            <FileText className="h-4 w-4 shrink-0 text-ink-muted" />
+            <span className="min-w-0 truncate text-sm text-ink-heading">
+              {node.name}
+            </span>
+            <span className="ml-auto shrink-0">
+              <IndexingStatusBadge status={toUiStatus(node.status)} />
+            </span>
+          </button>
+        )}
+        {node.kind === "folder" &&
+          expanded.has(node.id) &&
+          childrenMap[node.id] &&
+          renderNodes(childrenMap[node.id], depth + 1)}
+      </Fragment>
+    ));
+
+  // ── Render: KB list view ──────────────────────────────────────────
+
+  const renderKbList = () => {
+    const isEmpty = !loading && kbs.length === 0;
+
+    return (
+      <>
+        <div className="flex-1 overflow-y-auto px-5 pb-5 pt-3">
+          {loading ? (
+            <PageLoader />
+          ) : isEmpty ? (
+            <div className="flex flex-1 justify-center pt-[160px]">
+              <EmptyState
+                variant="plain"
+                title={t("knowledge.createNew" as Parameters<typeof t>[0])}
+                description={t(
+                  "knowledge.supportedFormats" as Parameters<typeof t>[0],
+                )}
+                icon={<FolderPlus className="h-5 w-5" />}
+                action={
+                  <Button
+                    size="sm"
+                    onClick={() => setCreateOpen(true)}
+                    variant="default"
+                  >
+                    <Plus className="h-3 w-3" />
+                    {t("knowledge.addKb" as Parameters<typeof t>[0])}
+                  </Button>
+                }
+              />
+            </div>
+          ) : (
+            <>
+              <div ref={kbGridRef} className="flex flex-col gap-6">
+                {kbBuckets.map(({ category, items }) => (
+                  <div key={category.id}>
+                    {/* Headerless when a single bucket — the OSS default view
+                        stays exactly as before; headers appear only once an
+                        overlay injects additional categories. */}
+                    {kbBuckets.length > 1 && (
+                      <div className="label-mono mb-3 flex items-center gap-1.5">
+                        <span>{category.label}</span>
+                        <span className="ml-1 text-ink-meta">
+                          {items.length}
+                        </span>
+                      </div>
+                    )}
+                    <div
+                      className="grid gap-3"
+                      style={{
+                        gridTemplateColumns: kbGridColumns,
+                      }}
+                    >
+                      {items.map((kb) => {
+                        const st = kbStatusLabel(kb.status, t);
+                        const isProcessing = kb.status === "has_processing";
+                        const KbIcon = kbIcons[kb.id] ?? BookOpen;
+                        return (
+                          <button
+                            key={kb.id}
+                            type="button"
+                            // Always enterable — even while 解析中, so the user can
+                            // open the KB and watch per-doc parse status. The
+                            // "解析中" badge below keeps the in-flight state visible.
+                            onClick={() => enterKb(kb.id)}
+                            className={cn(
+                              "group",
+                              "flex min-h-[148px] w-full flex-col rounded-2xl border border-surface-border",
+                              "bg-[#ffffff] p-4 text-left shadow-xs transition-all",
+                              "hover:-translate-y-1 hover:bg-[#ffffff] hover:shadow-md",
+                              isProcessing && "bg-brand-light/25",
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand">
+                                <KbIcon className="h-4 w-4" />
+                              </div>
+                              {isProcessing ? (
+                                <Badge
+                                  variant={st.variant}
+                                  className="border-0"
+                                >
+                                  {st.text}
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <div className="mt-4 min-w-0">
+                              <div className="flex items-center gap-1">
+                                <span className="truncate text-sm font-medium text-ink-heading">
+                                  {kb.name}
+                                </span>
+                                <OriginIcon origin={kb.exec_origin} />
+                              </div>
+                              <div className="mt-1 line-clamp-2 break-all text-xs leading-5 text-ink-meta">
+                                {kb.root_path}
+                              </div>
+                            </div>
+                            <div className="mt-auto flex items-center justify-between pt-4">
+                              <span className="text-xs text-ink-meta">
+                                {kb.document_count}{" "}
+                                {t(
+                                  "knowledge.docColumn" as Parameters<
+                                    typeof t
+                                  >[0],
+                                )}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <ResourceActionSlot
+                                  resourceType="kb"
+                                  resource={
+                                    kb as unknown as Record<string, unknown>
+                                  }
+                                />
+                                <ChevronRight className="h-4 w-4 shrink-0 text-ink-muted opacity-0 transition-opacity group-hover:opacity-100" />
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </>
+    );
+  };
+
+  // ── Render: KB detail (tree) view ─────────────────────────────────
+
+  const renderKbDetail = () => (
+    <>
+      <div className="flex-1 overflow-y-auto">
+        <div className="relative flex items-center gap-3 px-5 pb-5 pt-0 after:absolute after:bottom-0 after:left-5 after:right-5 after:h-px after:bg-[#f7f8fa]">
+          <SearchInput
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder={t(
+              "knowledge.searchDocPlaceholder" as Parameters<typeof t>[0],
+            )}
+            className="max-w-[340px] flex-1"
+          />
+          <div className="flex-1" />
+          <div className="text-xs text-ink-meta">
+            {activeKb?.document_count ?? 0}{" "}
+            {t("knowledge.docColumn" as Parameters<typeof t>[0])}
+            {activeKb?.auto_discover && (
+              <>
+                <span className="mx-1.5">·</span>
+                <span>
+                  {t("knowledge.autoDiscover" as Parameters<typeof t>[0])}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {treeLoading ? (
+          <PageLoader />
+        ) : filteredRootNodes.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <EmptyState
+              icon={<FolderOpen className="h-10 w-10 text-ink-muted" />}
+              message={
+                searchQuery
+                  ? t("knowledge.noMatchDocs" as Parameters<typeof t>[0])
+                  : t("knowledge.noDocs" as Parameters<typeof t>[0])
+              }
+            />
+          </div>
+        ) : (
+          <div>{renderNodes(filteredRootNodes, 0)}</div>
+        )}
+      </div>
+    </>
+  );
+
+  // ── Main render ───────────────────────────────────────────────────
+
+  const pageHeader = useMemo(() => {
+    return (
+      <div className="flex w-full items-center justify-between gap-4">
+        {activeKb ? (
+          <div className="flex min-w-0 items-center gap-2 text-sm leading-5">
+            <button
+              type="button"
+              onClick={exitKb}
+              className="inline-flex shrink-0 items-center gap-1 text-ink-meta transition-colors hover:text-ink-heading"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>{t("knowledge.backHome" as Parameters<typeof t>[0])}</span>
+            </button>
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
+            <span className="min-w-0 truncate font-medium text-ink-heading">
+              {activeKb.name}
+            </span>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-col justify-center">
+            <span className="text-base font-semibold leading-5 text-ink-heading">
+              {t("knowledge.knowledgeBase" as Parameters<typeof t>[0])}
+            </span>
+          </div>
+        )}
+        {activeKb ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => uploadInputRef.current?.click()}
+              loading={uploading}
+              aria-label={t("knowledge.uploadFiles" as Parameters<typeof t>[0])}
+              className="h-8 w-8 p-0 text-ink-meta hover:text-ink-heading"
+            >
+              <Upload className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRescan}
+              loading={rescanning}
+              aria-label={t("common.refresh" as Parameters<typeof t>[0])}
+              className="h-8 w-8 p-0 text-ink-meta hover:text-ink-heading"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={t("common.delete" as Parameters<typeof t>[0])}
+              className="h-8 w-8 p-0 text-ink-meta hover:text-[#f54b4b]"
+              onClick={() => setDeleteKbOpen(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+            <ResourceActionSlot
+              resourceType="kb"
+              resource={activeKb as unknown as Record<string, unknown>}
+            />
+          </div>
+        ) : (
+          <div className="flex shrink-0 items-center gap-2">
+            {!loading && health && (
+              <div className="hidden h-8 items-center gap-2 rounded-lg border border-surface-border bg-surface-soft px-3 text-xs md:flex">
+                <span className="text-ink-heading font-medium">
+                  {health.total_documents}{" "}
+                  {t("knowledge.docColumn" as Parameters<typeof t>[0])}
+                </span>
+                <span className="text-ink-meta">·</span>
+                <span className="text-ink-meta">
+                  {health.ready_count}{" "}
+                  {t("knowledge.statusReady" as Parameters<typeof t>[0])}
+                  {health.processing_count > 0
+                    ? ` · ${health.processing_count} ${t("knowledge.indexing" as Parameters<typeof t>[0])}`
+                    : ""}
+                  {health.missing_count > 0
+                    ? ` · ${health.missing_count} ${t("knowledge.statusFailed" as Parameters<typeof t>[0])}`
+                    : ""}
+                </span>
+              </div>
+            )}
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-3 w-3" />
+              {t("knowledge.add" as Parameters<typeof t>[0])}
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+    // ``uploading`` is load-bearing here: the header is memoised into the
+    // layout slot, so leaving it out would freeze the upload button's spinner
+    // on its first value — the header would keep rendering "idle" for the
+    // whole upload, which is the exact symptom this change exists to fix.
+  }, [
+    activeKb,
+    exitKb,
+    handleRescan,
+    health,
+    loading,
+    rescanning,
+    uploading,
+    t,
+  ]);
+
+  useEffect(() => {
+    setHeader(pageHeader);
+    setHeaderClassName(activeKb ? "h-15 px-5" : "h-15 px-5");
+    setContentInnerClassName("p-0");
+    return () => {
+      setHeader(null);
+      setHeaderClassName(undefined);
+      setContentInnerClassName(undefined);
+    };
+  }, [
+    activeKb,
+    pageHeader,
+    setContentInnerClassName,
+    setHeader,
+    setHeaderClassName,
+  ]);
+
+  return (
+    <div
+      className="relative flex h-full min-h-0 flex-col bg-card"
+      onDragEnter={activeKb ? handleDragEnter : undefined}
+      onDragLeave={activeKb ? handleDragLeave : undefined}
+      onDragOver={activeKb ? handleDragOver : undefined}
+      onDrop={activeKb ? handleDrop : undefined}
+    >
+      {(dragOver || uploading) && (
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-brand/5 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-brand/40 bg-card/90 px-12 py-10 shadow-lg">
+            <Upload className="h-8 w-8 text-brand" />
+            <span className="text-sm font-medium text-ink-heading">
+              {uploading
+                ? t("common.processing" as Parameters<typeof t>[0])
+                : t("knowledge.importFiles" as Parameters<typeof t>[0])}
+            </span>
+          </div>
+        </div>
+      )}
+      {/* Hidden picker for the header "Upload files" button. The drop
+          overlay above is the primary entry; this button is the explicit,
+          discoverable one. Both routes go through ``uploadKbFiles``
+          → ``POST /v1/kb/{id}/files``. */}
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files ? Array.from(e.target.files) : [];
+          // Reset so picking the same file twice still fires ``change``.
+          e.target.value = "";
+          if (files.length > 0) void uploadKbFiles(files);
+        }}
+      />
+      {activeKb ? renderKbDetail() : renderKbList()}
+
+      <CreateKbDialog
+        directoryFieldMode={directoryFieldMode}
+        managedRootAutoDiscovers={managedRootAutoDiscovers}
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSubmit={async (data) => {
+          const baseUrl = data.target_id
+            ? getExecutionTargets().find((tt) => tt.id === data.target_id)
+                ?.baseUrl
+            : undefined;
+          const kb = await kbApi.create(
+            {
+              name: data.name,
+              root_path: data.root_path,
+              auto_discover: data.auto_discover,
+            },
+            baseUrl ? { baseUrl } : undefined,
+          );
+          // Record BEFORE loadKbs / enterKb so KB-scoped calls for this KB
+          // route to the owning backend on multi-target editions.
+          if (data.target_id) recordEntityOrigin(kb.id, data.target_id);
+          toast.success(
+            t("knowledge.created" as Parameters<typeof t>[0], {
+              name: kb.name,
+            }),
+          );
+          await loadKbs();
+        }}
+      />
+
+      {/* Delete KB Dialog */}
+      <DeleteConfirmDialog
+        open={deleteKbOpen}
+        onOpenChange={setDeleteKbOpen}
+        itemName={activeKb?.name}
+        description={t("knowledge.deleteKbDesc" as Parameters<typeof t>[0], {
+          name: activeKb?.name ?? "",
+        })}
+        onConfirm={handleDeleteKb}
+      />
+
+      {/* Delete Document Dialog */}
+      <DeleteConfirmDialog
+        open={deleteDocOpen}
+        onOpenChange={setDeleteDocOpen}
+        itemName={selectedDoc?.filename}
+        description={t("knowledge.deleteKbDesc" as Parameters<typeof t>[0], {
+          name: activeKb?.name ?? "",
+        })}
+        onConfirm={handleDeleteDoc}
+      />
+    </div>
+  );
+};

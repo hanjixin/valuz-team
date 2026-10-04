@@ -151,6 +151,9 @@ win:
   target:
     - nsis
   icon: build/icon.ico
+# agent-base: electron-builder leaves every node_modules out of extra resources, and the
+# host cannot run without its own — afterPack copies it in (before signing).
+afterPack: build/afterPack.cjs
 afterSign: build/afterSign.cjs
 # Auto-update channel. electron-builder writes app-update.yml into the
 # packaged app from this block and emits latest-mac.yml / latest.yml /

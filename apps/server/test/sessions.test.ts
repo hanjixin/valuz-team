@@ -219,7 +219,10 @@ describe("sessions", () => {
 
     model.replies.push({ content: "Second.", delayMs: 50 });
     await call(alice, "POST", `/v1/sessions/${session.id}/messages`, { prompt: "two" });
-    await eventually(async () => frames.filter((f) => f.event_type === "session.idle").length === 2);
+    // The turn's last event is the status announcement that follows going idle.
+    await idle(session.id);
+    const last = (await history(session.id)).at(-1)?.seq;
+    await eventually(async () => frames.some((f) => f.event_type && f.seq === last));
     controller.abort();
     await pump;
 
@@ -453,6 +456,57 @@ describe("sessions", () => {
     ]);
     expect(replay.seen.at(-1)).toMatchObject({ event: "heartbeat", data: { seq: mine.at(-1)?.data.seq } });
     replay.stop();
+  });
+
+  it("keeps each member's feedback on a turn: a rating can be changed or withdrawn, a copy is counted", async () => {
+    const session = await newChat(alice);
+    model.replies.push({ content: "An answer worth rating." });
+    await say(alice, session.id, "rate me");
+    const messageId = (await history(session.id))[0]?.event.payload["message_id"];
+    const feedback = (body: object) => call(alice, "POST", `/v1/sessions/${session.id}/feedback`, body);
+
+    const up = await feedback({
+      message_id: messageId,
+      action: "rating",
+      value: "up",
+      reason_codes: ["solved", "fast"],
+    });
+    expect(up.status).toBe(201);
+    expect(up.body).toMatchObject({
+      action: "rating",
+      value: "up",
+      reason_code: "solved",
+      occurrences: 1,
+      block_ref: "",
+      target: { type: "message", id: messageId },
+      metadata: { reason_codes: ["solved", "fast"] },
+    });
+    // Changing your mind replaces the rating; it does not add a second one.
+    const down = await feedback({ message_id: messageId, action: "rating", value: "down", reason: "too long" });
+    expect(down.body).toMatchObject({ id: up.body.id, value: "down", reason: "too long", occurrences: 2 });
+    await feedback({ message_id: messageId, action: "copy" });
+    await feedback({ message_id: messageId, action: "copy" });
+    const items = (await call(alice, "GET", `/v1/sessions/${session.id}/feedback`)).body.items;
+    expect(items.map((i: { action: string; occurrences: number }) => [i.action, i.occurrences])).toEqual([
+      ["rating", 2],
+      ["copy", 2],
+    ]);
+
+    expect((await feedback({ message_id: messageId, action: "rating" })).status).toBe(422);
+    expect((await feedback({ message_id: messageId, action: "copy", value: "up" })).status).toBe(422);
+    expect((await feedback({ message_id: crypto.randomUUID(), action: "copy" })).status).toBe(404);
+    expect((await call(bob, "GET", `/v1/sessions/${session.id}/feedback`)).status).toBe(404); // not his session
+
+    const withdraw = await call(
+      alice,
+      "DELETE",
+      `/v1/sessions/${session.id}/feedback?message_id=${messageId}&action=rating`,
+    );
+    expect(withdraw.status).toBe(204);
+    expect(
+      (await call(alice, "DELETE", `/v1/sessions/${session.id}/feedback?message_id=${messageId}&action=rating`)).status,
+    ).toBe(404);
+    expect((await call(alice, "GET", `/v1/sessions/${session.id}/feedback`)).body.items).toHaveLength(1);
   });
 
   it("renames, and deletes with everything it held — but not mid-turn", async () => {

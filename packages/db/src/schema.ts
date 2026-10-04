@@ -248,6 +248,44 @@ export interface QueuedInputsTable {
   updated_at: ColumnType<Date | null, Date | undefined, Date | null>;
 }
 
+type NullableTime = ColumnType<Date | null, Date | undefined, Date | null>;
+
+export interface NotificationsTable {
+  id: string;
+  org_id: string;
+  user_id: string;
+  kind: string;
+  title: string;
+  body: ColumnType<string, string | undefined, string>;
+  route: string | null;
+  action: ColumnType<string, string | undefined, string>;
+  urgency: ColumnType<string, string | undefined, string>;
+  project_id: string | null;
+  session_id: string | null;
+  payload: ColumnType<Record<string, unknown>, string | undefined, string>;
+  created_at: Timestamp;
+  read_at: NullableTime;
+  resolved_at: NullableTime;
+}
+
+export interface MessageFeedbackTable {
+  id: string;
+  session_id: string;
+  message_id: string;
+  user_id: string;
+  action: string;
+  block_ref: ColumnType<string, string | undefined, string>;
+  value: string | null;
+  reason_code: string | null;
+  reason: string | null;
+  source: ColumnType<string, string | undefined, string>;
+  surface: string | null;
+  occurrences: ColumnType<number, number | undefined, number>;
+  metadata: ColumnType<Record<string, unknown>, string | undefined, string>;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -267,5 +305,7 @@ export interface Database {
   messages: MessagesTable;
   events: EventsTable;
   queued_inputs: QueuedInputsTable;
+  notifications: NotificationsTable;
+  message_feedback: MessageFeedbackTable;
   user_settings: UserSettingsTable;
 }

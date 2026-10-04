@@ -44,7 +44,7 @@ describe("contract-driven server", () => {
     expect([abandon.status, abandon.body.message]).toEqual([501, "abandonTask is not implemented yet"]);
     // The plain resource and a static segment with a verb are separate routes too.
     expect((await t.call("GET", `/v1/tasks/${id}`, { token })).body.message).toBe("getTask is not implemented yet");
-    expect((await t.call("POST", "/v1/notifications:read-all", { token })).status).toBe(501);
+    expect((await t.call("POST", "/v1/notifications:read-all", { token })).body).toEqual({ ok: true });
     expect((await t.call("POST", `/v1/tasks/${id}:nope`, { token })).status).toBe(404);
     // …and each verb keeps its own request schema.
     expect((await t.call("POST", `/v1/tasks/${id}:commit`, { token, body: {} })).body.message).toMatch(

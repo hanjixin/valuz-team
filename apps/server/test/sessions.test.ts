@@ -56,6 +56,8 @@ describe("sessions", () => {
     const res = await call(account, "POST", `/v1/sessions/${id}/messages`, { prompt });
     expect(res.status).toBe(200);
     await idle(id);
+    // A turn's last event is the status announcement that follows going idle; wait until it is stored too.
+    await eventually(async () => (await types(id)).at(-1) === "session.update");
   };
 
   beforeAll(async () => {
@@ -282,7 +284,10 @@ describe("sessions", () => {
   it("interrupting stops the turn and pauses the queue until someone sends again", async () => {
     const session = await newChat(alice);
     model.replies.push({ hang: true });
+    const asked = model.requests.length;
     await call(alice, "POST", `/v1/sessions/${session.id}/messages`, { prompt: "think forever" });
+    // Mid-turn: the model has been asked and has not answered.
+    await eventually(async () => model.requests.length > asked);
     await call(alice, "POST", `/v1/sessions/${session.id}/queue`, { prompt: "after that" });
 
     const interrupted = await call(alice, "POST", `/v1/sessions/${session.id}/interrupt`);
@@ -507,7 +512,10 @@ describe("sessions", () => {
   it("lets a queued message jump the queue, stopping the running turn to make way", async () => {
     const session = await newChat(alice);
     model.replies.push({ hang: true });
+    const asked = model.requests.length;
     await call(alice, "POST", `/v1/sessions/${session.id}/messages`, { prompt: "a long task" });
+    // Mid-turn: the model has been asked and has not answered.
+    await eventually(async () => model.requests.length > asked);
     await call(alice, "POST", `/v1/sessions/${session.id}/queue`, { prompt: "later" });
     const queue = (await call(alice, "POST", `/v1/sessions/${session.id}/queue`, { prompt: "urgent" })).body;
     const urgent = queue.items.find((item: { text: string }) => item.text === "urgent");

@@ -21,6 +21,7 @@ import * as knowledge from "../knowledge/service.ts";
 import * as devices from "../devices/service.ts";
 import * as projects from "../projects/service.ts";
 import * as sharing from "../sharing/service.ts";
+import * as artifacts from "./artifacts.ts";
 import * as repo from "./repo.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -281,13 +282,17 @@ const unresolved = (ref: string, error: Descriptor["error"]): Descriptor => ({
 
 /**
  * Which device a path is on. A file reference carries only a path, so: the
- * device of the project whose folder contains it, else the caller's only
+ * device of the project whose folder contains it, or the one a deliverable at
+ * that path was delivered from, else the caller's only
  * device they may control.
  */
 async function deviceFor(ctx: Ctx, auth: Auth, absPath: string): Promise<string | null> {
   const under = (root: string) => absPath === root || absPath.startsWith(`${root.replace(/\/+$/, "")}/`);
   const project = (await projects.list(ctx, auth)).find((p) => p.device_id && p.root_path && under(p.root_path));
   if (project?.device_id) return project.device_id;
+  // A deliverable says where it is, wherever its conversation worked.
+  const delivered = await artifacts.deviceOf(ctx, auth, absPath);
+  if (delivered) return delivered;
   const reachable = (await devices.list(ctx, auth)).filter(
     (device) => device.online && sharing.permissionAtLeast(device.permission ?? "view", "control"),
   );

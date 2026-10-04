@@ -4,6 +4,7 @@ import { requireAuth } from "../../infra/auth.ts";
 import type { Handler } from "../../infra/context.ts";
 import { uploaded } from "../../infra/upload.ts";
 import * as sessions from "../sessions/service.ts";
+import * as artifacts from "./artifacts.ts";
 import * as service from "./service.ts";
 
 export const uploadAttachment: Handler = async (req) => {
@@ -38,16 +39,25 @@ export const listSessionAttachments: Handler = async (req) => {
   return { items: await service.listForSession(ctx, session_id) };
 };
 
-/** Agents do not register deliverables yet, so a session has none to list. */
 export const listSessionArtifacts: Handler = async (req) => {
   const ctx = req.server.ctx;
-  await sessions.access(ctx, await requireAuth(ctx, req), (req.params as { session_id: string }).session_id);
-  return { items: [] };
+  const { row } = await sessions.access(
+    ctx,
+    await requireAuth(ctx, req),
+    (req.params as { session_id: string }).session_id,
+  );
+  return { items: await artifacts.forSession(ctx, row.id) };
 };
 
 export const listArtifacts: Handler = async (req) => {
-  await requireAuth(req.server.ctx, req);
-  return { items: [], total: 0 };
+  const ctx = req.server.ctx;
+  const { project_id, limit } = req.query as { project_id: string; limit?: number };
+  return artifacts.forProject(ctx, await requireAuth(ctx, req), project_id, limit ?? 200);
+};
+
+export const listArtifactRevisions: Handler = async (req) => {
+  const ctx = req.server.ctx;
+  return artifacts.history(ctx, await requireAuth(ctx, req), (req.params as { artifact_id: string }).artifact_id);
 };
 
 export const listProjectFiles: Handler = async (req) => {

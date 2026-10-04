@@ -117,6 +117,9 @@ sometimes the session — exists, so it waits in storage (`infra/storage.ts`: a 
 store when replicas must share it) until the message is sent, is then written into the session's workspace on
 the device, and is removed from the server.
 
+What an agent delivers is recorded the same way (`modules/files/artifacts.ts`): the agent names the files that are
+its result, the server notes the path and counts the version, and reading one asks the device.
+
 ## The knowledge base is on the server
 
 The exception to "files stay on the device" is what the organization chooses to share with everyone: its

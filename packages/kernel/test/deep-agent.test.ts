@@ -197,6 +197,38 @@ describe("DeepAgentRuntime", () => {
     ).rejects.toThrow(/no longer kept/);
   });
 
+  it("keeps a turn's end points and drops the steps between, without losing the conversation", async () => {
+    await writeFile(path.join(dir, "notes.txt"), "alpha\n");
+    const session = await newSession();
+    const file = path.join(dir, "data", "threads", `${session.id}.json`);
+    const kept = async () => {
+      const stored = JSON.parse(await readFile(file, "utf8")) as {
+        storage: Record<string, Record<string, Record<string, unknown>>>;
+        writes: Record<string, unknown>;
+      };
+      return {
+        checkpoints: Object.keys(stored.storage["main"]?.[""] ?? {}).length,
+        writes: Object.keys(stored.writes).length,
+      };
+    };
+    for (let turn = 1; turn <= 3; turn++) {
+      replies.push(
+        { tool: { name: "read_file", args: { file_path: path.join(dir, "notes.txt") } } },
+        { content: `Answer ${turn}.` },
+      );
+      await orch.runTurn("u1", session.id, user(`question ${turn}`));
+      // One checkpoint per finished turn, however many steps the turn took.
+      expect(await kept()).toEqual({ checkpoints: turn, writes: 0 });
+    }
+    replies.push({ content: "Last." });
+    await orch.runTurn("u1", session.id, user("and?"));
+    const said = requests
+      .at(-1)
+      ?.messages.filter((m) => m.role === "assistant" && m.content)
+      .map((m) => m.content);
+    expect(said).toEqual(["Answer 1.", "Answer 2.", "Answer 3."]);
+  });
+
   it("parks a mutating tool on approval and honors a rejection", async () => {
     replies.push(
       { tool: { name: "execute", args: { command: "echo hacked > pwned.txt" } } },

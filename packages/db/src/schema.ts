@@ -491,6 +491,28 @@ export interface MemoryReviewsTable {
   reviewed_until: number;
 }
 
+export interface ArtifactsTable {
+  id: string;
+  org_id: string;
+  project_id: string;
+  device_id: string | null;
+  file_path: string;
+  display_name: string;
+  version_no: ColumnType<number, number | undefined, number>;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface ArtifactRevisionsTable {
+  id: string;
+  artifact_id: string;
+  version_no: number;
+  session_id: string | null;
+  file_size: number;
+  mime_type: string | null;
+  created_at: Timestamp;
+}
+
 export interface ChannelBindingsTable {
   id: string;
   org_id: string;
@@ -583,6 +605,8 @@ export interface Database {
   kb_chunks: KbChunksTable;
   kb_tasks: KbTasksTable;
   project_kb_bindings: ProjectKbBindingsTable;
+  artifacts: ArtifactsTable;
+  artifact_revisions: ArtifactRevisionsTable;
   channel_bindings: ChannelBindingsTable;
   channel_threads: ChannelThreadsTable;
   automations: AutomationsTable;

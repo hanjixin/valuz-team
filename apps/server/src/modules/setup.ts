@@ -6,6 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { mountToolkit, toolkitServer } from "../infra/toolkit.ts";
 import * as automations from "./automations/runner.ts";
 import * as feishu from "./channels/feishu.ts";
+import * as artifacts from "./files/artifacts.ts";
 import { registerDeviceLink } from "./devices/link.ts";
 import * as parser from "./knowledge/parse.ts";
 import * as knowledge from "./knowledge/service.ts";
@@ -56,6 +57,22 @@ export async function setupModules(app: FastifyInstance): Promise<void> {
     tools: teamChat.CHAT_TOOLS,
     authorize: (sessionId) => teamChat.authorize(app.ctx, sessionId),
     call: (caller, tool, args) => teamChat.callTool(app, caller, tool, args),
+  });
+
+  // Deliverables: an agent marks the files that are its result.
+  registerTurnExtras(app.ctx, async (session) =>
+    session.device_id
+      ? {
+          instructions: artifacts.ARTIFACT_INSTRUCTIONS,
+          mcpServers: [toolkitServer(app, session.id, artifacts.ARTIFACT_TOOLKIT)],
+        }
+      : null,
+  );
+  mountToolkit<artifacts.Deliverer>(app, {
+    ...artifacts.ARTIFACT_TOOLKIT,
+    tools: artifacts.ARTIFACT_TOOLS,
+    authorize: (sessionId) => artifacts.authorize(app.ctx, sessionId),
+    call: (by, tool, args) => artifacts.callTool(app.ctx, by, tool, args),
   });
 
   // The knowledge base: uploads are parsed in the background, and a session whose

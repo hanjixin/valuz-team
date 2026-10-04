@@ -10,6 +10,9 @@ import path from "node:path";
 import { MemorySaver } from "@langchain/langgraph";
 import { ForkError } from "../runtime.ts";
 
+/** How many turns back a conversation can still be forked from. */
+const KEPT_TURNS = 30;
+
 /** Each session has a file to itself, so the thread inside it needs no name of its own. */
 export const THREAD = "main";
 
@@ -21,6 +24,7 @@ interface Stored {
   writes: MemorySaver["writes"];
   /** Set on a fork made from one of the source's turns: where its first turn branches from. */
   branch_from?: string | null;
+  turn_ends?: string[];
 }
 
 // Checkpoints are bytes; JSON carries them as base64.
@@ -47,6 +51,8 @@ const checkpointsOf = (stored: Pick<Stored, "storage">): string[] => Object.keys
 
 export class FileCheckpointer extends MemorySaver {
   private branchFrom: string | null = null;
+  /** The checkpoints recent turns ended at, oldest first. */
+  private turnEnds: string[] = [];
 
   private constructor(private readonly file: string) {
     super();
@@ -60,6 +66,7 @@ export class FileCheckpointer extends MemorySaver {
       saver.storage = stored.storage;
       saver.writes = stored.writes;
       saver.branchFrom = stored.branch_from ?? null;
+      saver.turnEnds = stored.turn_ends ?? [];
     }
     return saver;
   }
@@ -77,8 +84,33 @@ export class FileCheckpointer extends MemorySaver {
     return from ? { checkpoint_id: from } : {};
   }
 
+  /**
+   * Write the thread to its file. Called when a turn ends, which is also when
+   * the thread is trimmed: the library records a checkpoint at every step, each
+   * holding the whole conversation, and only the points a turn ended at are
+   * ever returned to (the tail to continue from, earlier ones to fork from).
+   */
   save(): Promise<void> {
-    return store(this.file, { storage: this.storage, writes: this.writes, branch_from: this.branchFrom });
+    const tail = this.latest();
+    if (tail) {
+      this.turnEnds = [...this.turnEnds.filter((id) => id !== tail), tail].slice(-KEPT_TURNS);
+      const kept = new Set(this.turnEnds);
+      if (this.branchFrom) kept.add(this.branchFrom);
+      const thread = this.storage[THREAD] ?? {};
+      // What sub-agents checkpointed under their own namespaces only mattered while the turn ran.
+      for (const namespace of Object.keys(thread)) if (namespace !== "") delete thread[namespace];
+      for (const id of Object.keys(thread[""] ?? {})) if (!kept.has(id)) delete thread[""]?.[id];
+      for (const key of Object.keys(this.writes)) {
+        const [, namespace, id] = JSON.parse(key) as [string, string, string];
+        if (namespace !== "" || !kept.has(id)) delete this.writes[key];
+      }
+    }
+    return store(this.file, {
+      storage: this.storage,
+      writes: this.writes,
+      branch_from: this.branchFrom,
+      turn_ends: this.turnEnds,
+    });
   }
 }
 

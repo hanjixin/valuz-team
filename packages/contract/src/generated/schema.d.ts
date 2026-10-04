@@ -4421,6 +4421,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/artifacts/{artifact_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every version of one deliverable, newest first */
+        get: operations["listArtifactRevisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{project_id}/files": {
         parameters: {
             query?: never;
@@ -17086,6 +17103,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArtifactList"];
+                };
+            };
+        };
+    };
+    listArtifactRevisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The deliverable's versions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        artifact_id: string;
+                        display_name: string;
+                        items: {
+                            [key: string]: unknown;
+                        }[];
+                    };
                 };
             };
         };

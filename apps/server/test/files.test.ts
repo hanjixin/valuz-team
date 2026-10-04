@@ -267,6 +267,82 @@ describe("files", () => {
     ]);
   });
 
+  it("records what an agent delivers: the file stays on the device, each delivery is a version", async () => {
+    const session = (await call(alice, "POST", "/v1/sessions", { project_id: projectId })).body;
+    const say = async (prompt: string) => {
+      await call(alice, "POST", `/v1/sessions/${session.id}/messages`, { prompt });
+      await eventually(async () => (await call(alice, "GET", `/v1/sessions/${session.id}`)).body.status === "idle");
+    };
+    const report = path.join(folder, "out", "report.md");
+    const deliver = {
+      tool: {
+        name: "mcp__artifacts__deliver_artifacts",
+        args: { files: [{ path: "out/report.md" }, { path: "nope.md" }] },
+      },
+    };
+    model.replies.push({ tool: { name: "write_file", args: { file_path: report, content: "# Report v1" } } }, deliver, {
+      content: "Delivered.",
+    });
+    await say("Write the report.");
+    const turn = model.requests.at(-1);
+    expect(turn?.messages[0]?.content).toContain("## Deliverables");
+    const result = JSON.parse(turn?.messages.filter((m) => m.role === "tool").at(-1)?.content ?? "{}");
+    expect(result).toEqual({ delivered: [{ path: report, name: "report.md", version: 1 }], not_found: ["nope.md"] });
+
+    const listed = (await call(alice, "GET", `/v1/sessions/${session.id}/artifacts`)).body.items;
+    expect(listed).toEqual([
+      expect.objectContaining({
+        session_id: session.id,
+        file_path: report,
+        ref: `valuz-file://${report}`,
+        file_name: "report.md",
+        file_size: 11,
+        mime_type: "text/markdown",
+        version_no: 1,
+        is_current: true,
+      }),
+    ]);
+    // Delivered again after a change: a second version; the first is no longer the current one.
+    model.replies.push(
+      { tool: { name: "edit_file", args: { file_path: report, old_string: "v1", new_string: "v2, revised" } } },
+      {
+        tool: {
+          name: "mcp__artifacts__deliver_artifacts",
+          args: { files: [{ path: report, name: "Quarterly report" }] },
+        },
+      },
+      { content: "Updated." },
+    );
+    await say("Revise it.");
+    const versions = (await call(alice, "GET", `/v1/sessions/${session.id}/artifacts`)).body.items;
+    expect(versions.map((v: { version_no: number; is_current: boolean }) => [v.version_no, v.is_current])).toEqual([
+      [1, false],
+      [2, true],
+    ]);
+    const project = (await call(alice, "GET", `/v1/artifacts?project_id=${projectId}`)).body;
+    expect(project.total).toBe(1);
+    expect(project.items[0]).toMatchObject({
+      display_name: "Quarterly report",
+      version_no: 2,
+      current: { file_path: report, status: "current", source_session_id: session.id },
+    });
+    const history = (await call(alice, "GET", `/v1/artifacts/${project.items[0].id}/revisions`)).body;
+    expect(history.items.map((item: { version_no: number; status: string }) => [item.version_no, item.status])).toEqual(
+      [
+        [2, "current"],
+        [1, "superseded"],
+      ],
+    );
+    // The server kept no copy: the bytes are read from the device when asked for.
+    const [resolved] = (await call(alice, "POST", "/v1/files/resolve", { refs: [listed[0].ref] })).body.results;
+    expect(await (await fetch(`${url}${resolved.url}`)).text()).toBe("# Report v2, revised");
+    // Seen by whoever sees the project, and nobody else.
+    const carol = await joinOrg(t, alice, "carol");
+    expect((await call(carol, "GET", `/v1/artifacts?project_id=${projectId}`)).status).toBe(404);
+    expect((await call(carol, "GET", `/v1/artifacts/${project.items[0].id}/revisions`)).status).toBe(404);
+    expect((await call(carol, "GET", `/v1/sessions/${session.id}/artifacts`)).status).toBe(404);
+  });
+
   it("answers plainly when the device is asleep", async () => {
     await host.stop();
     await eventually(async () => (await call(alice, "GET", `/v1/devices/${device.id}`)).body.online === false);

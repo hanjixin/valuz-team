@@ -139,7 +139,8 @@ describe("sessions", () => {
       name: "Say hello",
       last_user_message_text: "Say hello\nand nothing else",
     });
-    expect(after.total_tokens).toBe(55);
+    // The turn's own record (its usage) and the session going idle arrive separately, in either order.
+    await eventually(async () => (await call(alice, "GET", `/v1/sessions/${session.id}`)).body.total_tokens === 55);
     // The device ran it in a workspace it created for this chat.
     expect((await stat(path.join(dir, "data", "workspaces", `chat-${session.id}`))).isDirectory()).toBe(true);
     // The model was called with the channel's key, which the browser never saw.

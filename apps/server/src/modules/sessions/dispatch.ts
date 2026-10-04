@@ -6,6 +6,7 @@
 import {
   type Actor,
   type ApiProtocol as KernelProtocol,
+  type McpServerConfig,
   Session,
   type SkillBundle,
   type UserMessage,
@@ -29,6 +30,53 @@ import type { StoredEventRow } from "./translate.ts";
 const QUEUE_LIMIT = 20;
 type Row = NonNullable<Awaited<ReturnType<typeof repo.byId>>>;
 
+/** What another module adds to a session's turn: more to its instructions, more tool servers. */
+export interface TurnExtras {
+  instructions: string;
+  mcpServers: McpServerConfig[];
+}
+type ExtrasProvider = (session: Row) => Promise<TurnExtras | null>;
+
+/** A turn's final state, as other modules hear of it. */
+export interface TurnEnd {
+  id: string;
+  session_id: string;
+  status: string;
+  assistant_message: string | null;
+  error_message: unknown;
+}
+type TurnEndListener = (turn: TurnEnd) => Promise<void>;
+
+/** What other modules hooked into this server's sessions. Kept per server: a process may run several. */
+type IdleListener = (sessionId: string) => Promise<void>;
+const hooks = new WeakMap<Ctx, { extras: ExtrasProvider[]; turnEnd: TurnEndListener[]; idle: IdleListener[] }>();
+function hooksOf(ctx: Ctx) {
+  let mine = hooks.get(ctx);
+  if (!mine) hooks.set(ctx, (mine = { extras: [], turnEnd: [], idle: [] }));
+  return mine;
+}
+
+/**
+ * Hear when a session becomes free to take a turn. A turn's final state and
+ * the session going idle are reported separately and in either order, so
+ * anything that wants to start the next turn listens for this, not for the end.
+ */
+export const onSessionIdle = (ctx: Ctx, listener: IdleListener): void => void hooksOf(ctx).idle.push(listener);
+export function sessionIdle(ctx: Ctx, sessionId: string): void {
+  for (const listener of hooksOf(ctx).idle)
+    void listener(sessionId).catch((err: unknown) => ctx.log(err, `session ${sessionId}: an idle listener failed`));
+}
+
+/** Have every turn ask `provider` what it adds. (Tasks give their lead a toolkit and a protocol this way.) */
+export const registerTurnExtras = (ctx: Ctx, provider: ExtrasProvider): void => void hooksOf(ctx).extras.push(provider);
+export const onTurnEnd = (ctx: Ctx, listener: TurnEndListener): void => void hooksOf(ctx).turnEnd.push(listener);
+
+/** Tell the listeners; one that fails is logged and does not stop the others. */
+export function turnEnded(ctx: Ctx, turn: TurnEnd): void {
+  for (const listener of hooksOf(ctx).turnEnd)
+    void listener(turn).catch((err: unknown) => ctx.log(err, `turn ${turn.id}: a turn-end listener failed`));
+}
+
 /** The session as the kernel on the device needs it for this turn, and the skill packages its agent carries. */
 async function kernelSession(ctx: Ctx, row: Row): Promise<{ session: Session; skillBundles: SkillBundle[] }> {
   const [agent, project, channel] = await Promise.all([
@@ -42,17 +90,22 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<{ session: Session; sk
   if (channel && !protocol)
     throw conflict("this session's model channel can no longer drive its runtime", "protocol_mismatch");
 
+  const extras = (await Promise.all(hooksOf(ctx).extras.map((provide) => provide(row)))).flatMap((e) => (e ? [e] : []));
   // A deployed agent is a live reference: the turn uses its instructions as they are now.
   const instructions = [
     agent?.instructions ?? "",
     project?.instructions ? `## Project: ${project.name}\n${project.instructions}` : "",
+    ...extras.map((extra) => extra.instructions),
   ]
     .filter(Boolean)
     .join("\n\n");
   // …and its equipment as it is now: the current version of each skill it names.
   const skillBundles = await skills.bundlesFor(ctx, row.org_id, agent?.skills ?? []);
   const equipped = skillBundles.map((bundle) => bundle.slug);
-  const mcpServers = await connectors.serversFor(ctx, row.org_id, agent?.connector_types ?? []);
+  const mcpServers = [
+    ...(await connectors.serversFor(ctx, row.org_id, agent?.connector_types ?? [])),
+    ...extras.flatMap((extra) => extra.mcpServers),
+  ];
   const session = Session.parse({
     id: row.id,
     agent_config: {
@@ -168,6 +221,13 @@ export async function closeStrandedTurn(ctx: Ctx, sessionId: string, reason: str
   if (!row) return;
   const error = { type: "error", category: "interrupted", retry_status: "terminal", message: reason };
   for (const messageId of await repo.failRunningMessages(ctx.db, sessionId, { message: reason })) {
+    turnEnded(ctx, {
+      id: messageId,
+      session_id: sessionId,
+      status: "errored",
+      assistant_message: null,
+      error_message: { message: reason },
+    });
     for (const [type, data] of [
       ["session_error", { message: reason, category: "interrupted" }],
       ["session_idle", { stop_reason: error }],

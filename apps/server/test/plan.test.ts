@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PlanError, TaskPlan, TaskStateError, assertTaskTransition } from "../src/tasks/plan.ts";
+import { PlanError, TaskPlan, TaskStateError, assertTaskTransition } from "../src/modules/tasks/plan.ts";
 
 const plan = () =>
   TaskPlan.fromJson({
@@ -69,7 +69,12 @@ describe("TaskPlan", () => {
     const p = plan();
     p.setStatus("a", "in_progress");
     const again = TaskPlan.fromJson(JSON.parse(JSON.stringify(p.toJson())));
-    expect(again.toPanel().map((n) => [n.key, n.status])).toEqual([["a", "active"], ["b", "pending"], ["c", "pending"], ["d", "pending"]]);
+    expect(again.toPanel().map((n) => [n.key, n.status])).toEqual([
+      ["a", "active"],
+      ["b", "pending"],
+      ["c", "pending"],
+      ["d", "pending"],
+    ]);
   });
 });
 

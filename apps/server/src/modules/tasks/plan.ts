@@ -178,7 +178,8 @@ export class TaskPlan {
     const before = { ...node, depends_on: [...node.depends_on] };
     for (const [name, value] of Object.entries(fields)) {
       if (name === "key") continue;
-      if (!(PATCHABLE as readonly string[]).includes(name)) throw new PlanError(`subtask field "${name}" cannot be modified`);
+      if (!(PATCHABLE as readonly string[]).includes(name))
+        throw new PlanError(`subtask field "${name}" cannot be modified`);
       if (name === "depends_on") {
         if (!Array.isArray(value) || !value.every((x) => typeof x === "string")) {
           throw new PlanError(`subtask "${key}": 'depends_on' must be a list of keys`);
@@ -199,7 +200,11 @@ export class TaskPlan {
   }
 
   /** The one choke point for status writes; enforces the transition table. */
-  setStatus(key: string, status: SubtaskStatus, extra: Partial<Pick<Subtask, "attempts" | "latest_run_session_id" | "review_feedback">> = {}): Subtask {
+  setStatus(
+    key: string,
+    status: SubtaskStatus,
+    extra: Partial<Pick<Subtask, "attempts" | "latest_run_session_id" | "review_feedback">> = {},
+  ): Subtask {
     const node = this.get(key);
     if (!node) throw new PlanError(`no subtask with key "${key}"`);
     if (status !== node.status && !NODE_TRANSITIONS[node.status].includes(status)) {

@@ -21,7 +21,32 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     startModelGateway(),
   ]);
   // Conversations in the specs are answered by this stand-in model.
-  model.handler = () => ({ content: "The answer is forty-two." });
+  model.handler = (request) => {
+    const system = request.messages[0]?.content ?? "";
+    // A task's lead works through the orchestrator's tools, one step per tool result it has seen.
+    if (system.includes("You are the LEAD")) {
+      const step = request.messages.filter((message) => message.role === "tool").length;
+      const tool = (name: string, args: unknown = {}) => ({ tool: { name: `mcp__task__${name}`, args } });
+      const script = [
+        tool("plan_task", {
+          subtasks: [
+            { key: "research", title: "Research the market", goal: "Find the numbers.", agent: "Researcher" },
+            { key: "write", title: "Write the brief", goal: "Write it up.", agent: "Writer", depends_on: ["research"] },
+          ],
+        }),
+        tool("dispatch", { subtask_key: "research" }),
+        tool("await_members", { timeout_s: 30 }),
+        tool("review_subtask", { subtask_key: "research", decision: "approve" }),
+        tool("dispatch", { subtask_key: "write" }),
+        tool("await_members", { timeout_s: 30 }),
+        tool("review_subtask", { subtask_key: "write", decision: "approve" }),
+        tool("finish_task", { summary: "The brief is written: the market is worth 42.", artifacts: ["brief.md"] }),
+      ];
+      return script[step] ?? { content: "The task is complete." };
+    }
+    if (system.includes("You are a MEMBER")) return { content: "Finished my part: the market is worth 42." };
+    return { content: "The answer is forty-two." };
+  };
   process.env["E2E_MODEL_URL"] = model.url;
   // Specs add model channels that point at this stand-in vendor.
   process.env["E2E_VENDOR_URL"] = vendor.url;

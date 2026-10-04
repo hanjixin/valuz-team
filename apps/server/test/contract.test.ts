@@ -38,18 +38,19 @@ describe("contract-driven server", () => {
   it("routes the contract's custom verbs (`{id}:verb`) as distinct operations", async () => {
     const { token } = await signUp(t, "verbs");
     const id = "3f2b6c1e-0000-4000-8000-000000000001";
+    // Each verb is its own operation, with its own request schema…
+    const refusal = async (verb: string) => (await t.call("POST", `/v1/tasks/${id}:${verb}`, { token, body: {} })).body;
+    expect((await refusal("commit")).message).toMatch(/caller_session_id/);
+    expect((await refusal("inject")).message).toMatch(/text/);
+    expect((await refusal("intervene")).message).toMatch(/action/);
+    // …and reaches its own handler, which here finds no such task.
     const commit = await t.call("POST", `/v1/tasks/${id}:commit`, { token, body: { caller_session_id: "s1" } });
-    const abandon = await t.call("POST", `/v1/tasks/${id}:abandon`, { token, body: { caller_session_id: "s1" } });
-    expect([commit.status, commit.body.message]).toEqual([501, "commitTask is not implemented yet"]);
-    expect([abandon.status, abandon.body.message]).toEqual([501, "abandonTask is not implemented yet"]);
+    expect([commit.status, commit.body.message]).toEqual([404, "task not found"]);
     // The plain resource and a static segment with a verb are separate routes too.
-    expect((await t.call("GET", `/v1/tasks/${id}`, { token })).body.message).toBe("getTask is not implemented yet");
+    expect((await t.call("GET", `/v1/tasks/${id}`, { token })).body.message).toBe("task not found");
     expect((await t.call("POST", "/v1/notifications:read-all", { token })).body).toEqual({ ok: true });
-    expect((await t.call("POST", `/v1/tasks/${id}:nope`, { token })).status).toBe(404);
-    // …and each verb keeps its own request schema.
-    expect((await t.call("POST", `/v1/tasks/${id}:commit`, { token, body: {} })).body.message).toMatch(
-      /caller_session_id/,
-    );
+    const unknown = await t.call("POST", `/v1/tasks/${id}:nope`, { token });
+    expect([unknown.status, unknown.body.message]).toEqual([404, "route not found"]);
   });
 
   it("requires a valid access token on every operation the contract does not mark public", async () => {

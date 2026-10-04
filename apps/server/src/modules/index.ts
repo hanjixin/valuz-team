@@ -18,4 +18,5 @@ export * from "./settings/handlers.ts";
 export * from "./sharing/handlers.ts";
 export * from "./skills/handlers.ts";
 export * from "./system/handlers.ts";
+export * from "./tasks/handlers.ts";
 export * from "./teams/handlers.ts";

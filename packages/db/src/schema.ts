@@ -353,6 +353,62 @@ export interface ConnectorsTable {
   updated_at: Timestamp;
 }
 
+export interface TasksTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  project_id: string;
+  device_id: string | null;
+  title: string;
+  goal: string;
+  status: string;
+  lead_agent_slug: string;
+  lead_session_id: string | null;
+  cwd: string;
+  plan: ColumnType<{ subtasks: unknown[] }, string | undefined, string>;
+  plan_version: ColumnType<number, number | undefined, number>;
+  result: Json<Record<string, unknown> | null>;
+  idle_nudges: ColumnType<number, number | undefined, number>;
+  committed_at: NullableTime;
+  ended_at: NullableTime;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface TaskRunsTable {
+  id: string;
+  task_id: string;
+  session_id: string;
+  agent_slug: string;
+  kind: "lead" | "subtask";
+  subtask_key: string | null;
+  status: ColumnType<string, string | undefined, string>;
+  sequence: Generated<number>;
+  created_at: Timestamp;
+  ended_at: NullableTime;
+}
+
+export interface TaskEventsTable {
+  seq: Generated<number>;
+  task_id: string;
+  type: string;
+  actor: string;
+  session_id: string | null;
+  payload: ColumnType<Record<string, unknown>, string | undefined, string>;
+  created_at: Timestamp;
+}
+
+export interface TaskMailboxTable {
+  id: Generated<number>;
+  task_id: string;
+  session_id: string;
+  kind: string;
+  text: ColumnType<string, string | undefined, string>;
+  payload: ColumnType<Record<string, unknown>, string | undefined, string>;
+  consumed_at: NullableTime;
+  created_at: Timestamp;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -376,6 +432,10 @@ export interface Database {
   skills: SkillsTable;
   skill_versions: SkillVersionsTable;
   connectors: ConnectorsTable;
+  tasks: TasksTable;
+  task_runs: TaskRunsTable;
+  task_events: TaskEventsTable;
+  task_mailbox: TaskMailboxTable;
   message_feedback: MessageFeedbackTable;
   user_settings: UserSettingsTable;
 }

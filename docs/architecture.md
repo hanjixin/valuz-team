@@ -83,6 +83,21 @@ Who may do what with a session flows from three places: the session (its owner a
 control of everything on it). A session with no folder of its own — a quick chat, a project not bound to a
 folder — works in a workspace the host manages (`@managed/<name>`).
 
+## Tasks
+
+A task is goal-driven work by a project's team. Its lead — an agent, in a session of its own — plans it as a
+DAG of subtasks, dispatches each to a member (a session each), reviews what comes back, and finishes it.
+`modules/tasks/plan.ts` is the plan and its transition tables (pure); `service.ts` is the orchestration.
+
+The lead reaches the orchestrator as an MCP tool server the server itself hosts (`infra/toolkit.ts`), from
+whatever device and runtime it runs on, with a token that names its session. Three things move a task, each
+through one entry point: a tool call from the lead, a turn ending on a device, and a person intervening.
+Every plan write happens under a row lock; anything that talks to a device runs after the commit. Messages for
+a lead or member that is mid-turn wait in a mailbox and become its next turn.
+
+Tasks ride on sessions without sessions knowing about them: `sessions/dispatch.ts` lets other modules add to a
+turn (`registerTurnExtras`) and hear when a turn ends or a session falls idle.
+
 ## Calling out on a member's behalf
 
 A model channel's endpoint is a URL a member typed. Before the server calls one, `infra/outbound.ts` checks it
@@ -96,7 +111,7 @@ returned by the API.
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events), and the collaboration UI (Settings → Organization,
-Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), and approvals and session controls. Not yet: fork, regenerate, tasks,
+Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, and multi-agent tasks. Not yet: fork, regenerate,
 knowledge base, automations, channels, storage.
 
 The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),

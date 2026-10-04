@@ -1,5 +1,6 @@
 > **Already ported and removed from here:** accounts, organizations, invites, teams, the share ladder, the audit trail,
-> devices and remote control, the host, and the `protocol` and `kernel` packages. What is left no longer runs on its own — it is reference for porting.
+> devices and remote control, the host, the `protocol` and `kernel` packages, model channels, agents, skills,
+> connectors, projects, sessions, notifications and tasks. What is left no longer runs on its own — it is reference for porting.
 
 # agent-base
 

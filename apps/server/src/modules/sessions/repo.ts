@@ -49,10 +49,15 @@ export interface NewSession {
   cwd: string;
   effort: string | null;
   permission_mode: string;
+  /** What the session is for, beyond a conversation — e.g. its role in a task. */
+  metadata?: Record<string, unknown>;
 }
 
 export const insert = async (db: Db, row: NewSession): Promise<void> =>
-  void (await db.insertInto("sessions").values(row).execute());
+  void (await db
+    .insertInto("sessions")
+    .values({ ...row, metadata: JSON.stringify(row.metadata ?? {}) })
+    .execute());
 
 export const rename = async (db: Db, id: string, name: string): Promise<void> =>
   void (await db.updateTable("sessions").set({ name, updated_at: new Date() }).where("id", "=", id).execute());

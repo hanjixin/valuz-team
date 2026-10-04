@@ -17,6 +17,7 @@ import {
   type HostFrame,
   MANAGED_CWD_PREFIX,
   RpcMethods,
+  SERVER_URL_PLACEHOLDER,
   managedWorkspace,
   type RuntimeAvailability,
 } from "@agent-base/protocol";
@@ -154,7 +155,13 @@ export class Host {
       case "session.run": {
         const p = parsed.data as ReturnType<(typeof RpcMethods)["session.run"]["parse"]>;
         const cwd = await this.sessionCwd(actor, p.session.cwd);
-        const session = { ...p.session, cwd };
+        // MCP servers hosted by the server itself are addressed through the URL this host links by.
+        const server = this.config.server_url.replace(/\/+$/, "");
+        const hosted = (config: (typeof p.session.mcp_servers)[number]) =>
+          config.transport !== "stdio" && config.url.startsWith(SERVER_URL_PLACEHOLDER)
+            ? { ...config, url: server + config.url.slice(SERVER_URL_PLACEHOLDER.length) }
+            : config;
+        const session = { ...p.session, cwd, mcp_servers: p.session.mcp_servers.map(hosted) };
         this.store.adopt(session);
         // Answer "accepted" now; the turn streams back over the link.
         void this.orchestrator

@@ -48,6 +48,13 @@ export const DeviceInfo = z.object({
 });
 export type DeviceInfo = z.infer<typeof DeviceInfo>;
 
+/**
+ * A session may be given MCP servers that the server itself hosts (the task
+ * toolkit). The server does not know the address a device reaches it by, so it
+ * writes this prefix and the host puts its own configured server URL in.
+ */
+export const SERVER_URL_PLACEHOLDER = "agent-base-server:";
+
 // -- RPC: server → host --
 
 /** Who asked. Hosts log it and can enforce local policy on top of server ACL. */

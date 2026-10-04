@@ -47,7 +47,7 @@ export function present(row: Row, permission: sharing.Permission, totalTokens = 
     permission_mode: row.permission_mode as Detail["permission_mode"],
     effort: row.effort as Detail["effort"],
     mode: row.mode as Detail["mode"],
-    task_id: null,
+    task_id: (row.metadata as { valuz?: { task?: { task_id?: string } } }).valuz?.task?.task_id ?? null,
     worktree: null,
     forked_from_session_id: null,
     background: false,
@@ -109,6 +109,9 @@ export async function list(ctx: Ctx, auth: Auth, filter: { projectId?: string; q
 }
 
 /** The device a new session runs on: the one named, the project's, else the caller's own that is online. */
+export const deviceFor = (ctx: Ctx, auth: Auth, wanted: string | null | undefined, projectDevice: string | null) =>
+  chooseDevice(ctx, auth, wanted, projectDevice);
+
 async function chooseDevice(ctx: Ctx, auth: Auth, wanted: string | null | undefined, projectDevice: string | null) {
   const named = wanted ?? projectDevice;
   if (named) return (await devices.get(ctx, auth, named, "use")).id;
@@ -222,4 +225,63 @@ export async function setControls(
     throw badRequest(`the ${row.runtime_provider} runtime has no "${controls.mode}" mode`, "unsupported_mode");
   await repo.setControls(ctx.db, id, controls);
   return get(ctx, auth, id);
+}
+
+/**
+ * A session the server starts on a member's behalf — a task's lead, or a
+ * member working on one of its subtasks. It belongs to that member, runs as
+ * the agent given, and uses the agent's channel or, failing that, the member's
+ * default one.
+ */
+export async function createForRun(
+  ctx: Ctx,
+  tx: typeof ctx.db,
+  run: {
+    owner: Auth;
+    projectId: string;
+    deviceId: string;
+    agent: {
+      id: string;
+      runtime: string;
+      model: string;
+      provider_id: string | null;
+      effort: string | null;
+      permission_mode: string;
+    };
+    agentSlug: string;
+    cwd: string;
+    name: string;
+    metadata: Record<string, unknown>;
+  },
+): Promise<string> {
+  const { agent } = run;
+  const defaults = await providers.getDefaults(ctx, run.owner);
+  const providerId = agent.provider_id ?? defaults.default_provider_id;
+  const channel = providerId ? await providers.describe(ctx, run.owner, providerId) : null;
+  if (channel && !protocolFor(agent.runtime, channel.protocols as ApiProtocol[]))
+    throw badRequest(
+      `agent "${run.agentSlug}" runs on ${agent.runtime}, which its model channel cannot drive`,
+      "protocol_mismatch",
+    );
+  if (!channel && agent.runtime === "deepagents")
+    throw badRequest(`agent "${run.agentSlug}" needs a model channel`, "provider_required");
+  const id = crypto.randomUUID();
+  await repo.insert(tx, {
+    id,
+    org_id: run.owner.orgId,
+    owner_id: run.owner.userId,
+    project_id: run.projectId,
+    device_id: run.deviceId,
+    agent_id: agent.id,
+    agent_slug: run.agentSlug,
+    provider_id: providerId,
+    name: run.name,
+    runtime_provider: agent.runtime,
+    model: agent.model || channel?.default_model || defaults.default_model || "",
+    cwd: run.cwd,
+    effort: agent.effort,
+    permission_mode: agent.permission_mode,
+    metadata: run.metadata,
+  });
+  return id;
 }

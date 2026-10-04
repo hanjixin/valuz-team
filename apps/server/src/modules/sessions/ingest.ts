@@ -5,7 +5,7 @@
  */
 import type { Ctx } from "../../infra/context.ts";
 import { orgChannel } from "../../infra/pubsub.ts";
-import { announce, closeStrandedTurn, drain } from "./dispatch.ts";
+import { announce, closeStrandedTurn, drain, sessionIdle, turnEnded } from "./dispatch.ts";
 import * as repo from "./repo.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -55,14 +55,20 @@ export function attach(ctx: Ctx): void {
               session_id: frame.session_id,
               status: frame.patch.status,
             });
-          if (orgId && frame.patch.status === "idle") next(frame.session_id);
+          if (orgId && frame.patch.status === "idle") {
+            next(frame.session_id);
+            sessionIdle(ctx, frame.session_id);
+          }
           return;
         }
         case "message.upsert": {
           const { message } = frame;
           if (!(await repo.orgOfSessionOn(ctx.db, device.id, message.session_id))) return;
           await repo.upsertMessage(ctx.db, message);
-          if (message.status !== "running") next(message.session_id);
+          if (message.status !== "running") {
+            turnEnded(ctx, message);
+            next(message.session_id);
+          }
         }
       }
     },

@@ -155,3 +155,17 @@ export async function resolveForSession(ctx: Ctx, auth: Auth, projectId: string 
   if (!agent) throw notFound("agent");
   return agent;
 }
+
+/** A project's team as a task's lead sees it: who can be given work, and what each is for. */
+export async function teamFor(db: Ctx["db"], projectId: string) {
+  const team = await repo.listForProject(db, projectId);
+  const agentsById = new Map(
+    (await Promise.all(team.map((member) => agentRepo.findById(db, member.agent_id)))).flatMap((agent) =>
+      agent ? [[agent.id, agent] as const] : [],
+    ),
+  );
+  return team.flatMap((member) => {
+    const agent = agentsById.get(member.agent_id);
+    return agent ? [{ slug: member.agent_slug, agent }] : [];
+  });
+}

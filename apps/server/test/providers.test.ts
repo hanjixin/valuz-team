@@ -12,6 +12,11 @@ describe("model channels", () => {
 
   const call = (account: Account, method: string, url: string, body?: object) =>
     t.call(method, url, { token: account.token, ...(body ? { body } : {}) });
+  /** The channels a member added or was given — the two built-in subscription channels aside. */
+  const added = async (account: Account) =>
+    (await call(account, "GET", "/v1/providers")).body.providers.filter(
+      (channel: { auth_type: string }) => channel.auth_type !== "oauth",
+    );
   const add = (account: Account, body: object) => call(account, "POST", "/v1/providers", body);
 
   beforeAll(async () => {
@@ -48,7 +53,7 @@ describe("model channels", () => {
     });
     const wrong = await probe("sk-wrong");
     expect([wrong.status, wrong.body.detail]).toEqual([422, "API Key 无效，请检查后重试"]);
-    expect((await call(alice, "GET", "/v1/providers")).body.providers).toEqual([]);
+    expect(await added(alice)).toEqual([]);
   });
 
   it("adds a channel only when the upstream accepts the key, and never gives the key back", async () => {
@@ -59,7 +64,7 @@ describe("model channels", () => {
       base_url: vendor.url,
     });
     expect(refused.status).toBe(422);
-    expect((await call(alice, "GET", "/v1/providers")).body.providers).toEqual([]);
+    expect(await added(alice)).toEqual([]);
     expect((await add(alice, { name: "x", provider_kind: "nope", api_key: "k" })).status).toBe(400);
 
     const created = await add(alice, {
@@ -98,7 +103,7 @@ describe("model channels", () => {
   });
 
   it("is private to its owner until shared; `use` runs models through it without revealing where it points", async () => {
-    expect((await call(bob, "GET", "/v1/providers")).body.providers).toEqual([]);
+    expect(await added(bob)).toEqual([]);
     expect((await call(bob, "GET", `/v1/providers/${channelId}`)).status).toBe(404);
     expect((await call(bob, "GET", "/v1/providers/not-a-uuid")).status).toBe(404);
 
@@ -137,12 +142,13 @@ describe("model channels", () => {
 
     const options = (await call(bob, "GET", "/v1/settings/model-options")).body;
     expect(options.current).toEqual({ runtime: "claude_agent", provider_id: channelId, model: "beta-2" });
-    expect(options.groups).toHaveLength(1);
-    expect(options.groups[0]).toMatchObject({
+    expect(options.groups.map((group: { key: string }) => group.key)).toEqual(["subscription", "org"]);
+    const shared = options.groups[1];
+    expect(shared).toMatchObject({
       key: "org",
       providers: [{ label: "Team DeepSeek", status: "available" }],
     });
-    expect(options.groups[0].providers[0].models).toEqual([
+    expect(shared.providers[0].models).toEqual([
       expect.objectContaining({
         model_id: "alpha-1",
         label: "alpha-1",
@@ -158,6 +164,47 @@ describe("model channels", () => {
     });
     expect(patched.body).toMatchObject({ default_effort: "max", default_runtime: "codex", default_model: "beta-2" });
     expect((await call(bob, "PATCH", "/v1/settings/model-defaults", { default_effort: "ludicrous" })).status).toBe(400);
+  });
+
+  it("offers the Claude and Codex subscriptions as built-in channels that hold nothing: the device's login is the key", async () => {
+    const carol = await joinOrg(t, alice, "carol");
+    const channels = (await call(carol, "GET", "/v1/providers")).body.providers;
+    expect(channels.map((c: { id: string }) => c.id)).toEqual(["ch-claude-subscription", "ch-codex-subscription"]);
+    expect(channels[0]).toMatchObject({
+      provider_kind: "claude-subscription",
+      auth_type: "oauth",
+      enabled: true,
+      credential_source: "cli_keychain",
+      deletable: false,
+      effective_protocol: "anthropic",
+      default_model: "claude-sonnet-4-6",
+    });
+    expect(channels[0].models[0]).toMatchObject({ runtimes: ["claude_agent"] });
+    expect(channels[1].models.every((m: { runtimes: string[] }) => m.runtimes[0] === "codex")).toBe(true);
+
+    // It can be a member's default; the runtime follows it.
+    await call(carol, "PATCH", "/v1/settings/model-defaults", { default_runtime: "claude_agent" });
+    const set = await call(carol, "POST", "/v1/providers/default", { provider_id: "ch-codex-subscription" });
+    expect(set.status).toBe(200);
+    expect((await call(carol, "GET", "/v1/settings/model-defaults")).body).toMatchObject({
+      default_provider_id: "ch-codex-subscription",
+      default_model: "gpt-5.5",
+      default_runtime: "codex",
+    });
+    expect((await call(carol, "GET", "/v1/providers/ch-codex-subscription")).body.is_default).toBe(true);
+    const picker = (await call(carol, "GET", "/v1/settings/model-options")).body;
+    expect(picker.groups[0]).toMatchObject({ key: "subscription" });
+    expect(picker.groups[0].providers.map((p: { status: string }) => p.status)).toEqual(["available", "available"]);
+
+    // Switched off and on by the member; never deleted, and there is nothing to test or edit.
+    const off = await call(carol, "PATCH", "/v1/providers/ch-claude-subscription", { enabled: false });
+    expect(off.body).toMatchObject({ enabled: false, credential_source: "none" });
+    expect((await call(alice, "GET", "/v1/providers/ch-claude-subscription")).body.enabled).toBe(true); // hers alone
+    expect((await call(carol, "POST", "/v1/providers/ch-claude-subscription/enable")).body).toMatchObject({
+      enabled: true,
+      credential_source: "cli_keychain",
+    });
+    expect((await call(carol, "DELETE", "/v1/providers/ch-claude-subscription")).status).toBe(403);
   });
 
   it("a custom endpoint takes the model ids its owner names, and checks which of them really answer", async () => {
@@ -260,7 +307,7 @@ describe("model channels", () => {
 
   it("deleting a channel ends its shares, and a default that pointed at it reads as unset", async () => {
     expect((await call(alice, "DELETE", `/v1/providers/${channelId}`)).status).toBe(204);
-    expect((await call(bob, "GET", "/v1/providers")).body.providers).toEqual([]);
+    expect(await added(bob)).toEqual([]);
     expect((await call(bob, "GET", "/v1/settings/model-defaults")).body).toMatchObject({
       default_provider_id: null,
       default_model: null,

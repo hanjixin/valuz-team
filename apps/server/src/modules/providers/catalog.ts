@@ -30,9 +30,9 @@ const descriptor = (kind: string, display_name: string, overrides: Partial<Descr
 });
 
 /**
- * Subscription channels (Claude Pro/Max, Codex · ChatGPT) are absent on
- * purpose: they authenticate through a CLI login on the machine that runs the
- * agent, so in agent-base they belong to a device, not to the server.
+ * The channels a member can add. The two subscription channels (Claude Pro/Max,
+ * Codex · ChatGPT) are not among them: they are built in, and hold nothing —
+ * see `subscriptions.ts`.
  */
 export const DESCRIPTORS: readonly Descriptor[] = [
   descriptor("anthropic", "Anthropic", {

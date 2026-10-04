@@ -24,6 +24,7 @@ import {
 } from "./catalog.ts";
 import { completeOnce, ModelDiscoveryError, type Upstream, discoverModels, pingModel, pingModels } from "./discover.ts";
 import * as repo from "./repo.ts";
+import { SUBSCRIPTIONS, type Subscription, subscriptionOf } from "./subscriptions.ts";
 
 sharing.registerShareable("provider", "providers");
 
@@ -111,19 +112,79 @@ const upstreamOf = (
 
 export const listDescriptors = (): typeof DESCRIPTORS => DESCRIPTORS;
 
+// -- Subscription channels --
+
+const SUBSCRIPTION_SWITCHES = "subscription-channels";
+
+/** Which subscription channels the member has switched off. They are on unless said otherwise. */
+const switchedOff = async (ctx: Ctx, auth: Auth): Promise<Record<string, boolean>> =>
+  settings.get(ctx.db, auth, SUBSCRIPTION_SWITCHES, {} as Record<string, boolean>);
+
+function presentSubscription(subscription: Subscription, enabled: boolean, defaultProviderId: string | null): Channel {
+  return {
+    id: subscription.id,
+    name: subscription.name,
+    provider_kind: subscription.kind,
+    source: "user",
+    group: "subscription",
+    group_rank: 10,
+    enabled,
+    unavailable_reason: enabled ? null : "未启用",
+    is_default: subscription.id === defaultProviderId,
+    deletable: false,
+    default_model: subscription.default_model,
+    test_status: "success",
+    // Nothing is stored for it: the device's own CLI login is the credential.
+    credential_source: enabled ? "cli_keychain" : "none",
+    auth_type: "oauth",
+    protocol: null,
+    effective_protocol: subscription.protocol,
+    compatible_protocols: [subscription.protocol],
+    models: subscription.models.map((model) => ({ ...model, runtimes: [subscription.runtime] })),
+    permission: "use",
+    base_url: null,
+    supports_custom_base_url: false,
+    supports_connection_test: false,
+  };
+}
+
+/** Switch a subscription channel on (or off) for the member. */
+export async function enable(ctx: Ctx, auth: Auth, id: string, on = true): Promise<Channel> {
+  const subscription = subscriptionOf(id);
+  if (!subscription) return get(ctx, auth, id);
+  await settings.set(ctx.db, auth, SUBSCRIPTION_SWITCHES, { ...(await switchedOff(ctx, auth)), [id]: !on });
+  return get(ctx, auth, id);
+}
+
 export async function list(ctx: Ctx, auth: Auth): Promise<Channel[]> {
-  const [rows, defaults] = await Promise.all([repo.list(ctx.db, auth), storedDefaults(ctx, auth)]);
-  return rows.map((row) => present(row, auth, defaults.default_provider_id));
+  const [rows, defaults, off] = await Promise.all([
+    repo.list(ctx.db, auth),
+    storedDefaults(ctx, auth),
+    switchedOff(ctx, auth),
+  ]);
+  return [
+    ...SUBSCRIPTIONS.map((subscription) =>
+      presentSubscription(subscription, off[subscription.id] !== true, defaults.default_provider_id),
+    ),
+    ...rows.map((row) => present(row, auth, defaults.default_provider_id)),
+  ];
 }
 
 export async function get(ctx: Ctx, auth: Auth, id: string): Promise<Channel> {
+  const subscription = subscriptionOf(id);
+  if (subscription)
+    return presentSubscription(
+      subscription,
+      (await switchedOff(ctx, auth))[id] !== true,
+      (await storedDefaults(ctx, auth)).default_provider_id,
+    );
   const row = await mustFind(ctx, auth, id);
   return present(row, auth, (await storedDefaults(ctx, auth)).default_provider_id);
 }
 
 /** Throws unless the caller may run models through this channel. */
 export const assertUsable = async (ctx: Ctx, auth: Auth, id: string): Promise<void> =>
-  void (await mustFind(ctx, auth, id, "use"));
+  void (subscriptionOf(id) ?? (await mustFind(ctx, auth, id, "use")));
 
 /**
  * What a runtime needs to call the channel's model. Needs `use`: the key is
@@ -174,6 +235,8 @@ export async function complete(
 
 /** The channel's protocols and default model, for a caller who may use it. */
 export async function describe(ctx: Ctx, auth: Auth, id: string) {
+  const subscription = subscriptionOf(id);
+  if (subscription) return { protocols: [subscription.protocol], default_model: subscription.default_model };
   const row = await mustFind(ctx, auth, id, "use");
   return { protocols: compatibleProtocols(row.provider_kind, row.protocol), default_model: row.default_model };
 }
@@ -228,6 +291,11 @@ export async function update(
   id: string,
   input: Schema<"ProviderUpdateRequest">,
 ): Promise<Channel> {
+  // A subscription channel has nothing to edit but its switch.
+  if (subscriptionOf(id)) {
+    const { enabled } = input as { enabled?: boolean | null };
+    return typeof enabled === "boolean" ? enable(ctx, auth, id, enabled) : get(ctx, auth, id);
+  }
   const existing = await mustFind(ctx, auth, id, "edit");
   const d = descriptorOf(existing.provider_kind);
   if (input.protocol && !pinnedProtocol(input.protocol)) throw badRequest(`unknown protocol "${input.protocol}"`);
@@ -272,6 +340,7 @@ export async function update(
 }
 
 export async function remove(ctx: Ctx, auth: Auth, id: string): Promise<void> {
+  if (subscriptionOf(id)) throw forbidden("a subscription channel is built in; switch it off instead");
   await mustFind(ctx, auth, id, "admin");
   await ctx.db.transaction().execute(async (tx) => {
     await sharing.revokeForResource(tx, "provider", id);
@@ -366,7 +435,7 @@ export async function refreshModels(ctx: Ctx, auth: Auth, id: string): Promise<S
 /** Defaults pointing at a channel the member can no longer use read as unset. */
 export async function getDefaults(ctx: Ctx, auth: Auth): Promise<ModelDefaults> {
   const stored = await storedDefaults(ctx, auth);
-  if (!stored.default_provider_id) return stored;
+  if (!stored.default_provider_id || subscriptionOf(stored.default_provider_id)) return stored;
   const usable = await repo.find(ctx.db, auth, stored.default_provider_id);
   return usable ? stored : { ...stored, default_provider_id: null, default_model: null };
 }
@@ -377,7 +446,7 @@ export async function patchDefaults(ctx: Ctx, auth: Auth, patch: Schema<"ModelDe
   if (patch.default_effort) next.default_effort = patch.default_effort;
   if (patch.default_model !== undefined) next.default_model = patch.default_model || null;
   if (patch.default_provider_id !== undefined) {
-    if (patch.default_provider_id) await mustFind(ctx, auth, patch.default_provider_id, "use");
+    if (patch.default_provider_id) await assertUsable(ctx, auth, patch.default_provider_id);
     next.default_provider_id = patch.default_provider_id || null;
     if (!next.default_provider_id) next.default_model = null;
   }
@@ -387,9 +456,12 @@ export async function patchDefaults(ctx: Ctx, auth: Auth, patch: Schema<"ModelDe
 
 /** Make a channel the member's default, on a runtime it can actually drive. */
 export async function setDefault(ctx: Ctx, auth: Auth, id: string, model: string | null | undefined): Promise<void> {
-  const row = await mustFind(ctx, auth, id, "use");
+  const subscription = subscriptionOf(id);
+  const row = subscription ?? (await mustFind(ctx, auth, id, "use"));
   const current = await storedDefaults(ctx, auth);
-  const runtimes = runtimesFor(compatibleProtocols(row.provider_kind, row.protocol));
+  const runtimes: RuntimeId[] = subscription
+    ? [subscription.runtime]
+    : runtimesFor(compatibleProtocols((row as repo.ProviderRow).provider_kind, (row as repo.ProviderRow).protocol));
   await settings.set(ctx.db, auth, "model-defaults", {
     ...current,
     default_provider_id: id,
@@ -445,3 +517,5 @@ export async function modelOptions(ctx: Ctx, auth: Auth): Promise<Schema<"ModelO
       .map(([key, group]) => ({ key, providers: group.providers })),
   };
 }
+
+export { subscriptionFor, subscriptionOf } from "./subscriptions.ts";

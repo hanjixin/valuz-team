@@ -3967,6 +3967,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/providers/{provider_id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Switch on a subscription channel
+         * @description A subscription channel (Claude Pro/Max, Codex · ChatGPT) holds no key: agents run on
+         *     a device, and use the login the device already has. Enabling one only says the member
+         *     wants it offered.
+         */
+        post: operations["enableProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/providers/{provider_id}": {
         parameters: {
             query?: never;
@@ -16316,6 +16338,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SetDefaultProviderResponse"];
+                };
+            };
+        };
+    };
+    enableProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The channel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LLMChannelDetail"];
                 };
             };
         };

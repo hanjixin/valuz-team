@@ -40,7 +40,8 @@ export function present(row: Row, permission: sharing.Permission, totalTokens = 
     origin: row.origin as Detail["origin"],
     last_user_message_text: row.last_user_message_text,
     locked_model_id: row.model || null,
-    locked_provider_id: row.provider_id,
+    // A session with no channel runs on its device's own login: the subscription channel, as the app knows it.
+    locked_provider_id: row.provider_id ?? providers.subscriptionFor(row.runtime_provider)?.id ?? null,
     updated_at: row.updated_at.getTime(),
     created_at: row.created_at.getTime(),
     runtime_provider: row.runtime_provider as Detail["runtime_provider"],
@@ -137,6 +138,45 @@ export const recent = (
 export const deviceFor = (ctx: Ctx, auth: Auth, wanted: string | null | undefined, projectDevice: string | null) =>
   chooseDevice(ctx, auth, wanted, projectDevice);
 
+/**
+ * What a session runs on. A channel named for it (by the request, or by its
+ * agent) is used or refused; with none named, the member's default is used when
+ * it can drive the runtime. The Claude and Codex runtimes need no channel at
+ * all — the device's own login will do — so for them "no channel" is an answer,
+ * and a subscription channel is just a way of saying so.
+ */
+async function chooseModel(
+  ctx: Ctx,
+  auth: Auth,
+  wanted: { providerId?: string | null; runtime?: string | null; model?: string | null; who: string },
+): Promise<{ providerId: string | null; runtime: string; model: string }> {
+  const defaults = await providers.getDefaults(ctx, auth);
+  const named = providers.subscriptionOf(wanted.providerId);
+  const runtime = wanted.runtime ?? named?.runtime ?? defaults.default_runtime;
+  const mismatch = () =>
+    badRequest(`${wanted.who}'s model channel cannot drive the ${runtime} runtime`, "protocol_mismatch");
+
+  if (named) {
+    if (named.runtime !== runtime) throw mismatch();
+    return { providerId: null, runtime, model: wanted.model || named.default_model };
+  }
+  if (wanted.providerId) {
+    const channel = await providers.describe(ctx, auth, wanted.providerId);
+    if (!protocolFor(runtime, channel.protocols as ApiProtocol[])) throw mismatch();
+    return { providerId: wanted.providerId, runtime, model: wanted.model || channel.default_model || "" };
+  }
+  // Nothing named: the member's default, if it is a channel that can drive this runtime.
+  const usual = defaults.default_provider_id;
+  const channel = usual && !providers.subscriptionOf(usual) ? await providers.describe(ctx, auth, usual) : null;
+  if (channel && protocolFor(runtime, channel.protocols as ApiProtocol[]))
+    return { providerId: usual, runtime, model: wanted.model || channel.default_model || defaults.default_model || "" };
+  const login = providers.subscriptionFor(runtime);
+  if (!login)
+    throw badRequest(`${wanted.who} needs a model channel: add one in Settings → Models`, "provider_required");
+  const mine = providers.subscriptionOf(usual)?.id === login.id ? defaults.default_model : null;
+  return { providerId: null, runtime, model: wanted.model || mine || login.default_model };
+}
+
 async function chooseDevice(ctx: Ctx, auth: Auth, wanted: string | null | undefined, projectDevice: string | null) {
   const named = wanted ?? projectDevice;
   if (named) return (await devices.get(ctx, auth, named, "use")).id;
@@ -169,15 +209,12 @@ export async function create(
   const agent = input.agent_slug
     ? await members.resolveForSession(ctx, auth, existing?.id ?? null, input.agent_slug)
     : null;
-  const defaults = await providers.getDefaults(ctx, auth);
-  const runtime = input.runtime_id ?? agent?.runtime ?? defaults.default_runtime;
-  const providerId = input.provider_id ?? agent?.provider_id ?? defaults.default_provider_id;
-  // A channel is optional for the runtimes that can sign in on the device itself.
-  const channel = providerId ? await providers.describe(ctx, auth, providerId) : null;
-  if (channel && !protocolFor(runtime, channel.protocols as ApiProtocol[]))
-    throw badRequest(`this model channel cannot drive the ${runtime} runtime`, "protocol_mismatch");
-  if (!channel && runtime === "deepagents")
-    throw badRequest("this runtime needs a model channel: add one in Settings → Models", "provider_required");
+  const chosen = await chooseModel(ctx, auth, {
+    providerId: input.provider_id ?? agent?.provider_id,
+    runtime: input.runtime_id ?? agent?.runtime,
+    model: input.model_id || agent?.model,
+    who: "this session",
+  });
 
   const id = crypto.randomUUID();
   const project = existing ?? (await projects.createChat(ctx, auth, deviceId));
@@ -189,10 +226,10 @@ export async function create(
     device_id: deviceId,
     agent_id: agent?.id ?? null,
     agent_slug: agent ? (input.agent_slug ?? null) : null,
-    provider_id: providerId,
+    provider_id: chosen.providerId,
     name: input.title?.trim() || null,
-    runtime_provider: runtime,
-    model: input.model_id || agent?.model || channel?.default_model || defaults.default_model || "",
+    runtime_provider: chosen.runtime,
+    model: chosen.model,
     // A project without a folder of its own works in one the device manages; so does every quick chat.
     cwd: project.root_path ?? managedCwd(quickChat ? `chat-${id}` : `project-${project.id}`),
     effort: input.effort ?? agent?.effort ?? null,
@@ -349,16 +386,12 @@ export async function createForRun(
   },
 ): Promise<string> {
   const { agent } = run;
-  const defaults = await providers.getDefaults(ctx, run.owner);
-  const providerId = agent.provider_id ?? defaults.default_provider_id;
-  const channel = providerId ? await providers.describe(ctx, run.owner, providerId) : null;
-  if (channel && !protocolFor(agent.runtime, channel.protocols as ApiProtocol[]))
-    throw badRequest(
-      `agent "${run.agentSlug}" runs on ${agent.runtime}, which its model channel cannot drive`,
-      "protocol_mismatch",
-    );
-  if (!channel && agent.runtime === "deepagents")
-    throw badRequest(`agent "${run.agentSlug}" needs a model channel`, "provider_required");
+  const chosen = await chooseModel(ctx, run.owner, {
+    providerId: agent.provider_id,
+    runtime: agent.runtime,
+    model: agent.model,
+    who: `agent "${run.agentSlug}"`,
+  });
   const id = crypto.randomUUID();
   await repo.insert(tx, {
     id,
@@ -368,10 +401,10 @@ export async function createForRun(
     device_id: run.deviceId,
     agent_id: agent.id,
     agent_slug: run.agentSlug,
-    provider_id: providerId,
+    provider_id: chosen.providerId,
     name: run.name,
-    runtime_provider: agent.runtime,
-    model: agent.model || channel?.default_model || defaults.default_model || "",
+    runtime_provider: chosen.runtime,
+    model: chosen.model,
     cwd: run.cwd,
     effort: agent.effort,
     permission_mode: agent.permission_mode,

@@ -87,3 +87,8 @@ export const getModelOptions: Handler = async (req) => {
   const { ctx, auth } = await caller(req);
   return service.modelOptions(ctx, auth);
 };
+
+export const enableProvider: Handler = async (req) => {
+  const { ctx, auth, id } = await caller(req);
+  return service.enable(ctx, auth, id);
+};

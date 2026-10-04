@@ -97,8 +97,13 @@ Deliberate differences in behaviour:
 
 - Model channels belong to a member and are shared through the ladder; one shared by someone else is listed with
   `source: "org"`. The default channel and model are per member.
-- Subscription channels (Claude Pro/Max, Codex · ChatGPT) are not offered by the server: they sign in through a CLI
-  on the machine that runs the agent, so they will belong to a device.
+- Subscription channels (Claude Pro/Max, Codex · ChatGPT) are two built-in channels with the ids the app already
+  uses (`ch-claude-subscription`, `ch-codex-subscription`). They hold no credential: agents run on a device, and a
+  session on one carries no channel, so its runtime uses the login that device already has. They are on for every
+  member unless switched off, and are always reported `available` — the server cannot see a device's CLI login,
+  and the browser asking may not be on the device at all; a device that is not signed in says so when a turn runs.
+  With no channel named, a Claude or Codex session whose member's default channel cannot drive that runtime runs
+  on the device's login rather than being refused.
 - Agents and projects belong to a member and are shared through the ladder; responses carry `permission` and
   `owner_id`. An agent's slug is unique in its organization. A project's folder is on a device (`device_id`).
 - There are no built-in ("official") agents; the general assistant (`valurion`) is an ordinary agent the first-run

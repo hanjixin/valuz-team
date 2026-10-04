@@ -105,12 +105,43 @@ describe("sessions", () => {
     channelId = channel.body.id;
     await call(alice, "POST", "/v1/providers/default", { provider_id: channelId });
 
-    // A chat-completions channel cannot drive the Claude runtime.
+    // A chat-completions channel cannot drive the Claude runtime, when it is the one named…
     const mismatch = await call(alice, "POST", "/v1/sessions", {
       project_id: "chat-default",
       runtime_id: "claude_agent",
+      provider_id: channelId,
     });
     expect([mismatch.status, mismatch.body.code]).toEqual([400, "protocol_mismatch"]);
+    // …but the Claude runtime needs no channel: with none named it runs on the device's own login,
+    // which the app knows as the subscription channel.
+    const onLogin = await call(alice, "POST", "/v1/sessions", {
+      project_id: "chat-default",
+      runtime_id: "claude_agent",
+    });
+    expect(onLogin.status).toBe(201);
+    expect(onLogin.body).toMatchObject({
+      runtime_provider: "claude_agent",
+      locked_provider_id: "ch-claude-subscription",
+      locked_model_id: "claude-sonnet-4-6",
+    });
+    const named = await call(alice, "POST", "/v1/sessions", {
+      project_id: "chat-default",
+      provider_id: "ch-codex-subscription",
+      model_id: "gpt-5.6-sol",
+    });
+    expect(named.body).toMatchObject({
+      runtime_provider: "codex",
+      locked_provider_id: "ch-codex-subscription",
+      locked_model_id: "gpt-5.6-sol",
+    });
+    // A subscription is its own runtime's; and the native runtime has no login of its own to fall back on.
+    const crossed = await call(alice, "POST", "/v1/sessions", {
+      project_id: "chat-default",
+      provider_id: "ch-codex-subscription",
+      runtime_id: "claude_agent",
+    });
+    expect([crossed.status, crossed.body.code]).toEqual([400, "protocol_mismatch"]);
+    for (const id of [onLogin.body.id, named.body.id]) await call(alice, "DELETE", `/v1/sessions/${id}`);
   });
 
   it("starts a quick chat from the member's defaults, in a project and a workspace of its own", async () => {

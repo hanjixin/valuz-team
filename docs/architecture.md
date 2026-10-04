@@ -171,6 +171,11 @@ are the same ones the web app serves, behind the same sign-in.
 A model channel's endpoint is a URL a member typed. Before the server calls one, `infra/outbound.ts` checks it
 resolves only to public addresses and redirects are not followed — otherwise any member could make the server
 probe its own network. `ALLOW_PRIVATE_UPSTREAMS=1` lifts this for self-hosted setups with a gateway on the LAN.
+Not every channel has a credential on the server. The Claude and Codex runtimes can use the login their device
+already has (a Claude Pro/Max or ChatGPT subscription), so those two are built-in channels that hold nothing
+(`modules/providers/subscriptions.ts`): a session on one carries no channel, and the kernel leaves the runtime to
+the device's own sign-in.
+
 Credentials are sealed at rest with `infra/secret-box.ts` (keyed from `APP_SECRET`, per purpose) and are never
 returned by the API.
 

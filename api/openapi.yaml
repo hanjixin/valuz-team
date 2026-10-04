@@ -5985,6 +5985,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/SetDefaultProviderResponse"
 
+  /v1/providers/{provider_id}/enable:
+    post:
+      summary: Switch on a subscription channel
+      operationId: enableProvider
+      tags: [providers]
+      description: |
+        A subscription channel (Claude Pro/Max, Codex · ChatGPT) holds no key: agents run on
+        a device, and use the login the device already has. Enabling one only says the member
+        wants it offered.
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: The channel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMChannelDetail"
   /v1/providers/{provider_id}:
     get:
       summary: One model channel

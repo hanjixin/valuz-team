@@ -65,14 +65,14 @@ async function present(ctx: Ctx, row: repo.BindingRow): Promise<Binding> {
   const secrets = feishu.secretsOf(ctx, row);
   return {
     enabled: row.enabled,
-    // Also the last segment of the binding's callback URL.
     channel_instance_id: row.id,
     owner_user_id: row.owner_id,
     agent_slug: row.agent_slug,
     app_id: row.app_id,
     has_app_secret: Boolean(secrets.app_secret),
-    has_verification_token: Boolean(secrets.verification_token),
-    has_encrypt_key: Boolean(secrets.encrypt_key),
+    // There is no HTTP callback: events arrive over the long connection the binder's device holds.
+    has_verification_token: false,
+    has_encrypt_key: false,
     ...(await lines.connection(ctx, row)),
   };
 }
@@ -100,19 +100,11 @@ export async function putFeishu(
   // A secret left blank keeps the stored one; there must be one to keep.
   const appSecret = input.app_secret?.trim() || kept?.app_secret;
   if (!appSecret) throw new HttpError(422, "secret_required", "App Secret is required");
-  const verification =
-    input.verification_token === undefined ? kept?.verification_token : input.verification_token.trim();
-  const encrypt = input.encrypt_key === undefined ? kept?.encrypt_key : input.encrypt_key.trim();
-
   const row = await save(ctx, auth, existing, {
     platform: feishu.PLATFORM,
     agent_slug: agentSlug,
     app_id: appId,
-    secret_enc: feishu.seal(ctx, {
-      app_secret: appSecret,
-      ...(verification ? { verification_token: verification } : {}),
-      ...(encrypt ? { encrypt_key: encrypt } : {}),
-    }),
+    secret_enc: feishu.seal(ctx, { app_secret: appSecret }),
     enabled: input.enabled,
   });
   await audit.record(

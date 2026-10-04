@@ -1,7 +1,6 @@
 import type { Schema } from "@agent-base/contract";
 import { requireAuth } from "../../infra/auth.ts";
 import type { Handler } from "../../infra/context.ts";
-import * as feishu from "./feishu.ts";
 import * as service from "./service.ts";
 
 type Req = Parameters<Handler>[0];
@@ -25,15 +24,6 @@ export const testFeishuBinding: Handler = async (req) => {
   const { ctx, auth, slug } = await caller(req);
   return service.testFeishu(ctx, auth, slug);
 };
-
-/** Public route: the platform calls it, and the binding's token or signature is the authorization. */
-export const feishuChannelCallback: Handler = async (req) =>
-  feishu.callback(
-    req.server,
-    (req.params as { channel_instance_id: string }).channel_instance_id,
-    req.headers,
-    req.body as Record<string, unknown>,
-  );
 
 export const getWeComAIBotBinding: Handler = async (req) => {
   const { ctx, auth, slug } = await caller(req);

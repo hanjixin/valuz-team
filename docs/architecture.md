@@ -161,8 +161,8 @@ the member who entered them, and the host runs bots for its owner alone.
 
 Each chat the bot is in becomes a session with that agent, owned by whoever made the binding and run on that same
 device; a turn ending sends the answer back. What the two platforms share is `channels/chat.ts`. With the device
-off the bot is simply offline. A Feishu binding given a Verification Token or Encrypt Key can also take events at
-an HTTP callback on the server, and only then — to say the device is away — does the server post to a chat itself.
+off the bot is simply offline: the server takes no callback from either platform and posts nothing to them. The one
+call it makes is checking an app's credentials when a member presses "test".
 
 ## The desktop app
 

@@ -1,4 +1,3 @@
-import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -38,15 +37,12 @@ describe("channels: Feishu", () => {
     t.call(method, route, { token: account.token, ...(body ? { body } : {}) });
   const bind = (account: Account, slug: string, body: object) =>
     call(account, "PUT", `/v1/channels/feishu/bindings/${slug}`, { agent_slug: slug, enabled: true, ...body });
-  const post = (body: unknown, headers: Record<string, string> = {}, id = bindingId) =>
-    fetch(`${url}/v1/channels/feishu/${id}/callback`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify(body),
-    });
-  const event = (message: Record<string, unknown>, token = "vtoken", id = `ev_${++n}`) => ({
+  const APP = "cli_00000000000000a1";
+  /** The platform delivers an event to the bot's long connection — the one its device holds. */
+  const push = (body: unknown, app = APP) => platform.push(app, body);
+  const event = (message: Record<string, unknown>, id = `ev_${++n}`) => ({
     schema: "2.0",
-    header: { event_id: id, event_type: "im.message.receive_v1", token, app_id: "cli_00000000000000a1" },
+    header: { event_id: id, event_type: "im.message.receive_v1", app_id: APP },
     event: {
       sender: { sender_id: { open_id: "ou_1" } },
       message: { message_id: `om_in_${n}`, chat_type: "p2p", message_type: "text", ...message },
@@ -132,7 +128,7 @@ describe("channels: Feishu", () => {
     const bound = await bind(alice, "Support", {
       app_id: "cli_00000000000000a1",
       app_secret: FEISHU_GOOD_SECRET,
-      verification_token: "vtoken",
+      verification_token: "vtoken", // taken by the form upstream; there is no callback here to use it
     });
     expect(bound.status).toBe(200);
     expect(bound.body).toMatchObject({
@@ -141,12 +137,12 @@ describe("channels: Feishu", () => {
       agent_slug: "Support",
       app_id: "cli_00000000000000a1",
       has_app_secret: true,
-      has_verification_token: true,
+      has_verification_token: false,
       has_encrypt_key: false,
     });
     expect(JSON.stringify(bound.body)).not.toMatch(/good-secret|vtoken/);
     bindingId = bound.body.channel_instance_id;
-    // The server dials the platform itself, with the app's credentials.
+    // The binder's device dials the platform, with the app's credentials.
     await eventually(async () => platform.live() === 1);
     expect(platform.endpointCalls.at(-1)).toMatchObject({
       AppID: "cli_00000000000000a1",
@@ -170,41 +166,39 @@ describe("channels: Feishu", () => {
     });
   });
 
-  it("answers the platform's URL check and refuses what it cannot authenticate", async () => {
-    const check = await post({ type: "url_verification", challenge: "abc", token: "vtoken" });
-    expect(await check.json()).toEqual({ challenge: "abc" });
-    expect((await post({ type: "url_verification", challenge: "abc", token: "nope" })).status).toBe(403);
-    expect((await post(event({ chat_id: "oc_1", content: text("hi") }, "forged"))).status).toBe(403);
-    expect((await post(event({ chat_id: "oc_1", content: text("hi") }), {}, crypto.randomUUID())).status).toBe(404);
-    expect((await post(event({ chat_id: "oc_1", content: text("hi") }), {}, "nope")).status).toBe(404);
-    expect(platform.sent).toEqual([]);
+  it("takes nothing from the platform over HTTP: there is no callback", async () => {
+    const res = await fetch(`${url}/v1/channels/feishu/${bindingId}/callback`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "url_verification", challenge: "abc" }),
+    });
+    expect(res.status).toBe(501);
   });
 
   it("turns a chat into a session with the agent, and sends the answer back", async () => {
     model.replies.push({ content: "您好，我能帮您什么？" });
     const first = event({ chat_id: "oc_1", content: text("你好") });
-    const res = await post(first);
-    expect([res.status, await res.json()]).toEqual([200, { code: 0 }]);
+    push(first);
     await sentCount(1);
     expect(platform.sent[0]).toEqual({ chat: "oc_1", text: "您好，我能帮您什么？", auth: "Bearer t-token" });
     expect(model.requests.at(-1)?.messages[0]?.content).toContain("You are Support.");
     // The platform redelivers the same event: it is handled once.
-    await post(first);
+    push(first);
+    model.replies.push({ content: "第二个回答" });
+    push(event({ chat_id: "oc_1", content: text("继续") }));
+    await sentCount(2);
     expect(await sessions()).toHaveLength(1);
     expect((await sessions())[0]).toMatchObject({ name: "飞书 · Support", owner_id: alice.userId, origin: "user" });
 
     // Same chat, same session — the agent keeps the thread.
-    model.replies.push({ content: "第二个回答" });
-    await post(event({ chat_id: "oc_1", content: text("继续") }));
-    await sentCount(2);
     expect(model.requests.at(-1)?.messages.some((m) => m.content === "您好，我能帮您什么？")).toBe(true);
     expect(await sessions()).toHaveLength(1);
   });
 
   it("answers in a group only when mentioned, and says what it cannot do", async () => {
-    await post(event({ chat_id: "oc_group", chat_type: "group", content: text("大家好") }));
+    push(event({ chat_id: "oc_group", chat_type: "group", content: text("大家好") }));
     model.replies.push({ content: "群里的回答" });
-    await post(
+    push(
       event({
         chat_id: "oc_group",
         chat_type: "group",
@@ -218,14 +212,14 @@ describe("channels: Feishu", () => {
     expect(model.requests.at(-1)?.messages.at(-1)?.content).not.toContain("@_user_1");
     expect(await sessions()).toHaveLength(2);
 
-    await post(event({ chat_id: "oc_1", message_type: "image", content: "{}" }));
+    push(event({ chat_id: "oc_1", message_type: "image", content: "{}" }));
     await sentCount(4);
     expect(platform.sent[3]?.text).toBe("目前只支持文本消息。");
     // /new starts the chat over in a fresh session.
-    await post(event({ chat_id: "oc_1", content: text("/new") }));
+    push(event({ chat_id: "oc_1", content: text("/new") }));
     await sentCount(5);
     model.replies.push({ content: "全新的开始" });
-    await post(event({ chat_id: "oc_1", content: text("重新来") }));
+    push(event({ chat_id: "oc_1", content: text("重新来") }));
     await sentCount(6);
     expect(await sessions()).toHaveLength(3);
     expect(model.requests.at(-1)?.messages.some((m) => m.content === "第二个回答")).toBe(false);
@@ -233,52 +227,21 @@ describe("channels: Feishu", () => {
 
   it("queues what arrives mid-turn, and reports a failed turn in the chat", async () => {
     model.replies.push({ content: "慢慢来", delayMs: 400 }, { content: "第二条的回答" });
-    await post(event({ chat_id: "oc_1", content: text("第一条") }));
+    push(event({ chat_id: "oc_1", content: text("第一条") }));
     await eventually(async () => (await sessions()).some((s) => s.status === "running"));
-    await post(event({ chat_id: "oc_1", content: text("第二条") }));
+    push(event({ chat_id: "oc_1", content: text("第二条") }));
     await sentCount(8);
     expect(platform.sent.slice(6).map((message) => message.text)).toEqual(["慢慢来", "第二条的回答"]);
   });
 
-  it("with an Encrypt Key, takes only events that are encrypted and signed", async () => {
-    await bind(alice, "Support", { app_id: "cli_00000000000000a1", encrypt_key: "ekey" });
-    const sealed = (payload: unknown) => {
-      const iv = randomBytes(16);
-      const cipher = createCipheriv("aes-256-cbc", createHash("sha256").update("ekey").digest(), iv);
-      const body = {
-        encrypt: Buffer.concat([iv, cipher.update(JSON.stringify(payload)), cipher.final()]).toString("base64"),
-      };
-      const signature = createHash("sha256")
-        .update(`1700000000nonce1ekey${JSON.stringify(body)}`)
-        .digest("hex");
-      return {
-        body,
-        headers: {
-          "x-lark-request-timestamp": "1700000000",
-          "x-lark-request-nonce": "nonce1",
-          "x-lark-signature": signature,
-        },
-      };
-    };
-    model.replies.push({ content: "加密通道的回答" });
-    const enc = sealed(event({ chat_id: "oc_1", content: text("加密的消息") }));
-    expect((await post(enc.body, { ...enc.headers, "x-lark-signature": "0".repeat(64) })).status).toBe(403);
-    expect((await post(event({ chat_id: "oc_1", content: text("明文绕过") }))).status).toBe(403);
-    expect((await post(enc.body, enc.headers)).status).toBe(200);
-    await sentCount(9);
-    expect(platform.sent[8]?.text).toBe("加密通道的回答");
-  });
-
-  it("a binding with neither token nor key hears events over its long connection only", async () => {
+  it("each bot has a connection of its own, hung up when it is switched off", async () => {
     const plain = await bind(alice, "Sales", {
       app_id: "cli_00000000000000b2",
       app_secret: FEISHU_GOOD_SECRET,
       enabled: true,
     });
-    expect(plain.body).toMatchObject({ has_verification_token: false, has_encrypt_key: false });
+    expect(plain.status).toBe(200);
     await eventually(async () => platform.live() === 2);
-    const direct = await post(event({ chat_id: "oc_9", content: text("hi") }), {}, plain.body.channel_instance_id);
-    expect([direct.status, ((await direct.json()) as Json).code]).toEqual([409, "callback_not_configured"]);
 
     // Switching a bot off hangs up; on again, it dials again.
     await bind(alice, "Sales", { app_id: "cli_00000000000000b2", enabled: false });
@@ -288,7 +251,8 @@ describe("channels: Feishu", () => {
     await eventually(async () => platform.live() === 2);
   });
 
-  it("says so in the chat when the device is away, and stops answering when switched off", async () => {
+  it("is offline while its device is away: the server neither listens nor posts for it", async () => {
+    const before = platform.sent.length;
     await host.stop();
     await eventually(async () =>
       (await call(alice, "GET", "/v1/devices")).body.devices.every((d: Json) => d.online === false),
@@ -296,17 +260,11 @@ describe("channels: Feishu", () => {
     // The connections were the device's: with it gone, nothing is dialled — the server holds none.
     await eventually(async () => platform.live() === 0);
     expect((await call(alice, "GET", "/v1/channels/feishu/bindings/Support")).body).toMatchObject({
+      enabled: true,
       connected: false,
       connection_status: "disconnected",
     });
-    const sealedOff = platform.sent.length;
-    await bind(alice, "Support", { app_id: "cli_00000000000000a1", encrypt_key: "" }); // back to the token alone
-    await post(event({ chat_id: "oc_offline", content: text("在吗") }));
-    await sentCount(sealedOff + 1);
-    expect(platform.sent.at(-1)).toMatchObject({ chat: "oc_offline", text: "执行设备当前不在线，请稍后再试。" });
-
-    await bind(alice, "Support", { app_id: "cli_00000000000000a1", enabled: false });
-    expect((await post(event({ chat_id: "oc_1", content: text("还在吗") }))).status).toBe(404);
+    expect(platform.sent).toHaveLength(before);
     const actions = (await call(alice, "GET", "/v1/org/audit-logs?limit=200")).body.logs.map(
       (entry: Json) => entry.action,
     );

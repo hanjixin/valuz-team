@@ -17,32 +17,15 @@ const labelOf = (platform: string): string => LABELS[platform] ?? platform;
 /** Bots act for whoever bound them. */
 export const actorOf = (userId: string): { user_id: string; name: string } => ({ user_id: userId, name: "channels" });
 
-type Send = (ctx: Ctx, binding: repo.BindingRow, chatId: string, text: string) => Promise<void>;
-const direct = new Map<string, Send>();
-
-/**
- * A platform that can be posted to without a connection (a plain HTTP call)
- * says how. Used only when the bot's device is away, so that a person who
- * wrote to the bot is told so rather than met with silence.
- */
-export const registerDirectSend = (platform: string, send: Send): void => void direct.set(platform, send);
-
-/** Post to a chat: the device holding the bot's connection does it. */
+/** Post to a chat: the device holding the bot's connection does it — the server posts nothing itself. */
 async function say(ctx: Ctx, binding: repo.BindingRow, chatId: string, text: string): Promise<void> {
-  try {
-    if (!binding.device_id) throw new HttpError(409, "no_device", "没有设备保持这个机器人的连接");
-    await ctx.hub.call(
-      binding.device_id,
-      "channels.send",
-      { bot_id: binding.id, chat_id: chatId, text },
-      actorOf(binding.owner_id),
-    );
-  } catch (err) {
-    const away = err instanceof HttpError && (err.code === "device_offline" || err.code === "no_device");
-    const fallback = direct.get(binding.platform);
-    if (!away || !fallback) throw err;
-    await fallback(ctx, binding, chatId, text);
-  }
+  if (!binding.device_id) throw new HttpError(409, "no_device", "没有设备保持这个机器人的连接");
+  await ctx.hub.call(
+    binding.device_id,
+    "channels.send",
+    { bot_id: binding.id, chat_id: chatId, text },
+    actorOf(binding.owner_id),
+  );
 }
 
 /** Take one event, once: platforms redeliver until they are acknowledged. */

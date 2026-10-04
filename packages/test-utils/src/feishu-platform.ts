@@ -5,7 +5,7 @@
  */
 import { type Server, createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { WebSocketServer } from "ws";
+import { type WebSocket, WebSocketServer } from "ws";
 
 export const FEISHU_GOOD_SECRET = "good-secret";
 
@@ -18,7 +18,35 @@ export interface FeishuPlatform {
   endpointCalls: { AppID?: string; AppSecret?: string }[];
   /** How many long connections are open right now. */
   live(): number;
+  /** Deliver an event to an app over its long connection, as the platform does. */
+  push(appId: string, event: unknown): void;
   stop(): Promise<void>;
+}
+
+const varint = (value: number): Buffer => {
+  const bytes: number[] = [];
+  for (let rest = value; ; rest = Math.floor(rest / 128)) {
+    if (rest < 128) return Buffer.from([...bytes, rest]);
+    bytes.push((rest % 128) | 0x80);
+  }
+};
+const delimited = (field: number, data: Buffer): Buffer =>
+  Buffer.concat([varint((field << 3) | 2), varint(data.length), data]);
+
+/** One data frame of the gateway's protobuf framing (`pbbp2.Frame`), carrying a whole event. */
+function eventFrame(id: string, event: unknown): Buffer {
+  const header = (key: string, value: string): Buffer =>
+    delimited(5, Buffer.concat([delimited(1, Buffer.from(key)), delimited(2, Buffer.from(value))]));
+  return Buffer.concat([
+    ...[1, 2, 3].map((field) => Buffer.concat([varint(field << 3), varint(0)])), // SeqID, LogID, service
+    Buffer.concat([varint(4 << 3), varint(1)]), // method: data
+    header("type", "event"),
+    header("message_id", id),
+    header("sum", "1"),
+    header("seq", "0"),
+    header("trace_id", id),
+    delimited(8, Buffer.from(JSON.stringify(event))),
+  ]);
 }
 
 export async function startFeishuPlatform(): Promise<FeishuPlatform> {
@@ -46,7 +74,7 @@ export async function startFeishuPlatform(): Promise<FeishuPlatform> {
                 code: 0,
                 msg: "ok",
                 data: {
-                  URL: `ws://127.0.0.1:${port()}/ws?device_id=d1&service_id=s1`,
+                  URL: `ws://127.0.0.1:${port()}/ws?device_id=d1&service_id=s1&app=${body["AppID"] ?? ""}`,
                   ClientConfig: { PingInterval: 120, ReconnectCount: -1, ReconnectInterval: 120, ReconnectNonce: 30 },
                 },
               }
@@ -66,17 +94,21 @@ export async function startFeishuPlatform(): Promise<FeishuPlatform> {
     });
   });
   const gateway = new WebSocketServer({ server, path: "/ws" });
-  const open = new Set<unknown>();
-  gateway.on("connection", (socket) => {
-    open.add(socket);
+  const open = new Map<WebSocket, string>();
+  gateway.on("connection", (socket, req) => {
+    open.set(socket, new URL(req.url ?? "", "http://x").searchParams.get("app") ?? "");
     socket.on("close", () => open.delete(socket));
   });
+  let pushed = 0;
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
     url: `http://127.0.0.1:${port()}`,
     sent,
     endpointCalls,
     live: () => open.size,
+    push(appId, event) {
+      for (const [socket, app] of open) if (app === appId) socket.send(eventFrame(`push_${++pushed}`, event));
+    },
     async stop() {
       gateway.close();
       server.closeAllConnections();

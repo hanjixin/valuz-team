@@ -157,6 +157,25 @@ describe("knowledge base", () => {
     expect(next).toMatchObject({ markdown: "销制", offset: 5 });
   });
 
+  it("opens a document's original file from the server's storage, for members of the organization", async () => {
+    const detail = (await call(alice, "GET", `/v1/docs/${docs["leave.txt"]}`)).body;
+    expect(detail.source_path).toBe(`kb/${docs["leave.txt"]}/leave.txt`);
+    const ref = `valuz-file://${detail.source_path}`;
+    const [found] = (await call(alice, "POST", "/v1/files/resolve", { refs: [ref] })).body.results;
+    expect(found).toMatchObject({
+      exists: true,
+      kind: "remote",
+      name: "leave.txt",
+      mimeType: "text/plain",
+      error: null,
+    });
+    const res = await fetch(`${url}${found.url}`);
+    expect(await res.text()).toBe("Annual leave is 25 days. Unused leave carries over until March.");
+    expect(res.headers.get("content-security-policy")).toBe("sandbox");
+    const [theirs] = (await call(mallory, "POST", "/v1/files/resolve", { refs: [ref] })).body.results;
+    expect(theirs).toMatchObject({ exists: false, error: "not_found" });
+  });
+
   it("searches passages by substring, in any language, within the organization", async () => {
     const project = (await call(alice, "POST", "/v1/projects", { name: "Ops" })).body.id;
     const search = async (query: string, extra: object = {}, as = alice) =>

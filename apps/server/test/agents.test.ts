@@ -197,4 +197,10 @@ describe("agent library", () => {
     );
     expect(actions).toEqual(expect.arrayContaining(["agent.create", "agent.update", "agent.delete"]));
   });
+  it("has no 'all available' resource list: an agent uses what it names", async () => {
+    const created = (await call(alice, "POST", "/v1/agents", { name: "Explicit one" })).body;
+    const res = await call(alice, "GET", `/v1/agents/${created.slug}/effective-resources`);
+    expect([res.status, res.body.code]).toEqual([409, "explicit_resources"]);
+    expect((await call(alice, "GET", "/v1/agents/nobody/effective-resources")).status).toBe(404);
+  });
 });

@@ -9,14 +9,17 @@ import type { Ctx } from "../../infra/context.ts";
 import { type JobQueue, startJobs } from "../../infra/jobs.ts";
 import * as providers from "../providers/service.ts";
 import * as sessions from "../sessions/service.ts";
-import { reviewPrompt } from "./prompts.ts";
+import * as tasks from "../tasks/service.ts";
+import { reviewPrompt, taskReviewPrompt } from "./prompts.ts";
 import * as memory from "./service.ts";
 
-interface ReviewJob {
-  sessionId: string;
-  /** The turn that armed this review; a later turn re-arms and this one stands down. */
-  armedBy: string;
-}
+type ReviewJob =
+  | {
+      sessionId: string;
+      /** The turn that armed this review; a later turn re-arms and this one stands down. */
+      armedBy: string;
+    }
+  | { taskId: string };
 
 export interface Op {
   action: "add" | "replace" | "remove";
@@ -76,7 +79,50 @@ export async function applyOps(ctx: Ctx, owner: memory.Owner, ops: Op[]): Promis
   return applied;
 }
 
+/** A task finished: review what the team did for what is worth carrying into the project's later work. */
+async function reviewTask(ctx: Ctx, taskId: string): Promise<void> {
+  const task = await tasks.find(ctx, taskId);
+  const lead = task?.lead_session_id ? await sessions.byId(ctx, task.lead_session_id) : undefined;
+  if (!task || !lead?.provider_id || !lead.model) return;
+  const owner = await memory.ownerOfSession(ctx, lead);
+  const settings = await memory.getSettings(ctx, owner);
+  if (!settings.enabled || !settings.auto_extract) return;
+
+  const plan = await tasks.planView(ctx, task.id);
+  const digest = [
+    `Title: ${task.title}`,
+    `Goal: ${task.goal}`,
+    "Subtasks:",
+    ...plan.subtasks.map((node) => `- [${node.status}] ${node.key}: ${node.label} (${node.agent || "unassigned"})`),
+    `Result: ${JSON.stringify(task.result ?? {})}`,
+  ].join("\n");
+  const turns = await sessions.transcriptSince(ctx, lead.id, 0);
+  const transcript = memory
+    .redactSecrets(turns.map((turn) => `LEAD WAS TOLD: ${turn.user}\n\nLEAD: ${turn.assistant}`).join("\n\n---\n\n"))
+    .slice(-MAX_TRANSCRIPT_CHARS);
+  const current = await memory.all(ctx, owner);
+  const usage = Object.fromEntries(
+    Object.entries(current).map(([target, entries]) => [target, memory.usage(entries, target as memory.Target)]),
+  );
+  const reply = await providers.complete(
+    ctx,
+    lead.org_id,
+    lead.provider_id,
+    lead.model,
+    taskReviewPrompt({
+      digest: memory.redactSecrets(digest),
+      transcript,
+      current,
+      usage,
+      project: owner.project,
+      customInstructions: settings.custom_instructions,
+    }),
+  );
+  if (reply !== null) await applyOps(ctx, owner, parseOps(reply));
+}
+
 async function review(ctx: Ctx, job: ReviewJob): Promise<void> {
+  if ("taskId" in job) return reviewTask(ctx, job.taskId);
   if ((await ctx.redis.get(armedKey(job.sessionId))) !== job.armedBy) return; // the conversation went on
   const session = await sessions.byId(ctx, job.sessionId);
   // Conversations with a person only; a task's sessions talk to each other.
@@ -130,4 +176,10 @@ export async function arm(ctx: Ctx, turn: { id: string; session_id: string; stat
   if (turn.status !== "completed" || delayMs <= 0) return;
   await ctx.redis.set(armedKey(turn.session_id), turn.id, "EX", ctx.config.MEMORY_REVIEW_IDLE_SECONDS + 3600);
   await queues.get(ctx)?.add([{ sessionId: turn.session_id, armedBy: turn.id }], { delayMs });
+}
+
+/** A task completed: queue its review. Off when the background review is off altogether. */
+export async function taskFinished(ctx: Ctx, taskId: string): Promise<void> {
+  if (ctx.config.MEMORY_REVIEW_IDLE_SECONDS <= 0) return;
+  await queues.get(ctx)?.add([{ taskId }]);
 }

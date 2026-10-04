@@ -104,6 +104,7 @@ export async function setupModules(app: FastifyInstance): Promise<void> {
     };
   });
   onTurnEnd(app.ctx, (turn) => memoryReview.arm(app.ctx, turn));
+  tasks.onTaskFinished(app.ctx, (taskId) => memoryReview.taskFinished(app.ctx, taskId));
   mountToolkit<memory.Owner>(app, {
     ...MEMORY_TOOLKIT,
     tools: MEMORY_TOOLS,

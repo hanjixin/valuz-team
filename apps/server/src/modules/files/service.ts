@@ -299,6 +299,43 @@ async function deviceFor(ctx: Ctx, auth: Auth, absPath: string): Promise<string 
   return reachable.length === 1 ? (reachable[0]?.id ?? null) : null;
 }
 
+/** A file that exists, as the app is told of it: what it is, and a short-lived address for its bytes. */
+function described(
+  app: FastifyInstance,
+  auth: Auth,
+  ref: string,
+  where: { device: string; path: string } | { kb: string },
+  name: string,
+  size: number | null,
+  revision: string | null,
+  absPath: string | null = null,
+): Descriptor {
+  const token = app.jwt.sign({ typ: "file", ...where, name }, { sub: auth.userId, expiresIn: FILE_TOKEN_TTL_S });
+  const previewKind = previewKindOf(name);
+  const tooLarge = (size ?? 0) > app.ctx.config.MAX_UPLOAD_BYTES;
+  return {
+    ref,
+    kind: "remote",
+    absPath,
+    url: `/v1/files/raw/${token}`,
+    downloadUrl: `/v1/files/raw/${token}?download=1`,
+    expiresAt: Date.now() + FILE_TOKEN_TTL_S * 1000,
+    name,
+    mimeType: mime.getType(name),
+    size,
+    revision,
+    exists: true,
+    previewKind,
+    capabilities: {
+      canPreview: previewKind !== "unsupported" && !tooLarge,
+      canDownload: !tooLarge,
+      canOpenExternal: false,
+      canCopyContent: ["markdown", "code", "plain", "html"].includes(previewKind) && !tooLarge,
+    },
+    error: null,
+  };
+}
+
 /**
  * Turn file references into addresses the browser can fetch. Each address is
  * a short-lived token for that one file, on that one device, read as the caller.
@@ -309,6 +346,11 @@ export async function resolve(app: FastifyInstance, auth: Auth, refs: string[]):
     refs.map(async (ref): Promise<Descriptor> => {
       if (!FILE_REF.test(ref)) return unresolved(ref, "invalid_ref");
       const absPath = `/${decodeURIComponent(ref.replace(FILE_REF, "")).replace(/^\/+/, "")}`;
+      // A knowledge-base document's original is in the server's own storage, not on a device.
+      if (absPath.startsWith(`/${knowledge.ORIGINAL_PREFIX}`)) {
+        const doc = await knowledge.original(ctx, auth, absPath.slice(1));
+        return doc ? described(app, auth, ref, { kb: doc.id }, doc.name, doc.size, null) : unresolved(ref, "not_found");
+      }
       const deviceId = await deviceFor(ctx, auth, absPath);
       if (!deviceId) return unresolved(ref, "not_found");
       let stat: { path: string; kind?: string; size?: number; mtime_ms?: number };
@@ -318,45 +360,32 @@ export async function resolve(app: FastifyInstance, auth: Auth, refs: string[]):
         return unresolved(ref, err instanceof HttpError && err.status === 403 ? "forbidden" : "not_found");
       }
       if (stat.kind !== "file") return unresolved(ref, "not_found");
-      const name = path.posix.basename(absPath);
-      const token = app.jwt.sign(
-        { typ: "file", device: deviceId, path: stat.path, name },
-        { sub: auth.userId, expiresIn: FILE_TOKEN_TTL_S },
-      );
-      const previewKind = previewKindOf(name);
-      const tooLarge = (stat.size ?? 0) > ctx.config.MAX_UPLOAD_BYTES;
-      return {
+      return described(
+        app,
+        auth,
         ref,
-        kind: "remote",
-        absPath: stat.path,
-        url: `/v1/files/raw/${token}`,
-        downloadUrl: `/v1/files/raw/${token}?download=1`,
-        expiresAt: Date.now() + FILE_TOKEN_TTL_S * 1000,
-        name,
-        mimeType: mime.getType(name),
-        size: stat.size ?? null,
-        revision: stat.mtime_ms ? String(Math.round(stat.mtime_ms)) : null,
-        exists: true,
-        previewKind,
-        capabilities: {
-          canPreview: previewKind !== "unsupported" && !tooLarge,
-          canDownload: !tooLarge,
-          canOpenExternal: false,
-          canCopyContent: ["markdown", "code", "plain", "html"].includes(previewKind) && !tooLarge,
-        },
-        error: null,
-      };
+        { device: deviceId, path: stat.path },
+        path.posix.basename(absPath),
+        stat.size ?? null,
+        stat.mtime_ms ? String(Math.round(stat.mtime_ms)) : null,
+        stat.path,
+      );
     }),
   );
 }
 
 /** The bytes a file token stands for, fetched from the device as the member the token was issued to. */
 export async function readByToken(app: FastifyInstance, token: string): Promise<{ bytes: Buffer; name: string }> {
-  let claim: { typ?: string; sub?: string; device?: string; path?: string; name?: string };
+  let claim: { typ?: string; sub?: string; device?: string; path?: string; kb?: string; name?: string };
   try {
     claim = app.jwt.verify(token);
   } catch {
     throw notFound("file");
+  }
+  if (claim.typ === "file" && claim.kb) {
+    const bytes = await knowledge.originalBytes(app.ctx, claim.kb);
+    if (!bytes) throw notFound("file");
+    return { bytes, name: claim.name ?? "file" };
   }
   if (claim.typ !== "file" || !claim.sub || !claim.device || !claim.path) throw notFound("file");
   const file = (await app.ctx.hub.call(

@@ -135,6 +135,9 @@ export async function putDocument(
   });
 }
 
+export const storageKey = async (db: Db, id: string): Promise<string | undefined> =>
+  (await db.selectFrom("kb_documents").select("storage_key").where("id", "=", id).executeTakeFirst())?.storage_key;
+
 export const deleteDocument = (db: Db, id: string) => db.deleteFrom("kb_documents").where("id", "=", id).execute();
 
 export const setStatus = (db: Db, ids: string[], status: Status, error: string | null = null) =>

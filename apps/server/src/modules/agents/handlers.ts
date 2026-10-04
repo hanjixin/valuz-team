@@ -1,6 +1,7 @@
 import type { Schema } from "@agent-base/contract";
 import { requireAuth } from "../../infra/auth.ts";
 import type { Handler } from "../../infra/context.ts";
+import { conflict } from "../../infra/errors.ts";
 import * as members from "./members.ts";
 import * as service from "./service.ts";
 
@@ -26,6 +27,16 @@ export const createAgent: Handler = async (req, reply) => {
 export const getAgent: Handler = async (req) => {
   const { ctx, auth, slug } = await caller(req);
   return service.get(ctx, auth, slug);
+};
+
+/**
+ * What an "all available" agent can currently reach. Every agent here names its
+ * skills and connectors explicitly, so there is no such list to resolve.
+ */
+export const getAgentEffectiveResources: Handler = async (req) => {
+  const { ctx, auth, slug } = await caller(req);
+  await service.get(ctx, auth, slug);
+  throw conflict("this agent uses the skills and connectors it names", "explicit_resources");
 };
 
 export const updateAgent: Handler = async (req) => {

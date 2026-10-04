@@ -242,7 +242,8 @@ export async function getDocument(ctx: Ctx, auth: Auth, id: string): Promise<Sch
   const row = await requireDocument(ctx, auth, id);
   return {
     ...presentDoc(row),
-    source_path: null,
+    // A reference the file service resolves to the stored original (see `original`).
+    source_path: `${ORIGINAL_PREFIX}${row.id}/${row.filename}`,
     original_path: null,
     managed_path: null,
     parser_mode: "default",
@@ -251,6 +252,26 @@ export async function getDocument(ctx: Ctx, auth: Auth, id: string): Promise<Sch
     last_error_message: row.error,
     parser_attempts: [],
   };
+}
+
+/** How a document's original file is referred to: not a path on any device, a name in the knowledge base. */
+export const ORIGINAL_PREFIX = "kb/";
+
+/** The uploaded file behind a document reference, for a member of its organization. */
+export async function original(
+  ctx: Ctx,
+  auth: Auth,
+  reference: string,
+): Promise<{ id: string; name: string; size: number; mimeType: string | null } | null> {
+  const id = reference.slice(ORIGINAL_PREFIX.length).split("/")[0] ?? "";
+  const row = UUID.test(id) ? await repo.findDocument(ctx.db, auth.orgId, id) : undefined;
+  return row ? { id: row.id, name: row.filename, size: Number(row.size_bytes), mimeType: row.mime_type } : null;
+}
+
+/** The bytes of a document's original file. Whoever holds a token for it was already allowed to read it. */
+export async function originalBytes(ctx: Ctx, documentId: string): Promise<Buffer | null> {
+  const key = await repo.storageKey(ctx.db, documentId);
+  return key ? ctx.storage.get(key) : null;
 }
 
 /** A document's parsed text, for handing to an agent. 404 unless it is this organization's and ready. */

@@ -82,6 +82,19 @@ const clip = (text: string): string =>
 
 const loadTask = (db: Db, id: string) => db.selectFrom("tasks").selectAll().where("id", "=", id).executeTakeFirst();
 
+const finishListeners = new WeakMap<Ctx, ((taskId: string) => Promise<void>)[]>();
+
+/** Hear when a task completes. (Memory reviews what the team learned.) */
+export function onTaskFinished(ctx: Ctx, listener: (taskId: string) => Promise<void>): void {
+  finishListeners.set(ctx, [...(finishListeners.get(ctx) ?? []), listener]);
+}
+
+/** Tell the listeners; one that fails is logged and does not stop the others. */
+function finished(ctx: Ctx, taskId: string): void {
+  for (const listener of finishListeners.get(ctx) ?? [])
+    void listener(taskId).catch((err: unknown) => ctx.log(err, `task ${taskId}: a finish listener failed`));
+}
+
 /** A task by id, for a caller that has already been authorized another way. */
 export const find = (ctx: Ctx, id: string) => loadTask(ctx.db, id);
 
@@ -1093,6 +1106,7 @@ async function finish(ctx: Ctx, s: Scope, args: Fields) {
     );
   }
   await s.event(status === "completed" ? "task_completed" : "task_stopped", s.task.lead_agent_slug, result);
+  if (status === "completed") s.after(async () => finished(ctx, task.id));
   s.after(() =>
     notifications.notify(
       ctx,

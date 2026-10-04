@@ -316,6 +316,55 @@ describe("memory", () => {
     expect(model.completions.length).toBe(before + 1);
   });
 
+  it("reviews a finished task for what the team should carry forward", async () => {
+    await call(alice, "PATCH", "/v1/memory/settings", { auto_extract: true, custom_instructions: "" });
+    await call(alice, "POST", "/v1/agents", { name: "Lead", runtime: "deepagents", model: "test-model" });
+    await call(alice, "POST", `/v1/projects/${projectId}/agents:deploy`, { source_agent_slug: "Lead" });
+    // The lead plans one piece of work for itself to hand out, then closes the task.
+    const steps = [
+      {
+        tool: {
+          name: "mcp__task__plan_task",
+          args: { subtasks: [{ key: "draft", title: "Draft the notes", agent: "Lead" }] },
+        },
+      },
+      { tool: { name: "mcp__task__dispatch", args: { subtask_key: "draft" } } },
+      { tool: { name: "mcp__task__await_members", args: { timeout_s: 30 } } },
+      { tool: { name: "mcp__task__review_subtask", args: { subtask_key: "draft", decision: "approve" } } },
+      { tool: { name: "mcp__task__finish_task", args: { summary: "Release notes drafted." } } },
+      { content: "Done." },
+    ];
+    model.handler = (request) => {
+      const system = systemOf(request);
+      if (system.includes("You are the LEAD")) return steps.shift() ?? { content: "Done." };
+      return system.includes("You are a MEMBER") ? { content: "Notes drafted." } : undefined;
+    };
+    model.complete = (request) =>
+      (request.messages[0]?.content ?? "").includes("MULTI-AGENT TASK that just finished")
+        ? JSON.stringify({ ops: [{ action: "add", target: "project", content: "Release notes are drafted by Lead." }] })
+        : undefined;
+    try {
+      const task = await call(alice, "POST", `/v1/projects/${projectId}/tasks`, {
+        title: "Release notes",
+        goal: "Draft the release notes.",
+        lead_agent_slug: "Lead",
+      });
+      expect(task.status).toBe(201);
+      await eventually(
+        async () => (await memoryOf(alice, projectId)).entries.project.includes("Release notes are drafted by Lead."),
+        20_000,
+      );
+      const prompt = model.completions.findLast((c) => (c.messages[0]?.content ?? "").includes("MULTI-AGENT TASK"))
+        ?.messages[0]?.content;
+      expect(prompt).toContain("Title: Release notes");
+      expect(prompt).toContain("draft: Draft the notes (Lead)");
+      expect(prompt).toContain('Result: {"summary":"Release notes drafted."');
+      expect(prompt).toContain("<lead_transcript>");
+    } finally {
+      model.handler = null;
+    }
+  });
+
   it("switched off, a turn neither sees memory nor is offered the tool", async () => {
     const off = await tool(await newSession(projectId), { action: "settings", enabled: false });
     expect(off.value).toMatchObject({ enabled: false });

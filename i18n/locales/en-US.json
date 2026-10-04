@@ -3479,5 +3479,19 @@
     "contextPanel": "Context panel",
     "overlays": "Overlays",
     "playbookDetail": "Playbook detail"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "register": "Create account",
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "passwordHint": "At least 8 characters",
+    "inviteToken": "Invite code (optional)",
+    "inviteHint": "With an invite you join that organization; without one you get your own.",
+    "submitSignIn": "Sign in",
+    "submitRegister": "Create account",
+    "signOut": "Sign out",
+    "subtitle": "Sign in to your team's workspace"
   }
 }

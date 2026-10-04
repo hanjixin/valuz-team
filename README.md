@@ -14,6 +14,7 @@ contract is implemented so far.
 make install
 make check        # format + lint + typecheck + tests (needs Docker for the integration tests)
 make dev          # local PostgreSQL + Redis, server on :8787 in watch mode
+make test-e2e     # browser tests: built server + web app in Chrome
 ```
 
 `make help` lists every command.

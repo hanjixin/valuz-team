@@ -3479,5 +3479,19 @@
     "contextPanel": "上下文面板",
     "overlays": "浮层预览",
     "playbookDetail": "手册详情"
+  },
+  "auth": {
+    "signIn": "登录",
+    "register": "注册",
+    "email": "邮箱",
+    "password": "密码",
+    "name": "姓名",
+    "passwordHint": "至少 8 位",
+    "inviteToken": "邀请码（可选）",
+    "inviteHint": "有邀请码则加入对方的组织，否则创建你自己的组织。",
+    "submitSignIn": "登录",
+    "submitRegister": "创建账号",
+    "signOut": "退出登录",
+    "subtitle": "登录到团队的工作区"
   }
 }

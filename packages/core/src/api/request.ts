@@ -13,7 +13,33 @@ export type RequestOptions = Omit<RequestInit, "cache"> & {
   json?: unknown;
   cache?: RequestCache | RequestCacheOptions;
   timeoutMs?: number;
+  /** Send without the signed-in session (the sign-in and token-refresh calls themselves). */
+  skipAuth?: boolean;
 };
+
+/**
+ * Where requests get their credentials (agent-base: the server is multi-user).
+ * Registered by ``auth-session.ts``; with none registered, requests go out
+ * exactly as before.
+ */
+export interface AuthProvider {
+  /** Headers identifying the caller, or an empty object when signed out. */
+  headers(): Record<string, string>;
+  /** Try to renew an expired session. Resolves false when the user must sign in again. */
+  refresh(): Promise<boolean>;
+}
+
+let _authProvider: AuthProvider | null = null;
+
+export function setAuthProvider(provider: AuthProvider | null): void {
+  _authProvider = provider;
+}
+
+function applyAuth(headers: Headers, overwrite = false): void {
+  for (const [name, value] of Object.entries(_authProvider?.headers() ?? {})) {
+    if (overwrite || !headers.has(name)) headers.set(name, value);
+  }
+}
 
 export interface RequestCacheInvalidation {
   keys?: string[];
@@ -185,16 +211,19 @@ function prepareRequest(path: string, options: RequestOptions): {
   method: string;
   cache?: RequestCacheOptions;
   timeoutMs?: number;
+  skipAuth?: boolean;
 } {
   const {
     baseUrl = DEFAULT_API_BASE,
     json,
     cache,
     timeoutMs,
+    skipAuth,
     headers: callerHeaders,
     ...init
   } = options;
   const headers = new Headers(callerHeaders);
+  if (!skipAuth) applyAuth(headers);
   if (!headers.has("Accept-Language")) {
     headers.set("Accept-Language", currentLocale());
   }
@@ -221,6 +250,7 @@ function prepareRequest(path: string, options: RequestOptions): {
     method,
     cache: requestCache,
     timeoutMs,
+    skipAuth,
   };
 }
 
@@ -252,6 +282,7 @@ async function fetchWithHandling(prepared: {
   url: string;
   init: RequestInit;
   timeoutMs?: number;
+  skipAuth?: boolean;
 }): Promise<Response> {
   let timedOut = false;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -286,6 +317,17 @@ async function fetchWithHandling(prepared: {
   let response: Response;
   try {
     response = await fetch(prepared.url, { ...prepared.init, signal });
+    // An expired access token is renewed once, transparently, and the call retried.
+    if (
+      response.status === 401 &&
+      !prepared.skipAuth &&
+      _authProvider &&
+      (await _authProvider.refresh())
+    ) {
+      const headers = new Headers(prepared.init.headers);
+      applyAuth(headers, true);
+      response = await fetch(prepared.url, { ...prepared.init, headers, signal });
+    }
   } catch (err) {
     if (timedOut) {
       throw new Error("请求超时，请稍后重试");

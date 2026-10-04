@@ -19,6 +19,8 @@ const Env = z.object({
     .default(30 * 86_400),
   /** Override where api/openapi.yaml is read from (the bundled server ships a copy). */
   CONTRACT_FILE: z.string().optional(),
+  /** A built web app to serve at `/` (same origin as the API). Empty = look for the workspace's own build. */
+  WEB_DIR: z.string().default(""),
   LOG_LEVEL: z.string().default("info"),
 });
 

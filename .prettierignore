@@ -18,7 +18,8 @@ packages/shared
 packages/a2ui
 packages/parser-plugins
 packages/desktop-network-egress
-e2e
+e2e/*
+!e2e/web
 i18n
 docs/frontend
 api/openapi.yaml

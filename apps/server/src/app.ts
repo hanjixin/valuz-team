@@ -1,7 +1,11 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createDb } from "@agent-base/db";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
+import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance } from "fastify";
 import { Redis } from "ioredis";
 import type { Config } from "./infra/config.ts";
@@ -60,6 +64,15 @@ export async function buildServer(config: Config): Promise<Server> {
   app.setNotFoundHandler((_req, reply) => reply.code(404).send(errorBody("not_found", "route not found")));
 
   await registerContract(app, handlers as Record<string, Handler>);
+
+  // Serve the web app from the same origin as the API when a build is present.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const webDir =
+    config.WEB_DIR ||
+    [path.join(here, "web"), path.resolve(here, "../../webui/dist")].find((dir) =>
+      existsSync(path.join(dir, "index.html")),
+    );
+  if (webDir) await app.register(fastifyStatic, { root: webDir });
 
   return {
     app,

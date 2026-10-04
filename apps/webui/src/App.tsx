@@ -1,3 +1,4 @@
+import { AuthGate } from '@valuz/app/auth'
 import { WebPlatformProvider } from '@valuz/app/platform'
 import { ErrorBoundary } from '@valuz/ui'
 import { AppRouter } from './app/router'
@@ -9,7 +10,9 @@ import { AppRouter } from './app/router'
 export const App = () => (
   <WebPlatformProvider>
     <ErrorBoundary>
-      <AppRouter />
+      <AuthGate>
+        <AppRouter />
+      </AuthGate>
     </ErrorBoundary>
   </WebPlatformProvider>
 )

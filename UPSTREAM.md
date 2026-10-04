@@ -33,3 +33,17 @@ Keep changes in those directories to the documented seams so upstream can be re-
 - `packages/app/src/components/TemplatePrefillDialogs.test.tsx`: the test still asserted the old `border-brand`
   selected style after the action-kind picker became a `SegmentedControl`. It now asserts that control's selected
   style. Worth sending upstream.
+
+## agent-base additions inside carried-over packages
+
+The server is multi-user, which the frontend never had to know about. The additions are confined to:
+
+- `packages/core/src/api/request.ts` — an `AuthProvider` seam: credentials are added to every request and a 401
+  triggers one transparent token refresh and retry. `skipAuth` opts a call out. With no provider registered,
+  requests behave exactly as upstream.
+- `packages/core/src/api/auth-session.ts` (new) — the session store and the `/v1/auth/*` client; registers the provider.
+- `packages/app/src/auth/AuthGate.tsx` (new, exported as `@valuz/app/auth`) — the sign-in page, wrapped around the
+  router in `apps/webui/src/App.tsx`.
+- `i18n/locales/*.json` — an `auth` namespace.
+- `e2e/web/` (new) — browser tests against the built server and web app (`pnpm test:e2e`). The upstream Electron
+  specs in `e2e/` still expect the Python backend and run separately as `pnpm test:e2e:desktop`.

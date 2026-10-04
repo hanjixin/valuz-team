@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./platform": "./src/platform/index.ts",
+    "./auth": "./src/auth/index.ts",
     "./pages": "./src/pages/index.ts",
     "./components": "./src/components/index.ts",
     "./components/AgentModelPicker": "./src/components/AgentModelPicker.tsx",

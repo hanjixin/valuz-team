@@ -9,6 +9,7 @@
 - All quality gates: `make check` (format check + lint + typecheck + tests)
 - Tests: `make test-all`, or one package: `make test P=@agent-base/server`
 - Type check: `make typecheck` · Lint: `make lint` · Format: `make format`
+- Browser tests: `make test-e2e` (builds the server and web app, drives them in the installed Chrome)
 - Dev: `make dev` (local PostgreSQL + Redis, server in watch mode)
 - Migrations: `make migrate` / `make migrate-down`
 - Contract coverage: `make contract` (add `-- --missing` to `pnpm contract:coverage` to list gaps)

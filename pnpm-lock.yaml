@@ -508,6 +508,15 @@ importers:
 
   packages/desktop-network-egress: {}
 
+  packages/host-runtimes:
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.3.288
+        version: 0.3.289(@anthropic-ai/sdk@0.131.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.32.0(@cfworker/json-schema@4.1.1)(zod@4.6.5))(zod@4.6.5)
+      '@openai/codex-sdk':
+        specifier: ^0.160.0
+        version: 0.160.0
+
   packages/kernel:
     dependencies:
       '@agent-base/protocol':

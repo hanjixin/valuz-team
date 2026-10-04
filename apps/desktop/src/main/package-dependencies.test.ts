@@ -13,7 +13,14 @@ describe("desktop package dependencies", () => {
   it("excludes only known large renderer packages from app.asar", () => {
     const config = readFileSync(electronBuilderConfigPath, "utf8");
 
-    expect(config).not.toContain('- "!node_modules/**"');
+    // agent-base: upstream forbids a blanket exclusion, because a module the main
+    // process loads at run time must stay. Here everything is left out and the
+    // run-time ones are named back in — electron-updater and what it needs —
+    // and build/afterPack.cjs fails the build if that list falls behind.
+    const blanket = config.indexOf('- "!node_modules/**"');
+    const allowed = config.indexOf('- "node_modules/{electron-updater,');
+    expect(blanket).toBeGreaterThan(-1);
+    expect(allowed).toBeGreaterThan(blanket);
     expect(config).toContain('- "!node_modules/@fontsource/**"');
     expect(config).toContain('- "!node_modules/mermaid/**"');
     expect(config).toContain('- "!node_modules/@mermaid-js/**"');

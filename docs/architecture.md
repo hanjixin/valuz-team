@@ -200,6 +200,12 @@ computer without being asked (agents run here, so there is nothing to choose); a
 Settings → Devices is not linked again until they say so. The pages
 are the same ones the web app serves, behind the same sign-in.
 
+Packaged (`pnpm --filter @valuz/desktop build`), the app carries the host as one bundled file
+(`HOST_STANDALONE=1`, `apps/host/tsup.config.ts`) beside the two runtime SDKs, which find their command-line
+programs on disk and so stay real packages (`packages/host-runtimes` names them). Those two programs are most of
+the installer. The app archive itself holds only what the main process loads at run time — the updater and what it
+needs; everything else is already in the built pages.
+
 ## Calling out on a member's behalf
 
 A model channel's endpoint is a URL a member typed. Before the server calls one, `infra/outbound.ts` checks it

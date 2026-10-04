@@ -159,6 +159,10 @@ Deliberate differences in behaviour:
   the agent, one binding per agent in the organization; `channel_instance_id` is the binding's id and the last
   segment of its callback URL. The conversations people have with the bot are the binder's own sessions (a quick
   chat per Feishu chat), on the binder's device. Events arrive only over the long connection the binder's device dials (the server holds none; `connection_status` is what that device reports, `disconnected` while it is away). There is no HTTP callback: `feishuChannelCallback` is unimplemented, a Verification Token or Encrypt Key sent with a binding is ignored, and `has_verification_token` / `has_encrypt_key` are always false. Text messages only. Binding chats to projects is not implemented.
+- Packaging (`apps/desktop/build`): the app archive leaves out all of node_modules and names back only what the
+  main process loads at run time (electron-updater and its dependencies) — upstream excludes a list of large
+  packages instead, and its test of that list is changed to match. `afterPack.cjs` is new: it checks that
+  allow-list and copies the bundled host's node_modules in.
 - Built-in skills are skill-creator and the office plugin's docx / xlsx / pptx, served read-only to every member
   (`source: "builtin"`, ids `builtin-<slug>`). valuz-handbook, automation, browser, citation and
   valuz-project-docs are not carried: they describe features this server does not have.

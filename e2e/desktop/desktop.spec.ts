@@ -6,7 +6,8 @@ import { _electron, expect, test } from "@playwright/test";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appPath = path.resolve(here, "../../apps/desktop");
-const hostCli = path.resolve(here, "../../apps/host/dist/cli.js");
+// The host as the packaged app carries it: one bundled file beside the two runtime SDKs (`pnpm build:host`).
+const hostCli = path.resolve(here, "../../apps/desktop/resources/host/dist/cli.js");
 const SERVER = "http://127.0.0.1:18790";
 
 /**

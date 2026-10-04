@@ -65,6 +65,12 @@ files:
   - "!node_modules/victory-vendor/**"
   - "!node_modules/@babel/**"
   - "!node_modules/es-toolkit/**"
+  # agent-base: the main process is bundled by Vite except for electron-updater, so of
+  # everything in node_modules only the updater and what it needs is loaded at run time.
+  # The rest (echarts, pdfjs, canvas, d3, …) is already inside dist/ and was being shipped
+  # twice. build/afterPack.cjs fails the build if the updater's needs outgrow this list.
+  - "!node_modules/**"
+  - "node_modules/{electron-updater,builder-util-runtime,fs-extra,graceful-fs,jsonfile,universalify,js-yaml,argparse,lazy-val,lodash.escaperegexp,lodash.isequal,semver,tiny-typed-emitter,debug,ms,sax}/**"
   # Runtime-loaded icons read via `path.join(app.getAppPath(), "build", …)`
   # — the macOS menu-bar tray (iconTemplate), the dock setIcon + window icon
   # (iconRounded), and the Windows tray (icon.ico). Without these in the asar

@@ -23,7 +23,7 @@
     "test:e2e": "VITE_API_BASE_URL=/ pnpm --filter @valuz/webui build && pnpm --filter @agent-base/server --filter @agent-base/host build && playwright test --config e2e/web/playwright.config.ts",
     "contract:generate": "pnpm --filter @agent-base/contract generate",
     "contract:check": "pnpm --filter @agent-base/contract generate:check",
-    "test:e2e:desktop": "pnpm --filter @agent-base/server --filter @agent-base/host build && pnpm --filter @valuz/desktop run build:app && playwright test --config e2e/desktop/playwright.config.ts"
+    "test:e2e:desktop": "pnpm --filter @agent-base/server build && pnpm --filter @valuz/desktop run build:host && pnpm --filter @valuz/desktop run build:app && playwright test --config e2e/desktop/playwright.config.ts"
   },
   "devDependencies": {
     "@agent-base/test-utils": "workspace:*",

@@ -554,6 +554,69 @@ describe("sessions", () => {
     await say(alice, session.id, "still there?");
   });
 
+  it("forks a conversation — whole, or from one of its turns — and leaves the source alone", async () => {
+    const source = await newChat(alice);
+    expect((await call(alice, "POST", `/v1/sessions/${source.id}/fork`, {})).body.code).toBe("nothing_to_fork");
+    model.replies.push({ content: "One." });
+    await say(alice, source.id, "first question");
+    model.replies.push({ content: "Two." });
+    await say(alice, source.id, "second question");
+    // Each finished turn says it can be forked from.
+    const updates = (await history(source.id)).filter((e) => e.event.event_type === "session.update");
+    expect(updates.map((e) => e.event.payload["fork_anchor"])).toEqual(["true", "true"]);
+    const turns = (await history(source.id))
+      .filter((item) => item.event.event_type === "message.user")
+      .map((item) => item.event.payload["message_id"] as string);
+    const sourceEvents = (await history(source.id)).length;
+    /** What the model is shown of the conversation, on the session's next turn. */
+    const heard = async (id: string, prompt: string) => {
+      model.replies.push({ content: "Fork answer." });
+      await say(alice, id, prompt);
+      return (model.requests.at(-1)?.messages ?? [])
+        .filter((m) => m.role !== "system")
+        .map((m) => (m.content ?? "").replace(/^[\s\S]*\n/, ""));
+    };
+
+    // From the first turn: the fork knows the first exchange and nothing after it.
+    const early = await call(alice, "POST", `/v1/sessions/${source.id}/fork`, { message_id: turns[0] });
+    expect(early.status).toBe(201);
+    expect(early.body).toMatchObject({ status: "idle", owner_id: alice.userId, device_id: source.device_id });
+    expect(early.body.name).toBe("first question（分叉）");
+    expect(early.body.project_id).not.toBe(source.project_id); // a quick chat has a project to itself
+    expect((await types(early.body.id)).filter((type) => type === "message.user")).toHaveLength(1);
+    expect(await heard(early.body.id, "third question")).toEqual(["first question", "One.", "third question"]);
+
+    // Whole: everything so far.
+    const whole = await call(alice, "POST", `/v1/sessions/${source.id}/fork`, {});
+    expect(whole.status).toBe(201);
+    expect((await history(whole.body.id)).length).toBe(sourceEvents);
+    expect(await heard(whole.body.id, "another")).toEqual([
+      "first question",
+      "One.",
+      "second question",
+      "Two.",
+      "another",
+    ]);
+
+    // The source went nowhere, and still continues from its own tail.
+    expect((await history(source.id)).length).toBe(sourceEvents);
+    expect(await heard(source.id, "back here")).toHaveLength(5);
+
+    // What cannot be forked: someone else's message, an unfinished turn, a session one cannot drive.
+    const other = await call(alice, "POST", `/v1/sessions/${whole.body.id}/fork`, { message_id: turns[0] });
+    expect(other.status).toBe(404);
+    expect((await call(alice, "POST", `/v1/sessions/${source.id}/fork`, { message_id: "nope" })).status).toBe(404);
+    expect((await call(bob, "POST", `/v1/sessions/${source.id}/fork`, {})).status).toBe(404);
+    model.replies.push({ hang: true });
+    await call(alice, "POST", `/v1/sessions/${source.id}/messages`, { prompt: "long one" });
+    const busy = await call(alice, "POST", `/v1/sessions/${source.id}/fork`, {});
+    expect([busy.status, busy.body.code]).toEqual([409, "session_busy"]);
+    // …though an earlier turn of a busy session still can be.
+    expect((await call(alice, "POST", `/v1/sessions/${source.id}/fork`, { message_id: turns[1] })).status).toBe(201);
+    await call(alice, "POST", `/v1/sessions/${source.id}/interrupt`);
+    await idle(source.id);
+  });
+
   it("tells each member, on one stream, when the sessions they can see start and finish — and nothing else", async () => {
     const follow = async (account: Account, afterSeq = 0) => {
       const controller = new AbortController();

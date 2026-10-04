@@ -5,10 +5,10 @@
  * a teammate may drive it, `view`/`use` that they may watch), and its device
  * (`control` there means remote control of everything running on it).
  */
-import { managedCwd } from "@agent-base/protocol";
+import { type RuntimeProvider, managedCwd } from "@agent-base/protocol";
 import type { Schema } from "@agent-base/contract";
 import type { Auth, Ctx } from "../../infra/context.ts";
-import { badRequest, conflict, forbidden, notFound } from "../../infra/errors.ts";
+import { HttpError, badRequest, conflict, forbidden, notFound } from "../../infra/errors.ts";
 import * as members from "../agents/members.ts";
 import * as audit from "../audit/service.ts";
 import * as devices from "../devices/service.ts";
@@ -211,6 +211,67 @@ export async function remove(ctx: Ctx, auth: Auth, id: string): Promise<void> {
       .call(row.device_id, "session.close", { session_id: id }, { user_id: auth.userId, name: auth.name })
       .catch(() => undefined);
   }
+}
+
+/**
+ * Fork: a new session that starts from this one's conversation — all of it, or
+ * up to one of its turns — and then goes its own way. The source is never
+ * changed. The thread itself lives on the device, so the device branches it
+ * first; if it cannot, nothing is created.
+ */
+export async function fork(ctx: Ctx, auth: Auth, id: string, messageId?: string | null): Promise<Detail> {
+  const { row } = await drive(ctx, auth, id);
+  if (row.runtime_provider === "codex")
+    throw new HttpError(422, "fork_unsupported", "the Codex runtime cannot fork a conversation");
+  if (!row.device_id) throw conflict("the device this session ran on was removed", "device_removed");
+  if (!row.runtime_session_id) throw conflict("this session has no conversation to fork yet", "nothing_to_fork");
+  await devices.get(ctx, auth, row.device_id, "use");
+
+  let anchor: Record<string, unknown> | null = null;
+  let through: number | null = null;
+  if (messageId) {
+    const message = UUID.test(messageId) ? await repo.findMessage(ctx.db, id, messageId) : undefined;
+    if (!message) throw notFound("message");
+    anchor = (message.metadata["runtime_native"] as Record<string, unknown> | undefined) ?? null;
+    if (message.status !== "completed" || !anchor)
+      throw conflict(
+        "that turn cannot be forked from: it did not finish, or predates fork points",
+        "fork_anchor_invalid",
+      );
+    through = Number(message.started_at);
+  } else if (row.status === "running") {
+    throw conflict("wait for the running turn to finish before forking", "session_busy");
+  }
+
+  const forkId = crypto.randomUUID();
+  const actor = { user_id: auth.userId, name: auth.name };
+  const branched = (await ctx.hub.call(
+    row.device_id,
+    "session.fork",
+    { source_session_id: id, session_id: forkId, runtime_provider: row.runtime_provider as RuntimeProvider, anchor },
+    actor,
+  )) as { runtime_session_id: string | null };
+  // A runtime that branches at the fork's first turn is told then where to branch from.
+  const lazy = { valuz: { fork: { session_id: id, native_session_id: row.runtime_session_id, anchor } } };
+  const quickChat = (await projects.contextForSession(ctx, row.project_id))?.kind === "chat";
+  const ownProject = quickChat ? (await projects.createChat(ctx, auth, row.device_id)).id : null;
+  await ctx.db.transaction().execute(async (tx) => {
+    await repo.insertFork(
+      tx,
+      id,
+      {
+        id: forkId,
+        owner_id: auth.userId,
+        project_id: ownProject,
+        name: `${row.name ?? "对话"}（分叉）`,
+        metadata: branched.runtime_session_id ? {} : lazy,
+        runtime_session_id: branched.runtime_session_id,
+      },
+      through,
+    );
+    await audit.record(tx, auth, "session.fork", { type: "session", id: forkId }, { source: id });
+  });
+  return get(ctx, auth, forkId);
 }
 
 /** What each runtime can be asked to do. The native runtime neither reviews tool calls itself nor plans. */

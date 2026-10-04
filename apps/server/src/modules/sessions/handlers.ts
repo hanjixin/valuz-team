@@ -32,6 +32,12 @@ export const getSession: Handler = async (req) => {
   return service.get(ctx, auth, id);
 };
 
+export const forkSession: Handler = async (req, reply) => {
+  const { ctx, auth, id } = await caller(req);
+  const { message_id } = (req.body ?? {}) as Schema<"ForkSessionRequest">;
+  return reply.code(201).send(await service.fork(ctx, auth, id, message_id));
+};
+
 export const renameSession: Handler = async (req) => {
   const { ctx, auth, id } = await caller(req);
   return service.rename(ctx, auth, id, (req.query as { name?: string }).name ?? "");

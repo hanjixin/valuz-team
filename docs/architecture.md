@@ -75,6 +75,11 @@ kernel streams events back; `modules/sessions/ingest.ts` stores each once (frame
 publishes it, and `events.ts` serves the log as history, as whole-turn windows, and as a live stream that
 replays from a cursor and then follows.
 
+A session can be forked — whole, or from one of its turns. The thread itself (what the model is shown) lives with
+the runtime on the device, so each finished turn records a runtime-native anchor in its message
+(`metadata.runtime_native`), and forking asks the device to branch the thread (`session.fork`) before the server
+copies the conversation's rows; if the device cannot, nothing is created.
+
 The conversation UI was written against an older event vocabulary with string-only payloads;
 `modules/sessions/translate.ts` maps kernel events to it at the edge.
 
@@ -143,9 +148,9 @@ returned by the API.
 
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
-teams, sessions (create, send, interrupt, queue, events), and the collaboration UI (Settings → Organization,
+teams, sessions (create, send, interrupt, queue, events, fork), and the collaboration UI (Settings → Organization,
 Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory.
-Not yet: fork, regenerate, automations, channels.
+Not yet: regenerate, automations, channels.
 
 The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),
 module by module. `make contract` reports how much of the contract is implemented.

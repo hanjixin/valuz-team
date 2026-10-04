@@ -21,6 +21,11 @@ export interface RuntimePort {
    * place and emits exactly one terminal `session_idle` or `session_error`.
    */
   run(session: Session, userMessage: UserMessage): Promise<void>;
+  /**
+   * Where this runtime's thread stood when the last turn ended, in terms it can
+   * later fork from. Absent or null: the turn cannot be forked from.
+   */
+  forkAnchor?(): Record<string, unknown> | null;
   submitAction(action: SubmitAction): Promise<void>;
   interrupt(): Promise<void>;
   close(): Promise<void>;
@@ -50,6 +55,9 @@ export const canonicalRuntime = (runtime: RuntimeProvider): RuntimeProvider =>
 
 export class RuntimeConfigError extends Error {}
 
+/** A thread that cannot be forked as asked — said in words a person can act on. */
+export class ForkError extends Error {}
+
 export function validateApiProtocol(runtime: RuntimeProvider, protocol: ApiProtocol | null): void {
   if (protocol === null) return;
   const allowed = ALLOWED_PROTOCOLS_BY_RUNTIME[runtime];
@@ -69,11 +77,13 @@ export interface TurnExtras {
 export interface ForkSource {
   session_id: string;
   native_session_id: string;
+  /** The point of the source thread to branch from; absent = its tail. */
+  anchor: Record<string, unknown> | null;
 }
 
 export const forkSourceOf = (session: { metadata: Record<string, unknown> }): ForkSource | null => {
   const fork = (session.metadata["valuz"] as { fork?: Partial<ForkSource> } | undefined)?.fork;
   return fork?.session_id && fork.native_session_id
-    ? { session_id: fork.session_id, native_session_id: fork.native_session_id }
+    ? { session_id: fork.session_id, native_session_id: fork.native_session_id, anchor: fork.anchor ?? null }
     : null;
 };

@@ -9,7 +9,14 @@
 import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { arch, hostname, platform } from "node:os";
 import path from "node:path";
-import { type RuntimeFactory, SessionOrchestrator, createRuntime, detectRuntimes } from "@agent-base/kernel";
+import {
+  ForkError,
+  type RuntimeFactory,
+  SessionOrchestrator,
+  createRuntime,
+  detectRuntimes,
+  forkThread,
+} from "@agent-base/kernel";
 import {
   type Actor,
   type DeviceInfo,
@@ -241,6 +248,20 @@ export class Host {
         await this.orchestrator.cleanup(p.session_id);
         this.store.forget(p.session_id);
         return { closed: true };
+      }
+      case "session.fork": {
+        const p = parsed.data as ReturnType<(typeof RpcMethods)["session.fork"]["parse"]>;
+        try {
+          return await forkThread(this.options.dataDir, {
+            runtime: p.runtime_provider,
+            sourceSessionId: p.source_session_id,
+            sessionId: p.session_id,
+            anchor: p.anchor,
+          });
+        } catch (err) {
+          if (err instanceof ForkError) throw new RpcError("conflict", err.message);
+          throw err;
+        }
       }
       case "fs.list": {
         const dir = await this.authorizePath(actor, (parsed.data as { path: string }).path);

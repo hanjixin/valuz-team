@@ -87,7 +87,14 @@ const RULES: Record<string, [string, (data: Data) => Payload]> = {
   ],
   todo_update: ["session.todos.update", (d) => ({ todos: stringify(d["todos"] ?? []) })],
   session_idle: ["session.idle", (d) => ({ stop_reason: stringify(d["stop_reason"] ?? "") })],
-  session_update: ["session.update", (d) => ({ status: text(d, "status") })],
+  session_update: [
+    "session.update",
+    // A turn's last frame says whether the turn can be forked from; older ones do not say.
+    (d) => ({
+      status: text(d, "status"),
+      ...(typeof d["fork_anchor"] === "boolean" ? { fork_anchor: String(d["fork_anchor"]) } : {}),
+    }),
+  ],
   compaction: ["session.compaction", (d) => ({ summary: text(d, "summary") })],
   requires_action: [
     "session.requires_action",

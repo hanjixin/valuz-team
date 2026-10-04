@@ -169,7 +169,8 @@ export class DeviceHub {
     if (ok) return rpc.resolve(result);
     if (error?.code === OFFLINE.code) return rpc.reject(new DeviceOfflineError());
     // The device's own refusals keep their meaning; anything else is the device failing.
-    const status = { forbidden: 403, bad_request: 400, not_found: 404, too_large: 413 }[error?.code ?? ""] ?? 502;
+    const status =
+      { forbidden: 403, bad_request: 400, not_found: 404, conflict: 409, too_large: 413 }[error?.code ?? ""] ?? 502;
     rpc.reject(new HttpError(status, error?.code ?? "device_error", error?.message ?? "device error"));
   }
 

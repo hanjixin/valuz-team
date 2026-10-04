@@ -85,6 +85,10 @@ Deliberate differences in behaviour:
   when none is named. Deltas are stored as well as final messages, so history replays exactly what a live
   stream showed, and every frame carries the durable `seq`.
 - The native runtime (`deepagents`) speaks chat completions only for now.
+- Fork works for the native and Claude runtimes; Codex answers 422. The native runtime's anchors stop being valid
+  once the thread is compacted (409) — fork the whole conversation instead. A forked quick chat gets a project of
+  its own and shares the source's workspace folder. `regenerate`, `messages/sync` and per-session skills are not
+  implemented (the app does not call them).
 - Skills live in the database, not in a folder on disk: a skill is its files plus every earlier version of them,
   and an agent's skills are written to the device for each turn. `path` in responses is a label, not a location.
   Per-project enablement is not modelled — a member's library switch is the only one. `POST /v1/skills/scan` has

@@ -77,6 +77,19 @@ test("a conversation typed in the browser is answered by an agent running on a l
     const sessions = await (await request.get("/v1/sessions", { headers })).json();
     expect(sessions.sessions).toHaveLength(1);
     expect(sessions.sessions[0]).toMatchObject({ status: "idle", runtime_provider: "deepagents" });
+
+    // Fork from the turn: a new conversation opens, starting from what was said so far.
+    const source = page.url();
+    await page.getByText("The answer is forty-two.").first().hover();
+    await page.getByRole("button", { name: "从此处 Fork" }).first().click();
+    await expect(page.getByText("已 Fork 出新会话").first()).toBeVisible();
+    await expect(page).not.toHaveURL(source);
+    await expect(page.getByText("The answer is forty-two.").first()).toBeVisible();
+    const after = await (await request.get("/v1/sessions", { headers })).json();
+    expect(after.sessions.map((session: { name: string }) => session.name).sort()).toEqual([
+      "What is six times seven?",
+      "What is six times seven?（分叉）",
+    ]);
   } finally {
     host?.kill("SIGKILL");
     await rm(home, { recursive: true, force: true });

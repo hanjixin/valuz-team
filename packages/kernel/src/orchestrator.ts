@@ -298,6 +298,9 @@ export class SessionOrchestrator {
       await coalesced.flush();
 
       finalizeMessage(message, session, observer);
+      // A turn that ended normally can be forked from, if its runtime can say where it stood.
+      const anchor = message.status === "completed" ? (slot.runtime?.forkAnchor?.() ?? null) : null;
+      if (anchor) message.metadata = { ...message.metadata, runtime_native: anchor };
       await this.store.saveSession(session);
       await this.store.saveMessage(userId, message);
 
@@ -307,6 +310,7 @@ export class SessionOrchestrator {
           status: session.status,
           message_id: message.id,
           stop_reason: session.stop_reason,
+          fork_anchor: anchor !== null,
         }),
       );
       await coalesced.flush();

@@ -4,11 +4,12 @@
  * tool calls) to any compatible gateway, runs built-in and MCP tools, and
  * checkpoints the thread to a JSON file so history survives restarts.
  */
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Session, SubmitAction, UserMessage } from "@agent-base/protocol";
 import { buildUserPrompt, modelRejectsImages } from "../prompt-builder.ts";
-import { RuntimeConfigError, type RuntimeDeps, type RuntimePort, forkSourceOf } from "../runtime.ts";
+import { ForkError, RuntimeConfigError, type RuntimeDeps, type RuntimePort, forkSourceOf } from "../runtime.ts";
 import { type EventSink, makeEvent } from "../sinks.ts";
 import { skillIndexPrompt } from "../skills.ts";
 import { ApprovalBridge, isApproved } from "./approvals.ts";
@@ -57,6 +58,37 @@ async function* sseChunks(body: ReadableStream<Uint8Array>): AsyncGenerator<Reco
   }
 }
 
+const checkpointPath = (dataDir: string, sessionId: string): string =>
+  path.join(dataDir, "checkpoints", `${sessionId}.json`);
+
+/** Identifies a thread's first message. Compaction rewrites it, which is what makes older anchors stale. */
+const headOf = (history: ChatMessage[]): string =>
+  createHash("sha256").update(JSON.stringify(history[0])).digest("hex").slice(0, 16);
+
+/**
+ * Give `sessionId` a thread of its own that starts as a copy of `sourceId`'s —
+ * all of it, or up to an anchor an earlier turn recorded.
+ */
+export async function forkCheckpoint(
+  dataDir: string,
+  sourceId: string,
+  sessionId: string,
+  anchor: Record<string, unknown> | null,
+): Promise<void> {
+  const raw = await readFile(checkpointPath(dataDir, sourceId), "utf8").catch(() => null);
+  if (!raw) throw new ForkError("this conversation has nothing on this device to fork from");
+  let history = JSON.parse(raw) as ChatMessage[];
+  if (anchor) {
+    const length = Number(anchor["history_length"]);
+    if (!Number.isInteger(length) || length < 1 || length > history.length || anchor["head"] !== headOf(history))
+      throw new ForkError("the conversation was compacted after that message; fork the whole conversation instead");
+    history = history.slice(0, length);
+  }
+  const file = checkpointPath(dataDir, sessionId);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify(history));
+}
+
 export class ValuzAgentRuntime implements RuntimePort {
   private sink: EventSink;
   private abort: AbortController | null = null;
@@ -76,7 +108,11 @@ export class ValuzAgentRuntime implements RuntimePort {
   }
 
   private checkpointPath(sessionId: string): string {
-    return path.join(this.deps.dataDir, "checkpoints", `${sessionId}.json`);
+    return checkpointPath(this.deps.dataDir, sessionId);
+  }
+
+  forkAnchor(): Record<string, unknown> | null {
+    return this.history?.length ? { history_length: this.history.length, head: headOf(this.history) } : null;
   }
 
   async prepare(session: Session): Promise<void> {

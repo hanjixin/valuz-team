@@ -170,6 +170,65 @@ export const insertMessage = async (
     .values({ ...message, user_message: JSON.stringify(message.user_message) })
     .execute());
 
+export const findMessage = (db: Db, sessionId: string, id: string) =>
+  db
+    .selectFrom("messages")
+    .select(["id", "status", "metadata", "started_at"])
+    .where("session_id", "=", sessionId)
+    .where("id", "=", id)
+    .executeTakeFirst();
+
+/**
+ * Create `fork` as a copy of `sourceId`: its settings, and its conversation —
+ * the finished turns, with everything each one logged — up to `through`
+ * (a turn's `started_at`) when given. The copy's turns get ids of their own.
+ */
+export async function insertFork(
+  db: Db,
+  sourceId: string,
+  fork: {
+    id: string;
+    owner_id: string;
+    /** A project of the fork's own (a quick chat has one each); null keeps the source's. */
+    project_id: string | null;
+    name: string;
+    metadata: Record<string, unknown>;
+    runtime_session_id: string | null;
+  },
+  through: number | null,
+): Promise<void> {
+  const until = through ?? Number.MAX_SAFE_INTEGER;
+  await sql`
+    INSERT INTO sessions (id, org_id, owner_id, project_id, device_id, agent_id, agent_slug, provider_id, name,
+                          runtime_provider, model, cwd, effort, permission_mode, mode, status, origin, metadata,
+                          runtime_session_id, last_user_message_text)
+    SELECT ${fork.id}, org_id, ${fork.owner_id}, COALESCE(${fork.project_id}::uuid, project_id), device_id, agent_id, agent_slug, provider_id, ${fork.name},
+           runtime_provider, model, cwd, effort, permission_mode, mode, 'idle', 'user', ${JSON.stringify(fork.metadata)},
+           ${fork.runtime_session_id},
+           (SELECT user_message->>'text' FROM messages
+             WHERE session_id = ${sourceId} AND status <> 'running' AND started_at <= ${until}
+             ORDER BY started_at DESC LIMIT 1)
+      FROM sessions WHERE id = ${sourceId}`.execute(db);
+  await sql`
+    WITH map AS (
+      SELECT id AS old_id, gen_random_uuid() AS new_id FROM messages
+       WHERE session_id = ${sourceId} AND status <> 'running' AND started_at <= ${until}),
+    copied AS (
+      INSERT INTO messages (id, session_id, actor_id, user_message, status, assistant_message, error_message, stop_reason,
+                            total_turns, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model_usage,
+                            metadata, todos, started_at, ended_at)
+      SELECT map.new_id, ${fork.id}, m.actor_id, m.user_message, m.status, m.assistant_message, m.error_message,
+             m.stop_reason, m.total_turns, m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens,
+             m.model_usage, m.metadata, m.todos, m.started_at, m.ended_at
+        FROM messages m JOIN map ON map.old_id = m.id
+      RETURNING id)
+    INSERT INTO events (session_id, message_id, type, data, ts, event_uid)
+    SELECT ${fork.id}, map.new_id, e.type, e.data, e.ts, gen_random_uuid()
+      FROM events e JOIN map ON map.old_id = e.message_id
+     WHERE e.session_id = ${sourceId}
+     ORDER BY e.seq`.execute(db);
+}
+
 /** The turns that finished after `since`, oldest first: what was asked and what was answered. */
 export const completedTurnsSince = (db: Db, sessionId: string, since: number, limit: number) =>
   db

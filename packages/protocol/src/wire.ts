@@ -8,7 +8,7 @@
  * dropped connection never loses or duplicates an event.
  */
 import { z } from "zod";
-import { Message, Session, SkillBundle, SubmitAction, UserMessage } from "./domain.ts";
+import { Message, RuntimeProvider, Session, SkillBundle, SubmitAction, UserMessage } from "./domain.ts";
 
 export const DEVICE_LINK_PATH = "/v1/devices/link";
 export const DEVICE_LINK_VERSION = 1;
@@ -71,6 +71,13 @@ export const RpcMethods = {
   "session.interrupt": z.object({ session_id: z.string() }),
   "session.action": z.object({ session_id: z.string(), action: SubmitAction }),
   "session.close": z.object({ session_id: z.string() }),
+  /** Branch a session's thread into a new session's — all of it, or up to an anchor a turn recorded. */
+  "session.fork": z.object({
+    source_session_id: z.string(),
+    session_id: z.string(),
+    runtime_provider: RuntimeProvider,
+    anchor: z.record(z.string(), z.unknown()).nullable().default(null),
+  }),
   "fs.list": z.object({ path: z.string() }),
   "fs.stat": z.object({ path: z.string() }),
   "fs.read": z.object({ path: z.string(), max_bytes: z.number().int().default(1_048_576) }),

@@ -2,10 +2,10 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { RuntimeAvailability, RuntimeProvider } from "@agent-base/protocol";
-import { type RuntimeFactory, canonicalRuntime, validateApiProtocol } from "../runtime.ts";
+import { ForkError, type RuntimeFactory, canonicalRuntime, validateApiProtocol } from "../runtime.ts";
 import { ClaudeAgentRuntime } from "./claude-agent.ts";
 import { CodexRuntime } from "./codex.ts";
-import { ValuzAgentRuntime } from "./valuz-agent.ts";
+import { ValuzAgentRuntime, forkCheckpoint } from "./valuz-agent.ts";
 
 export const createRuntime: RuntimeFactory = (session, deps) => {
   validateApiProtocol(session.runtime_provider, session.model_provider?.api_protocol ?? null);
@@ -19,6 +19,32 @@ export const createRuntime: RuntimeFactory = (session, deps) => {
       return new ValuzAgentRuntime(deps);
   }
 };
+
+/**
+ * Branch a session's thread on this machine. The native runtime copies its
+ * thread now and the fork owns it from here (`runtime_session_id` is set); the
+ * Claude runtime branches when the fork takes its first turn, so nothing is
+ * done yet (null) and the fork carries where to branch from.
+ */
+export async function forkThread(
+  dataDir: string,
+  fork: {
+    runtime: RuntimeProvider;
+    sourceSessionId: string;
+    sessionId: string;
+    anchor: Record<string, unknown> | null;
+  },
+): Promise<{ runtime_session_id: string | null }> {
+  switch (canonicalRuntime(fork.runtime)) {
+    case "claude_agent":
+      return { runtime_session_id: null };
+    case "codex":
+      throw new ForkError("the Codex runtime cannot fork a conversation");
+    default:
+      await forkCheckpoint(dataDir, fork.sourceSessionId, fork.sessionId, fork.anchor);
+      return { runtime_session_id: fork.sessionId };
+  }
+}
 
 const exec = promisify(execFile);
 

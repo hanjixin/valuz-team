@@ -71,6 +71,8 @@ export class ClaudeAgentRuntime implements RuntimePort {
   private interrupted = false;
   /** Set when the model API rejected our credentials — retrying cannot help. */
   private authFailure: string | null = null;
+  /** The last thing the model said in this turn: where a fork of the turn branches from. */
+  private lastAssistantUuid: string | null = null;
   private readonly approvals = new ApprovalBridge(() => this.sink);
 
   constructor(private readonly deps: RuntimeDeps) {
@@ -120,6 +122,9 @@ export class ClaudeAgentRuntime implements RuntimePort {
       // A fork's first turn branches the source thread; after that it resumes its own.
       resume: session.runtime_session_id ?? fork?.native_session_id,
       forkSession: !session.runtime_session_id && fork !== null,
+      ...(!session.runtime_session_id && typeof fork?.anchor?.["message_uuid"] === "string"
+        ? { resumeSessionAt: fork.anchor["message_uuid"] }
+        : {}),
       permissionMode:
         session.mode === "plan"
           ? "plan"
@@ -134,9 +139,14 @@ export class ClaudeAgentRuntime implements RuntimePort {
     };
   }
 
+  forkAnchor(): Record<string, unknown> | null {
+    return this.lastAssistantUuid ? { message_uuid: this.lastAssistantUuid } : null;
+  }
+
   async run(session: Session, userMessage: UserMessage): Promise<void> {
     this.interrupted = false;
     this.authFailure = null;
+    this.lastAssistantUuid = null;
     const prompt = buildUserPrompt(userMessage, session.cwd, new Date(), {
       modelRejectsImages: modelRejectsImages(session.model_settings),
     });
@@ -219,6 +229,7 @@ export class ClaudeAgentRuntime implements RuntimePort {
         return false;
       }
       case "assistant": {
+        if (parent === null) this.lastAssistantUuid = msg.uuid;
         for (const block of msg.message.content as unknown as Block[]) {
           if (block.type === "text" && block["text"]) {
             // Sub-agent prose is not the session's answer; only the tool result is.

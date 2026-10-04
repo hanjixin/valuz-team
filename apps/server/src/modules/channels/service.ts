@@ -10,6 +10,7 @@ import * as agents from "../agents/service.ts";
 import * as audit from "../audit/service.ts";
 import * as feishu from "./feishu.ts";
 import * as repo from "./repo.ts";
+import * as wecom from "./wecom.ts";
 
 type Binding = Schema<"FeishuBinding">;
 
@@ -101,4 +102,70 @@ export async function testFeishu(ctx: Ctx, auth: Auth, agentSlug: string): Promi
   if (!row) throw notFound("feishu binding");
   const error = await feishu.checkCredentials(ctx, row);
   return { credential_ok: error === null, error, ...feishu.connection(ctx, row) };
+}
+
+// ------------------------------------------------------------------ WeCom smart bots
+
+type WeComBinding = Schema<"WeComAIBotBinding">;
+
+const presentWeCom = (ctx: Ctx, row: repo.BindingRow): WeComBinding => ({
+  enabled: row.enabled,
+  channel_instance_id: row.id,
+  owner_user_id: row.owner_id,
+  agent_slug: row.agent_slug,
+  bot_id: row.app_id,
+  has_secret: Boolean(wecom.secretOf(ctx, row)),
+  ...wecom.connection(ctx, row),
+});
+
+export async function getWeCom(ctx: Ctx, auth: Auth, agentSlug: string): Promise<WeComBinding> {
+  await agents.require(ctx, auth, agentSlug);
+  const row = await repo.find(ctx.db, auth.orgId, wecom.PLATFORM, agentSlug);
+  if (row) return presentWeCom(ctx, row);
+  return {
+    enabled: false,
+    channel_instance_id: "",
+    owner_user_id: auth.userId,
+    agent_slug: agentSlug,
+    bot_id: "",
+    has_secret: false,
+    connected: false,
+    connection_status: "disabled",
+    connection_error: null,
+  };
+}
+
+export async function putWeCom(
+  ctx: Ctx,
+  auth: Auth,
+  agentSlug: string,
+  input: Schema<"WeComAIBotBindingUpdate">,
+): Promise<WeComBinding> {
+  if (input.agent_slug.trim() !== agentSlug) throw badRequest("agent_slug mismatch");
+  await agents.require(ctx, auth, agentSlug, "edit");
+  const botId = input.bot_id.trim();
+  if (!botId) throw badRequest("the bot's Bot ID is required");
+  const existing = await repo.find(ctx.db, auth.orgId, wecom.PLATFORM, agentSlug);
+  // A secret left blank keeps the stored one; there must be one to keep.
+  const secret = input.secret?.trim() || (existing ? wecom.secretOf(ctx, existing) : "");
+  if (!secret) throw new HttpError(422, "secret_required", "Secret is required");
+  const row = await repo.upsert(ctx.db, {
+    id: existing?.id ?? crypto.randomUUID(),
+    org_id: auth.orgId,
+    owner_id: auth.userId,
+    platform: wecom.PLATFORM,
+    agent_slug: agentSlug,
+    app_id: botId,
+    secret_enc: wecom.seal(ctx, secret),
+    enabled: input.enabled,
+  });
+  await audit.record(
+    ctx.db,
+    auth,
+    "channel.bind",
+    { type: "agent", id: agentSlug },
+    { platform: wecom.PLATFORM, bot_id: botId, enabled: input.enabled },
+  );
+  await wecom.sync(ctx, row.id);
+  return presentWeCom(ctx, row);
 }

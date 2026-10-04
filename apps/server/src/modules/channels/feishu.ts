@@ -11,12 +11,9 @@
 import { createHash } from "node:crypto";
 import * as lark from "@larksuiteoapi/node-sdk";
 import type { FastifyInstance } from "fastify";
-import { authFor } from "../../infra/auth.ts";
-import type { Auth, Ctx } from "../../infra/context.ts";
+import type { Ctx } from "../../infra/context.ts";
 import { HttpError, forbidden, notFound } from "../../infra/errors.ts";
-import * as notifications from "../notifications/service.ts";
-import { type TurnEnd, dispatchTurn, enqueue } from "../sessions/dispatch.ts";
-import * as sessions from "../sessions/service.ts";
+import * as chat from "./chat.ts";
 import * as repo from "./repo.ts";
 
 export const PLATFORM = "feishu";
@@ -206,7 +203,7 @@ export async function callback(
 /** Take one message event, once: the platform redelivers until it is acknowledged. */
 async function receive(app: FastifyInstance, bindingId: string, eventId: string, event: Record<string, unknown>) {
   const ctx = app.ctx;
-  if (eventId && !(await ctx.redis.set(`channel-event:${bindingId}:${eventId}`, "1", "EX", 3600, "NX"))) return;
+  if (!(await chat.firstTime(ctx, bindingId, eventId))) return;
   const binding = await repo.byId(ctx.db, bindingId);
   if (!binding?.enabled) return;
   void onMessage(ctx, binding, event).catch((err: unknown) => ctx.log(err, `channel ${bindingId}: message failed`));
@@ -226,7 +223,7 @@ async function onMessage(ctx: Ctx, binding: repo.BindingRow, event: Record<strin
   if (!chatId) return;
   // In a group the bot answers only when it is addressed.
   if (message.chat_type !== "p2p" && !(Array.isArray(message.mentions) && message.mentions.length > 0)) return;
-  if (message.message_type !== "text") return send(ctx, binding, chatId, "目前只支持文本消息。");
+  if (message.message_type !== "text") return chat.decline(ctx, binding, chatId);
   let text = "";
   try {
     text = String((JSON.parse(message.content ?? "") as { text?: string }).text ?? "");
@@ -234,76 +231,7 @@ async function onMessage(ctx: Ctx, binding: repo.BindingRow, event: Record<strin
     return;
   }
   text = text.replace(/@_user_\d+/g, "").trim();
-  if (!text) return;
-
-  if (text === "/new") {
-    await repo.closeThread(ctx.db, binding.id, chatId);
-    return send(ctx, binding, chatId, "已开始新会话。");
-  }
-
-  try {
-    const owner = await authFor(ctx, binding.org_id, binding.owner_id);
-    if (!owner) throw new Error("绑定这个机器人的成员已不在组织中");
-    const sessionId = await sessionFor(ctx, binding, owner, chatId);
-    try {
-      await dispatchTurn(ctx, sessionId, text, { user_id: owner.userId, name: "飞书" });
-    } catch (err) {
-      if (!(err instanceof HttpError) || err.code !== "session_busy") throw err;
-      // Mid-turn: it waits its turn like any message typed during a run.
-      await enqueue(ctx, owner, sessionId, text);
-    }
-  } catch (err) {
-    const offline = err instanceof HttpError && (err.code === "device_offline" || err.code === "no_device");
-    await send(
-      ctx,
-      binding,
-      chatId,
-      offline ? "执行设备当前不在线，请稍后再试。" : `无法处理这条消息：${(err as Error).message}`,
-    );
-  }
+  if (text) await chat.hear(ctx, binding, chatId, text);
 }
 
-/** The chat's session, created on first contact: the binding owner's, with the bound agent. */
-async function sessionFor(ctx: Ctx, binding: repo.BindingRow, owner: Auth, chatId: string): Promise<string> {
-  const existing = await repo.threadSession(ctx.db, binding.id, chatId);
-  if (existing) return existing;
-  const session = await sessions.create(
-    ctx,
-    owner,
-    { project_id: "chat-default", agent_slug: binding.agent_slug, title: `飞书 · ${binding.agent_slug}` },
-    { origin: "user", metadata: { valuz: { channel: { binding_id: binding.id, chat_id: chatId } } } },
-  );
-  return repo.openThread(ctx.db, binding.id, chatId, session.id);
-}
-
-// ------------------------------------------------------------------ answers out
-
-/** A turn ended on a device: if the session belongs to a chat, answer there. */
-export async function handleTurnEnd(ctx: Ctx, turn: TurnEnd): Promise<void> {
-  if (turn.status === "running" || turn.status === "cancelled") return;
-  const session = await sessions.byId(ctx, turn.session_id);
-  const meta = (session?.metadata as { valuz?: { channel?: { binding_id?: string; chat_id?: string } } } | undefined)
-    ?.valuz?.channel;
-  if (!session || !meta?.binding_id || !meta.chat_id) return;
-  const binding = await repo.byId(ctx.db, meta.binding_id);
-  if (!binding) return;
-  const text =
-    turn.status === "completed"
-      ? turn.assistant_message?.trim() || "（已完成，没有文字回复）"
-      : `运行出错：${String((turn.error_message as { message?: unknown } | null)?.message ?? "未知错误")}`;
-  try {
-    await send(ctx, binding, meta.chat_id, text);
-  } catch (err) {
-    await notifications.notify(
-      ctx,
-      { orgId: binding.org_id, userId: binding.owner_id },
-      {
-        kind: "channel_send_failed",
-        title: `飞书回复发送失败：${binding.agent_slug}`,
-        body: (err as Error).message.slice(0, 300),
-        route: `/conversation/${turn.session_id}`,
-        sessionId: turn.session_id,
-      },
-    );
-  }
-}
+chat.registerPlatform(PLATFORM, "飞书", send);

@@ -34,3 +34,13 @@ export const feishuChannelCallback: Handler = async (req) =>
     req.headers,
     req.body as Record<string, unknown>,
   );
+
+export const getWeComAIBotBinding: Handler = async (req) => {
+  const { ctx, auth, slug } = await caller(req);
+  return service.getWeCom(ctx, auth, slug);
+};
+
+export const updateWeComAIBotBinding: Handler = async (req) => {
+  const { ctx, auth, slug } = await caller(req);
+  return service.putWeCom(ctx, auth, slug, req.body as Schema<"WeComAIBotBindingUpdate">);
+};

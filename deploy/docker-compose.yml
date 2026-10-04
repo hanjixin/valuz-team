@@ -19,6 +19,7 @@ services:
       MEMORY_REVIEW_IDLE_SECONDS: ${MEMORY_REVIEW_IDLE_SECONDS:-60}
       AUTOMATION_MIN_INTERVAL_SECONDS: ${AUTOMATION_MIN_INTERVAL_SECONDS:-30}
       FEISHU_API_BASE: ${FEISHU_API_BASE:-}
+      WECOM_WS_URL: ${WECOM_WS_URL:-}
       # Knowledge-base documents live here, and uploads wait here until they are delivered to a device.
       # Projects themselves stay on devices.
       STORAGE_DIR: /data/storage

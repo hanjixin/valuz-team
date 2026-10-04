@@ -154,7 +154,8 @@ dropped. A conversation's turn ending is what tells its run how it went.
 A Feishu bot can be bound to an agent (`modules/channels`). The server dials the open platform's long connection
 with the app's credentials — no public URL is needed — and each chat the bot is in becomes a session with that
 agent, owned by whoever made the binding and run on their device; a turn ending sends the answer back to the
-chat. Every replica holds a connection, the platform delivers an event to one of them, and an event id is taken
+chat. A WeCom smart bot is bound the same way, over WeCom's own long connection; what the two share — a chat is
+a session, an answer goes back — is `channels/chat.ts`. Every replica holds a connection, the platform delivers an event to one of them, and an event id is taken
 once (Redis), so redelivery is harmless. The platform side is the official SDK.
 
 ## The desktop app
@@ -178,8 +179,8 @@ returned by the API.
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events, fork), and the collaboration UI (Settings → Organization,
-Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations, the Feishu channel, the desktop app, agent templates and the first-run tour.
-Not yet: regenerate, the WeCom channel, playbooks, plugins.
+Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations, the Feishu and WeCom channels, the desktop app, agent templates and the first-run tour.
+Not provided: playbooks, plugins, the marketplace, backup.
 
 The repository was rebuilt from a prototype (tag `prototype-v0`), module by module; the prototype itself is no
 longer in the tree. `make contract` reports how much of the contract is implemented.

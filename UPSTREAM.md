@@ -147,7 +147,8 @@ Deliberate differences in behaviour:
   project sees it, and its owner or the project's editors change it. A run that starts a task succeeds once the
   task is handed over; `task_status` follows the task. Proposals made by an agent in chat are not implemented.
   The shortest interval is `AUTOMATION_MIN_INTERVAL_SECONDS` (30).
-- Channels: Feishu only (the WeCom operations stay unimplemented). A bot is bound to an agent by whoever may edit
+- Channels: Feishu bots and WeCom smart bots (`wecom-aibot`, over the long connection, through the official
+  `@wecom/aibot-node-sdk`). The WeCom self-built-app HTTP callbacks stay unimplemented. A bot is bound to an agent by whoever may edit
   the agent, one binding per agent in the organization; `channel_instance_id` is the binding's id and the last
   segment of its callback URL. The conversations people have with the bot are the binder's own sessions (a quick
   chat per Feishu chat), on the binder's device. Events arrive over the long connection the server dials; the HTTP

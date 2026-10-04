@@ -16,6 +16,7 @@ import { DeviceOfflineError } from "../../infra/device-hub.ts";
 import { conflict, notFound } from "../../infra/errors.ts";
 import { orgChannel } from "../../infra/pubsub.ts";
 import * as agents from "../agents/service.ts";
+import * as connectors from "../connectors/service.ts";
 import * as projects from "../projects/service.ts";
 import { type ApiProtocol, protocolFor } from "../providers/catalog.ts";
 import * as providers from "../providers/service.ts";
@@ -50,6 +51,7 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<{ session: Session; sk
   // …and its equipment as it is now: the current version of each skill it names.
   const skillBundles = await skills.bundlesFor(ctx, row.org_id, agent?.skills ?? []);
   const equipped = skillBundles.map((bundle) => bundle.slug);
+  const mcpServers = await connectors.serversFor(ctx, row.org_id, agent?.connector_types ?? []);
   const session = Session.parse({
     id: row.id,
     agent_config: {
@@ -78,6 +80,7 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<{ session: Session; sk
     model_settings: row.effort ? { effort: row.effort } : null,
     instructions,
     skills: equipped,
+    mcp_servers: mcpServers,
     permission_mode: row.permission_mode,
     mode: row.mode,
     status: "running",

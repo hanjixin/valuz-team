@@ -316,6 +316,43 @@ export interface SkillVersionsTable {
   created_at: Timestamp;
 }
 
+/** One header, query parameter or environment variable of a connector. A secret one carries no value here. */
+export interface ConnectorEntry {
+  key: string;
+  secret: boolean;
+  value: string | null;
+}
+
+export interface ConnectorConfig {
+  url: string | null;
+  command: string | null;
+  args: string[];
+  working_dir: string | null;
+  headers: ConnectorEntry[];
+  params: ConnectorEntry[];
+  env: ConnectorEntry[];
+}
+
+export interface ConnectorsTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  slug: string;
+  display_name: string;
+  description: string | null;
+  transport: string;
+  auth_type: ColumnType<string, string | undefined, string>;
+  config: ColumnType<ConnectorConfig, string, string>;
+  secret_enc: string | null;
+  enabled: ColumnType<boolean, boolean | undefined, boolean>;
+  status: ColumnType<string, string | undefined, string>;
+  tool_count: number | null;
+  last_tested_at: NullableTime;
+  error_message: string | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -338,6 +375,7 @@ export interface Database {
   notifications: NotificationsTable;
   skills: SkillsTable;
   skill_versions: SkillVersionsTable;
+  connectors: ConnectorsTable;
   message_feedback: MessageFeedbackTable;
   user_settings: UserSettingsTable;
 }

@@ -1,0 +1,236 @@
+import { type TestMcpServer, startMcpServer } from "@agent-base/test-utils";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { serversFor } from "../src/modules/connectors/service.ts";
+import { type Account, type TestServer, joinOrg, signUp, startTestServer } from "./harness.ts";
+
+describe("connectors", () => {
+  let t: TestServer;
+  let mcp: TestMcpServer;
+  let alice: Account;
+  let bob: Account;
+  let id: string;
+
+  const call = (account: Account, method: string, url: string, body?: object) =>
+    t.call(method, url, { token: account.token, ...(body ? { body } : {}) });
+
+  beforeAll(async () => {
+    t = await startTestServer({ ALLOW_PRIVATE_UPSTREAMS: "1" });
+    mcp = await startMcpServer();
+    mcp.token = "s3cret-token";
+    alice = await signUp(t, "alice");
+    bob = await joinOrg(t, alice, "bob");
+  });
+  afterAll(async () => {
+    await mcp?.stop();
+    await t?.stop();
+  });
+
+  it("adds an MCP server, sealing what is marked secret and never giving it back", async () => {
+    const created = await call(alice, "POST", "/v1/connectors", {
+      display_name: "Catalogue Tools",
+      transport: "http",
+      url: mcp.url,
+      description: "Looks things up",
+      headers: [
+        { key: "Authorization", secret: true, value: "Bearer s3cret-token" },
+        { key: "X-Client", secret: false, value: "agent-base" },
+      ],
+      params: [{ key: "tenant", secret: false, value: "acme" }],
+    });
+    expect(created.status).toBe(201);
+    expect(created.body).toEqual({
+      id: created.body.id,
+      slug: "catalogue-tools",
+      needs_auth: false,
+      authorization_url: null,
+    });
+    id = created.body.id;
+
+    const item = (await call(alice, "GET", `/v1/connectors/${id}`)).body;
+    expect(item).toMatchObject({
+      slug: "catalogue-tools",
+      display_name: "Catalogue Tools",
+      transport: "http",
+      url: mcp.url,
+      has_api_key: true,
+      enabled: true,
+      status: "untested",
+      tool_count: null,
+      permission: "admin",
+      headers: [
+        { key: "Authorization", secret: true, value: null },
+        { key: "X-Client", secret: false, value: "agent-base" },
+      ],
+      params: [{ key: "tenant", secret: false, value: "acme" }],
+    });
+    const row = await t.server.ctx.db
+      .selectFrom("connectors")
+      .select(["config", "secret_enc"])
+      .executeTakeFirstOrThrow();
+    expect(JSON.stringify(row.config)).not.toContain("s3cret-token");
+    expect(row.secret_enc).toMatch(/^v1\./);
+
+    expect((await call(alice, "POST", "/v1/connectors", { display_name: "x", transport: "http" })).status).toBe(400);
+    expect((await call(alice, "POST", "/v1/connectors", { display_name: "x", transport: "stdio" })).status).toBe(400);
+    expect(
+      (
+        await call(alice, "POST", "/v1/connectors", {
+          display_name: "x",
+          transport: "http",
+          url: mcp.url,
+          slug: "catalogue-tools",
+        })
+      ).body.code,
+    ).toBe("slug_taken");
+  });
+
+  it("connects for real when tested, and remembers what it found", async () => {
+    const tested = await call(alice, "POST", `/v1/connectors/${id}/test`);
+    expect(tested.body).toEqual({
+      ok: true,
+      tool_count: 2,
+      tools: ["lookup", "ping"],
+      tool_details: [
+        { name: "lookup", description: "Look a term up in the test catalogue" },
+        { name: "ping", description: "Answer pong" },
+      ],
+      error: null,
+    });
+    expect(mcp.authorizations.at(-1)).toBe("Bearer s3cret-token");
+    const after = (await call(alice, "GET", `/v1/connectors/${id}`)).body;
+    expect(after).toMatchObject({ status: "connected", tool_count: 2, error_message: null });
+    expect(after.last_tested_at).toBeGreaterThan(0);
+
+    mcp.token = "rotated";
+    const failed = (await call(alice, "POST", `/v1/connectors/${id}/test`)).body;
+    expect(failed).toMatchObject({ ok: false, tool_count: null, tools: [] });
+    expect(failed.error).toBeTruthy();
+    expect((await call(alice, "GET", `/v1/connectors/${id}`)).body.status).toBe("error");
+  });
+
+  it("an edit that leaves a secret blank keeps it; one that sends a value replaces it", async () => {
+    const renamed = await call(alice, "PATCH", `/v1/connectors/${id}`, {
+      display_name: "Catalogue",
+      headers: [
+        { key: "Authorization", secret: true, value: null }, // as the form sends an untouched secret
+        { key: "X-Client", secret: false, value: "agent-base/2" },
+      ],
+    });
+    expect(renamed.body).toMatchObject({
+      display_name: "Catalogue",
+      slug: "catalogue-tools",
+      status: "untested",
+      has_api_key: true,
+    });
+    mcp.token = "s3cret-token";
+    expect((await call(alice, "POST", `/v1/connectors/${id}/test`)).body.ok).toBe(true);
+
+    mcp.token = "rotated";
+    await call(alice, "PATCH", `/v1/connectors/${id}`, {
+      headers: [{ key: "Authorization", secret: true, value: "Bearer rotated" }],
+    });
+    expect((await call(alice, "POST", `/v1/connectors/${id}/test`)).body.ok).toBe(true);
+    // Dropping the header drops its secret with it.
+    await call(alice, "PATCH", `/v1/connectors/${id}`, { headers: [] });
+    expect((await call(alice, "GET", `/v1/connectors/${id}`)).body.has_api_key).toBe(false);
+    await call(alice, "PATCH", `/v1/connectors/${id}`, {
+      headers: [{ key: "Authorization", secret: true, value: "Bearer rotated" }],
+    });
+  });
+
+  it("is private until shared; `use` lets a colleague's agents call it without showing how it is set up", async () => {
+    expect((await call(bob, "GET", "/v1/connectors")).body.connectors).toEqual([]);
+    await call(alice, "PUT", `/v1/shares/connector/${id}`, {
+      principal_type: "user",
+      principal_id: bob.userId,
+      permission: "use",
+    });
+    const seen = (await call(bob, "GET", "/v1/connectors/catalogue-tools")).body; // by slug
+    expect(seen).toMatchObject({
+      permission: "use",
+      url: null,
+      headers: [{ key: "Authorization", secret: true, value: null }],
+      params: [{ key: "tenant", value: null }],
+    });
+    expect((await call(bob, "POST", `/v1/connectors/${id}/test`)).body.ok).toBe(true);
+    expect((await call(bob, "PATCH", `/v1/connectors/${id}`, { display_name: "Mine" })).status).toBe(403);
+    expect((await call(bob, "POST", `/v1/connectors/${id}/disable`)).status).toBe(403);
+    expect((await call(bob, "DELETE", `/v1/connectors/${id}`)).status).toBe(403);
+  });
+
+  it("hands a turn the server definitions of the enabled connectors its agent names, secrets filled in", async () => {
+    await call(alice, "POST", "/v1/connectors", {
+      display_name: "Local Files",
+      transport: "stdio",
+      command: "npx",
+      args: ["-y", "some-mcp-server"],
+      env: { API_KEY: "local-secret" },
+    });
+    const stdio = (await call(alice, "GET", "/v1/connectors/local-files")).body;
+    expect(stdio).toMatchObject({ command: "npx", env: [{ key: "API_KEY", secret: true, value: null }] });
+    expect((await call(alice, "POST", "/v1/connectors/local-files/test")).body).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("run on a device"),
+    });
+
+    const servers = await serversFor(t.server.ctx, alice.orgId, ["catalogue-tools", "local-files", "gone"]);
+    expect(servers).toEqual([
+      {
+        name: "catalogue-tools",
+        transport: "http",
+        url: `${mcp.url}?tenant=acme`,
+        headers: { Authorization: "Bearer rotated" },
+        tool_timeout_sec: null,
+        server_instructions_trusted: false,
+      },
+      {
+        name: "local-files",
+        transport: "stdio",
+        command: "npx",
+        args: ["-y", "some-mcp-server"],
+        env: { API_KEY: "local-secret" },
+        env_vars: [],
+      },
+    ]);
+
+    await call(alice, "POST", `/v1/connectors/${id}/disable`);
+    expect((await serversFor(t.server.ctx, alice.orgId, ["catalogue-tools"])).length).toBe(0);
+    expect((await call(alice, "POST", `/v1/connectors/${id}/enable`)).body.enabled).toBe(true);
+  });
+
+  it("deleting a connector ends its shares", async () => {
+    expect((await call(alice, "DELETE", `/v1/connectors/${id}`)).body).toEqual({ ok: true });
+    expect((await call(bob, "GET", "/v1/connectors")).body.connectors).toEqual([]);
+    const shares = await t.server.ctx.db
+      .selectFrom("resource_shares")
+      .select("id")
+      .where("resource_id", "=", id)
+      .execute();
+    expect(shares).toEqual([]);
+    expect((await call(alice, "GET", "/v1/connectors/recommended")).body).toEqual({ items: [] });
+  });
+});
+
+describe("connectors on a server with default settings", () => {
+  let t: TestServer;
+  let mcp: TestMcpServer;
+  beforeAll(async () => {
+    t = await startTestServer();
+    mcp = await startMcpServer();
+  });
+  afterAll(async () => {
+    await mcp?.stop();
+    await t?.stop();
+  });
+
+  it("will not test a server on a private network on a member's say-so", async () => {
+    const mallory = await signUp(t, "mallory");
+    const created = await t.call("POST", "/v1/connectors", {
+      token: mallory.token,
+      body: { display_name: "Inside", transport: "http", url: mcp.url },
+    });
+    const tested = await t.call("POST", `/v1/connectors/${created.body.id}/test`, { token: mallory.token });
+    expect(tested.body).toMatchObject({ ok: false, error: expect.stringContaining("private network") });
+    expect(mcp.authorizations).toEqual([]);
+  });
+});

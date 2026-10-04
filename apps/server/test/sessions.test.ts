@@ -2,7 +2,7 @@ import { mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Host } from "@agent-base/host";
-import { type ModelGateway, startModelGateway } from "@agent-base/test-utils";
+import { type ModelGateway, startMcpServer, startModelGateway } from "@agent-base/test-utils";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Account, type TestServer, eventually, joinOrg, signUp, startTestServer } from "./harness.ts";
 
@@ -388,6 +388,36 @@ describe("sessions", () => {
     // The runtime tells the model which skills it has.
     const system = model.requests.at(-1)?.messages.find((m) => m.role === "system")?.content ?? "";
     expect(system).toContain("rhyme-check");
+  });
+
+  it("lets an agent call the tools of its connectors, from the device, with the connector's sealed credentials", async () => {
+    const mcp = await startMcpServer();
+    mcp.token = "catalogue-key";
+    try {
+      await call(alice, "POST", "/v1/connectors", {
+        display_name: "Catalogue",
+        transport: "http",
+        url: mcp.url,
+        headers: [{ key: "Authorization", secret: true, value: "Bearer catalogue-key" }],
+      });
+      await call(alice, "PATCH", "/v1/agents/Poet", { connector_types: ["catalogue"], skills: [] });
+      const session = await newChat(alice, { agent_slug: "Poet" });
+      model.replies.push(
+        { tool: { name: "mcp__catalogue__lookup", args: { term: "sonnet" } } },
+        { content: "Looked it up." },
+      );
+      await say(alice, session.id, "What is a sonnet?");
+
+      expect(mcp.calls).toEqual(["sonnet"]);
+      const offered = model.requests.at(-1)?.tools?.map((tool) => tool.function.name) ?? [];
+      expect(offered).toEqual(expect.arrayContaining(["mcp__catalogue__lookup", "mcp__catalogue__ping"]));
+      const result = (await history(session.id)).find((e) => e.event.event_type === "tool.call.completed")?.event
+        .payload;
+      expect(result).toMatchObject({ is_error: "false" });
+      expect(result?.["content"]).toContain("sonnet: found in the catalogue");
+    } finally {
+      await mcp.stop();
+    }
   });
 
   it("closes a turn on the device's behalf when the device restarts in the middle of it", async () => {

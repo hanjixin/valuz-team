@@ -6299,6 +6299,183 @@ paths:
             text/event-stream:
               schema: {type: string}
 
+  # ── Connectors: MCP servers an agent can call ──────────────────────────────
+  # agent-base: a connector belongs to a member and is shared through the ladder
+  # (`/v1/shares/connector/{id}`). Values marked secret are stored encrypted and never returned.
+  /v1/connectors:
+    get:
+      summary: List the connectors the caller can use
+      operationId: listConnectors
+      tags: [connectors]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorList"
+    post:
+      summary: Add a connector
+      operationId: createConnector
+      tags: [connectors]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConnectorRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateConnectorResponse"
+
+  /v1/connectors/discover:
+    post:
+      summary: Find out how an MCP server at a URL expects callers to authenticate
+      operationId: discoverConnector
+      tags: [connectors]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiscoverConnectorRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverConnectorResponse"
+
+  /v1/connectors/recommended:
+    get:
+      summary: A directory of ready-made connectors
+      operationId: listRecommendedConnectors
+      tags: [connectors]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorCatalog"
+
+  /v1/connectors/{connector_id}:
+    get:
+      summary: One connector
+      operationId: getConnector
+      tags: [connectors]
+      parameters:
+        - name: connector_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorItem"
+    patch:
+      summary: Change a connector
+      operationId: updateConnector
+      tags: [connectors]
+      parameters:
+        - name: connector_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConnectorRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorItem"
+    delete:
+      summary: Delete a connector
+      operationId: deleteConnector
+      tags: [connectors]
+      parameters:
+        - name: connector_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /v1/connectors/{connector_id}/enable:
+    post:
+      summary: Switch a connector on
+      operationId: enableConnector
+      tags: [connectors]
+      parameters:
+        - name: connector_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorItem"
+
+  /v1/connectors/{connector_id}/disable:
+    post:
+      summary: Switch a connector off
+      operationId: disableConnector
+      tags: [connectors]
+      parameters:
+        - name: connector_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectorItem"
+
+  /v1/connectors/{connector_id}/test:
+    post:
+      summary: Connect to the server and list its tools
+      operationId: testConnector
+      tags: [connectors]
+      description: |
+        Works for servers reached over the network. A `stdio` connector is a command run on a device,\nso it can only be checked there, when a session uses it.
+      parameters:
+        - name: connector_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestConnectorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -12280,3 +12457,178 @@ components:
       required: [ok]
       properties:
         ok: {type: boolean}
+    ConnectorParam:
+      type: object
+      required: [key]
+      properties:
+        key: {type: string, minLength: 1, maxLength: 200}
+        secret: {type: boolean, default: false}
+        value:
+          type: string
+          nullable: true
+          maxLength: 8000
+          description: Null in responses when `secret` — a secret is write-only.
+    ConnectorItem:
+      type: object
+      required: [id, slug, display_name, description, connector_type, transport, url, auth_type, has_api_key, command, args, working_dir, env, headers, params, enabled, status, tool_count, last_tested_at, error_message, created_at, updated_at]
+      properties:
+        id: {type: string}
+        slug: {type: string}
+        display_name: {type: string}
+        description: {type: string, nullable: true}
+        connector_type: {type: string}
+        transport: {type: string, enum: [http, sse, stdio]}
+        url: {type: string, nullable: true}
+        auth_type: {type: string}
+        has_api_key: {type: boolean}
+        command: {type: string, nullable: true}
+        args:
+          type: array
+          items: {type: string}
+        working_dir: {type: string, nullable: true}
+        env:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectorParam"
+        headers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectorParam"
+        params:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectorParam"
+        enabled: {type: boolean}
+        status: {type: string}
+        tool_count: {type: integer, nullable: true}
+        last_tested_at: {type: integer, format: int64, nullable: true}
+        error_message: {type: string, nullable: true}
+        created_at: {type: integer, format: int64}
+        updated_at: {type: integer, format: int64}
+        permission: {type: string, enum: [view, use, edit, control, admin]}
+        owner_id: {type: string, format: uuid}
+    ConnectorList:
+      type: object
+      required: [connectors]
+      properties:
+        connectors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectorItem"
+    CreateConnectorRequest:
+      type: object
+      required: [display_name, transport]
+      properties:
+        slug: {type: string}
+        display_name: {type: string, minLength: 1, maxLength: 128}
+        transport: {type: string, enum: [http, sse, stdio]}
+        description: {type: string, nullable: true}
+        connector_type: {type: string}
+        url: {type: string, nullable: true}
+        auth_type: {type: string}
+        headers:
+          type: array
+          nullable: true
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/ConnectorParam"
+        params:
+          type: array
+          nullable: true
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/ConnectorParam"
+        credentials:
+          type: object
+          additionalProperties: {type: string}
+        command: {type: string, nullable: true}
+        args:
+          type: array
+          maxItems: 100
+          items: {type: string}
+        working_dir: {type: string, nullable: true}
+        env:
+          type: object
+          nullable: true
+          additionalProperties: {type: string}
+    CreateConnectorResponse:
+      type: object
+      required: [id, slug, needs_auth, authorization_url]
+      properties:
+        id: {type: string}
+        slug: {type: string}
+        needs_auth: {type: boolean}
+        authorization_url: {type: string, nullable: true}
+    UpdateConnectorRequest:
+      type: object
+      properties:
+        display_name: {type: string, nullable: true}
+        description: {type: string, nullable: true}
+        url: {type: string, nullable: true}
+        auth_type: {type: string, nullable: true}
+        headers:
+          type: array
+          nullable: true
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/ConnectorParam"
+        params:
+          type: array
+          nullable: true
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/ConnectorParam"
+        command: {type: string, nullable: true}
+        args:
+          type: array
+          nullable: true
+          maxItems: 100
+          items: {type: string}
+        working_dir: {type: string, nullable: true}
+        env:
+          type: object
+          nullable: true
+          additionalProperties: {type: string}
+        enabled: {type: boolean, nullable: true}
+    DiscoverConnectorRequest:
+      type: object
+      required: [url]
+      properties:
+        url: {type: string}
+        transport: {type: string}
+    DiscoverConnectorResponse:
+      type: object
+      required: [auth_type, discovered, oauth_authorization_endpoint, oauth_token_endpoint, oauth_registration_endpoint]
+      properties:
+        auth_type: {type: string}
+        discovered: {type: boolean}
+        oauth_authorization_endpoint: {type: string, nullable: true}
+        oauth_token_endpoint: {type: string, nullable: true}
+        oauth_registration_endpoint: {type: string, nullable: true}
+    ConnectorCatalog:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    TestConnectorResponse:
+      type: object
+      required: [ok, tool_count, tools, tool_details, error]
+      properties:
+        ok: {type: boolean}
+        tool_count: {type: integer, nullable: true}
+        tools:
+          type: array
+          items: {type: string}
+        tool_details:
+          type: array
+          items:
+            type: object
+            required: [name, description]
+            properties:
+              name: {type: string}
+              description: {type: string, nullable: true}
+        error: {type: string, nullable: true}

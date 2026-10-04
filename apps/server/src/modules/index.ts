@@ -5,6 +5,7 @@
 export * from "./agents/handlers.ts";
 export * from "./audit/handlers.ts";
 export * from "./auth/handlers.ts";
+export * from "./connectors/handlers.ts";
 export * from "./devices/handlers.ts";
 export * from "./feedback/handlers.ts";
 export * from "./notifications/handlers.ts";

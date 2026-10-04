@@ -96,7 +96,7 @@ returned by the API.
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events), and the collaboration UI (Settings → Organization,
-Devices, Sharing), notifications, per-turn feedback, and the skill library with versions. Not yet: connectors, approvals, fork, tasks,
+Devices, Sharing), notifications, per-turn feedback, the skill library with versions, and connectors (MCP servers). Not yet: approvals, fork, tasks,
 knowledge base, automations, channels, storage.
 
 The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),

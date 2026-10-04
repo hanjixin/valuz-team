@@ -69,7 +69,7 @@ connectors, projects, automations, knowledge base…) are reached by hand-writte
 As each of those modules is ported, its operations are added to the contract here, with shapes taken from the
 frontend's types and the Python routes. Added so far: `auth`, `orgs`, `teams`, `shares`, `devices` (new in
 agent-base), and `providers`, `settings/model-defaults`, `settings/model-options` and the project CRUD under `projects`
-(existing frontend calls).
+(existing frontend calls), and `connectors`.
 
 Deliberate differences in behaviour:
 
@@ -88,4 +88,7 @@ Deliberate differences in behaviour:
   and an agent's skills are written to the device for each turn. `path` in responses is a label, not a location.
   Per-project enablement is not modelled — a member's library switch is the only one. `POST /v1/skills/scan` has
   nothing to scan and returns the count.
+- Connectors: only servers that take a key or nothing — OAuth-protected MCP servers are not supported yet
+  (`discover` always answers "no OAuth"), and there is no directory of ready-made connectors. A `stdio` connector
+  runs on the device, so it cannot be tested from the server.
 - `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

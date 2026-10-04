@@ -241,6 +241,9 @@ importers:
       '@fastify/websocket':
         specifier: ^11.3.3
         version: 11.3.3
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.0
+        version: 1.32.0(zod@3.25.76)
       '@node-rs/argon2':
         specifier: ^2.2.1
         version: 2.2.1
@@ -480,6 +483,9 @@ importers:
 
   packages/test-utils:
     dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.32.0
+        version: 1.32.0(zod@3.25.76)
       '@testcontainers/postgresql':
         specifier: ^11.0.0
         version: 11.14.0
@@ -489,6 +495,9 @@ importers:
       testcontainers:
         specifier: ^11.0.0
         version: 11.14.0
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
 
   packages/ui:
     dependencies:

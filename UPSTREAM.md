@@ -159,6 +159,9 @@ Deliberate differences in behaviour:
   the agent, one binding per agent in the organization; `channel_instance_id` is the binding's id and the last
   segment of its callback URL. The conversations people have with the bot are the binder's own sessions (a quick
   chat per Feishu chat), on the binder's device. Events arrive only over the long connection the binder's device dials (the server holds none; `connection_status` is what that device reports, `disconnected` while it is away). There is no HTTP callback: `feishuChannelCallback` is unimplemented, a Verification Token or Encrypt Key sent with a binding is ignored, and `has_verification_token` / `has_encrypt_key` are always false. Text messages only. Binding chats to projects is not implemented.
+- The built-in assistant (Valurion / 小万) is one per member of an organization rather than one per installation;
+  its product instructions are not carried over (it runs with none of its own), and `effective-resources` lists the
+  member's enabled skills and connectors and the organization's knowledge bases.
 - Agent templates and the first-run tour use the 24 bundled team packs, copied from valuz-agent's
   `backend/valuz_agent/resources/agent_packs` into `apps/server/src/modules/templates/packs` and reduced to what is
   read (each team and its roles' names, descriptions and instructions). The skills and connectors the packs name are

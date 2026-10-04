@@ -12,6 +12,8 @@ const visible = (db: Db, auth: Auth) =>
     .select("u.name as owner_name")
     .select(permissionOf(auth, "agent", "r").as("permission"))
     .where("r.org_id", "=", auth.orgId)
+    // A built-in assistant is its member's alone: nobody else sees it, admins included.
+    .where((eb) => eb.or([eb("r.kind", "=", "standard"), eb("r.owner_id", "=", auth.userId)]))
     .where(sql<boolean>`${permissionOf(auth, "agent", "r")} IS NOT NULL`);
 
 export type AgentRow = Awaited<ReturnType<typeof list>>[number];
@@ -24,6 +26,26 @@ export const findBySlug = (db: Db, auth: Auth, slug: string) =>
 /** Every slug in the organization — including agents the caller cannot see, which still hold their slug. */
 export const slugsInOrg = async (db: Db, orgId: string): Promise<Set<string>> =>
   new Set((await db.selectFrom("agents").select("slug").where("org_id", "=", orgId).execute()).map((row) => row.slug));
+
+/** Give a member their built-in assistant unless they have it; two requests racing agree on one. */
+export const insertBuiltin = async (
+  db: Db,
+  row: AgentValues & { id: string; org_id: string; owner_id: string },
+): Promise<void> =>
+  void (await db
+    .insertInto("agents")
+    .values({ ...row, ...lists(row), kind: "system" } as never)
+    .onConflict((oc) => oc.doNothing())
+    .execute());
+
+export const hasBuiltin = async (db: Db, auth: Auth): Promise<boolean> =>
+  (await db
+    .selectFrom("agents")
+    .select("id")
+    .where("org_id", "=", auth.orgId)
+    .where("owner_id", "=", auth.userId)
+    .where("kind", "=", "system")
+    .executeTakeFirst()) !== undefined;
 
 export interface AgentValues {
   slug: string;

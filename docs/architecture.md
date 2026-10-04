@@ -43,6 +43,15 @@ apps/server/src/
     repo.ts               SQL for this module's tables — private to the module
 ```
 
+## The built-in assistant
+
+Every member has one agent nobody made: the assistant (小万 / Valurion, slug `valurion`, `kind: system`). It is
+created the first time it is looked for, is its member's alone — not shareable, not visible to admins — and cannot
+be renamed or deleted; what it runs on (runtime, model, channel, effort) is the member's to change. It names no
+skills or connectors: each turn it is given everything its member can use at that moment
+(`modules/agents/available.ts`). Because each member has one under the same slug, a slug is unique in the
+organization only among the agents people make.
+
 ## Access control
 
 Every shareable row carries `org_id` and `owner_id`. The caller's permission on it is `admin` for its owner

@@ -3,6 +3,7 @@ import { requireAuth } from "../../infra/auth.ts";
 import type { Handler } from "../../infra/context.ts";
 import { conflict } from "../../infra/errors.ts";
 import * as members from "./members.ts";
+import { everythingFor } from "./available.ts";
 import * as service from "./service.ts";
 
 type Req = Parameters<Handler>[0];
@@ -14,9 +15,10 @@ const caller = async (req: Req) => {
 
 export const listAgents: Handler = async (req) => {
   const { ctx, auth } = await caller(req);
-  // Every agent here is member-made; there are no built-in ("official") ones yet.
+  // "custom" is what members made; nothing here is "official" — the one built-in is the assistant.
   const { source } = req.query as { source?: string };
-  return { agents: source === "official" ? [] : await service.list(ctx, auth) };
+  const agents = source === "official" ? [] : await service.list(ctx, auth);
+  return { agents: source ? agents.filter((agent) => agent.source === source) : agents };
 };
 
 export const createAgent: Handler = async (req, reply) => {
@@ -30,13 +32,45 @@ export const getAgent: Handler = async (req) => {
 };
 
 /**
- * What an "all available" agent can currently reach. Every agent here names its
- * skills and connectors explicitly, so there is no such list to resolve.
+ * What an "all available" agent — the built-in assistant — can reach right now.
+ * Every other agent names its skills and connectors, so there is nothing to resolve.
  */
 export const getAgentEffectiveResources: Handler = async (req) => {
   const { ctx, auth, slug } = await caller(req);
-  await service.get(ctx, auth, slug);
-  throw conflict("this agent uses the skills and connectors it names", "explicit_resources");
+  const agent = await service.get(ctx, auth, slug);
+  if (agent.resource_policy !== "all_available")
+    throw conflict("this agent uses the skills and connectors it names", "explicit_resources");
+  const all = await everythingFor(ctx, auth);
+  const skills = all.skills.map((skill) => ({
+    id: skill.id,
+    slug: skill.slug,
+    name: skill.name,
+    source: skill.source,
+    status: "available",
+  }));
+  const connectors = all.connectors.map((connector) => ({
+    id: connector.id,
+    slug: connector.slug,
+    name: connector.display_name,
+    source: "custom",
+    status: connector.status,
+  }));
+  const knowledge_bases = all.knowledgeBases.map((base) => ({
+    id: base.id,
+    slug: base.id,
+    name: base.name,
+    source: "org",
+    status: "available",
+  }));
+  return {
+    policy: "all_available",
+    resolved_at: Date.now(),
+    counts: { skills: skills.length, connectors: connectors.length, knowledge_bases: knowledge_bases.length },
+    skills,
+    connectors,
+    knowledge_bases,
+    warnings: [],
+  };
 };
 
 export const updateAgent: Handler = async (req) => {

@@ -20,12 +20,6 @@ type Template = Schema<"AgentTemplate">;
 type Agent = Schema<"Agent">;
 type Role = Pack["roles"][number];
 
-const ASSISTANT = {
-  slug: "valurion",
-  name: "Valurion",
-  description: "Your built-in assistant with access to all resources currently available to you.",
-  avatar: "bot",
-};
 const EXAMPLE_PROJECT: Localized = { "zh-CN": "示例项目", "en-US": "Example project" };
 
 async function localeOf(ctx: Ctx, auth: Auth): Promise<keyof Localized> {
@@ -142,10 +136,9 @@ export async function add(ctx: Ctx, auth: Auth, templateId: string): Promise<Sch
 
 // ------------------------------------------------------------------ the first-run tour
 
-/** The general assistant every member can start with. Made once; found again afterwards. */
+/** The general assistant every member starts with: their built-in one. */
 export async function assistant(ctx: Ctx, auth: Auth): Promise<{ agent_slug: string }> {
-  const { agent } = await ensure(ctx, auth, { ...ASSISTANT, effort: "high", instructions: "" });
-  return { agent_slug: agent.slug };
+  return { agent_slug: (await agents.get(ctx, auth, agents.BUILTIN_SLUG)).slug };
 }
 
 /** An example project with one of the templates as its team. Calling again finds the same project. */

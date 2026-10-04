@@ -14,10 +14,12 @@ import {
   managedCwd,
 } from "@agent-base/protocol";
 import type { Schema } from "@agent-base/contract";
+import { authFor } from "../../infra/auth.ts";
 import type { Auth, Ctx } from "../../infra/context.ts";
 import { DeviceOfflineError } from "../../infra/device-hub.ts";
 import { HttpError, conflict, notFound } from "../../infra/errors.ts";
 import { orgChannel } from "../../infra/pubsub.ts";
+import { everythingFor } from "../agents/available.ts";
 import * as agents from "../agents/service.ts";
 import * as audit from "../audit/service.ts";
 import * as connectors from "../connectors/service.ts";
@@ -104,10 +106,21 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<{ session: Session; sk
     .filter(Boolean)
     .join("\n\n");
   // …and its equipment as it is now: the current version of each skill it names.
-  const skillBundles = await skills.bundlesFor(ctx, row.org_id, agent?.skills ?? []);
+  // The built-in assistant names nothing: it has whatever its member can use right now.
+  const owner = agent?.kind === "system" ? await authFor(ctx, row.org_id, agent.owner_id) : null;
+  const all = owner ? await everythingFor(ctx, owner) : null;
+  const skillBundles = await skills.bundlesFor(
+    ctx,
+    row.org_id,
+    all ? all.skills.map((skill) => skill.slug) : (agent?.skills ?? []),
+  );
   const equipped = skillBundles.map((bundle) => bundle.slug);
   const mcpServers = [
-    ...(await connectors.serversFor(ctx, row.org_id, agent?.connector_types ?? [])),
+    ...(await connectors.serversFor(
+      ctx,
+      row.org_id,
+      all ? all.connectors.map((connector) => connector.slug) : (agent?.connector_types ?? []),
+    )),
     ...extras.flatMap((extra) => extra.mcpServers),
   ];
   const session = Session.parse({

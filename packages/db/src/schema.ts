@@ -150,6 +150,8 @@ export interface AgentsTable {
   inherit_global_instructions: ColumnType<boolean, boolean | undefined, boolean>;
   permission_mode: ColumnType<string, string | undefined, string>;
   avatar: string | null;
+  /** "system" for a member's built-in assistant. */
+  kind: ColumnType<string, string | undefined, string>;
   created_at: Timestamp;
   updated_at: Timestamp;
 }

@@ -127,7 +127,7 @@ describe("agent library", () => {
   });
 
   it("is private until shared: `use` lets a colleague work with it, `edit` change it, only the owner delete it", async () => {
-    expect((await call(bob, "GET", "/v1/agents")).body.agents).toEqual([]);
+    expect((await call(bob, "GET", "/v1/agents?source=custom")).body.agents).toEqual([]);
     expect((await call(bob, "GET", "/v1/agents/researcher")).status).toBe(404);
 
     const agent = (await call(alice, "GET", "/v1/agents/researcher")).body;
@@ -198,7 +198,52 @@ describe("agent library", () => {
     );
     expect(actions).toEqual(expect.arrayContaining(["agent.create", "agent.update", "agent.delete"]));
   });
-  it("has no 'all available' resource list: an agent uses what it names", async () => {
+  it("gives every member a built-in assistant of their own: fixed in what it is, theirs in what it runs on", async () => {
+    // Nobody made it: it is simply there, for each of them, under the same handle.
+    const mine = (await call(bob, "GET", "/v1/agents")).body.agents.filter(
+      (a: { kind: string; id: string }) => a.kind === "system",
+    );
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({
+      slug: "valurion",
+      name: "小万",
+      source: "builtin",
+      resource_policy: "all_available",
+      readonly: true,
+      deletable: false,
+      owner_id: bob.userId,
+      skills: [],
+    });
+    const hers = (await call(alice, "GET", "/v1/agents/valurion")).body;
+    expect(hers).toMatchObject({ kind: "system", owner_id: alice.userId });
+    expect(hers.id).not.toBe(mine[0].id);
+    // Asking again makes no second one; alice, an org owner, still sees only her own.
+    const again = (await call(alice, "GET", "/v1/agents")).body.agents.filter(
+      (a: { kind: string; id: string }) => a.kind === "system",
+    );
+    expect(again.map((a: { kind: string; id: string }) => a.id)).toEqual([hers.id]);
+    await call(alice, "PATCH", "/v1/settings/preferences", { default_locale: "en-US" });
+    expect((await call(alice, "GET", "/v1/agents/valurion")).body.name).toBe("Valurion");
+    await call(alice, "PATCH", "/v1/settings/preferences", { default_locale: "zh-CN" });
+
+    // What it is cannot be changed, and it cannot be deleted or have its handle taken.
+    const renamed = await call(bob, "PATCH", "/v1/agents/valurion", { name: "Mine" });
+    expect([renamed.status, renamed.body.code]).toEqual([409, "builtin_agent"]);
+    const removed = await call(bob, "DELETE", "/v1/agents/valurion");
+    expect([removed.status, removed.body.code]).toEqual([409, "builtin_agent"]);
+    expect((await call(bob, "POST", "/v1/agents", { name: "Impostor", slug: "valurion" })).status).toBe(409);
+    // What it runs on is the member's choice.
+    const moved = await call(bob, "PATCH", "/v1/agents/valurion", { model: "another-model", effort: "low" });
+    expect(moved.body).toMatchObject({ model: "another-model", effort: "low", name: "小万" });
+
+    // It works with whatever its member can use right now.
+    await call(bob, "POST", "/v1/skills", { name: "Bob's skill", description: "d", instructions: "Do it." });
+    const resources = (await call(bob, "GET", "/v1/agents/valurion/effective-resources")).body;
+    expect(resources).toMatchObject({ policy: "all_available", counts: { skills: 1 } });
+    expect(resources.skills[0]).toMatchObject({ name: "Bob's skill", status: "available" });
+  });
+
+  it("has no 'all available' resource list for the agents people make: they use what they name", async () => {
     const created = (await call(alice, "POST", "/v1/agents", { name: "Explicit one" })).body;
     const res = await call(alice, "GET", `/v1/agents/${created.slug}/effective-resources`);
     expect([res.status, res.body.code]).toEqual([409, "explicit_resources"]);

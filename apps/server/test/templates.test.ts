@@ -63,8 +63,9 @@ describe("agent templates and the first-run tour", () => {
   it("needs a model channel before it can make agents", async () => {
     const refused = await call(alice, "POST", "/v1/agent-templates/content:add");
     expect([refused.status, refused.body.code]).toEqual([422, "no_model_channel"]);
-    expect((await call(alice, "POST", "/v1/onboarding/assistant")).status).toBe(422);
-    expect((await call(alice, "GET", "/v1/agents")).body.agents).toEqual([]);
+    // The built-in assistant is not made by the tour: it is there, channel or not.
+    expect((await call(alice, "POST", "/v1/onboarding/assistant")).body).toEqual({ agent_slug: "valurion" });
+    expect((await call(alice, "GET", "/v1/agents?source=custom")).body.agents).toEqual([]);
     expect((await call(alice, "POST", "/v1/agent-templates/nope:add")).status).toBe(404);
   });
 
@@ -85,7 +86,7 @@ describe("agent templates and the first-run tour", () => {
       skipped: 4,
     });
     expect(await template(alice, "content")).toMatchObject({ added: true });
-    expect((await call(alice, "GET", "/v1/agents")).body.agents).toHaveLength(4);
+    expect((await call(alice, "GET", "/v1/agents?source=custom")).body.agents).toHaveLength(4);
   });
 
   it("gives a colleague their own copies, under slugs of their own", async () => {
@@ -103,7 +104,7 @@ describe("agent templates and the first-run tour", () => {
     const assistant = (await call(alice, "POST", "/v1/onboarding/assistant")).body;
     expect(assistant).toEqual({ agent_slug: "valurion" });
     expect((await call(alice, "POST", "/v1/onboarding/assistant")).body).toEqual(assistant);
-    expect((await call(alice, "GET", "/v1/agents/valurion")).body).toMatchObject({ name: "Valurion", effort: "high" });
+    expect((await call(alice, "GET", "/v1/agents/valurion")).body).toMatchObject({ name: "小万", effort: "high" });
 
     const first = await call(alice, "POST", "/v1/onboarding/example-project", { team_id: "development-engineering" });
     expect(first.status).toBe(200);
@@ -174,7 +175,7 @@ describe("agent templates and the first-run tour", () => {
       connectors: [{ slug: "github", already_present: false, requires_setup: true }],
     });
     // Looking changed nothing.
-    expect((await call(bob, "GET", "/v1/agents")).body.agents).toHaveLength(4);
+    expect((await call(bob, "GET", "/v1/agents?source=custom")).body.agents).toHaveLength(4);
 
     const imported = (
       await call(bob, "POST", "/v1/agent-packs/import/confirm", { preview_id: preview.body.preview_id })
@@ -216,7 +217,7 @@ describe("agent templates and the first-run tour", () => {
       provider_id: "ch-claude-subscription",
       model: "claude-sonnet-4-6",
     });
-    expect((await call(dana, "POST", "/v1/onboarding/assistant")).body).toEqual({ agent_slug: expect.any(String) });
+    expect((await call(dana, "POST", "/v1/onboarding/assistant")).body).toEqual({ agent_slug: "valurion" });
     // Editing an agent onto the other subscription moves its runtime with it.
     const moved = await call(dana, "PATCH", `/v1/agents/${added.roles[0].slug}`, {
       provider_id: "ch-codex-subscription",

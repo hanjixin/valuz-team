@@ -10,6 +10,7 @@ import type { Auth, Ctx } from "../../infra/context.ts";
 import { badRequest, conflict, forbidden, notFound } from "../../infra/errors.ts";
 import * as audit from "../audit/service.ts";
 import * as providers from "../providers/service.ts";
+import * as settings from "../settings/service.ts";
 import * as sharing from "../sharing/service.ts";
 import * as repo from "./repo.ts";
 import { MAX_SLUG_LENGTH, deriveSlug, ensureUniqueSlug, isValidSlug } from "./slug.ts";
@@ -18,8 +19,66 @@ sharing.registerShareable("agent", "agents");
 
 type Agent = Schema<"Agent">;
 
-function present(row: repo.AgentRow): Agent {
+/**
+ * The built-in assistant: every member has one, under this slug, made the first
+ * time it is looked for. What it is — its name, that it works with everything
+ * its member can use — is fixed; what it runs on is the member's to choose.
+ */
+export const BUILTIN_SLUG = "valurion";
+const BUILTIN = {
+  name: { "zh-CN": "小万", "en-US": "Valurion" },
+  description: {
+    "zh-CN": "你的内置智能助手，可使用你当前所有可用的资源。",
+    "en-US": "Your built-in assistant with access to all resources currently available to you.",
+  },
+} as const;
+type Locale = keyof typeof BUILTIN.name;
+/** The only things a member may change about their built-in assistant. */
+const BUILTIN_EDITABLE = ["runtime", "model", "provider_id", "effort"];
+
+const localeOf = async (ctx: Ctx, auth: Auth): Promise<Locale> =>
+  (await settings.getPreferences(ctx.db, { orgId: auth.orgId, userId: auth.userId })).default_locale === "en-US"
+    ? "en-US"
+    : "zh-CN";
+
+export async function ensureBuiltin(ctx: Ctx, auth: Auth): Promise<void> {
+  if (await repo.hasBuiltin(ctx.db, auth)) return;
+  const defaults = await providers.getDefaults(ctx, auth);
+  await repo.insertBuiltin(ctx.db, {
+    id: crypto.randomUUID(),
+    org_id: auth.orgId,
+    owner_id: auth.userId,
+    slug: BUILTIN_SLUG,
+    name: BUILTIN.name["en-US"],
+    description: BUILTIN.description["en-US"],
+    instructions: "",
+    runtime: defaults.default_runtime,
+    model: defaults.default_model ?? "",
+    // A subscription is "no channel": the runtime uses the device's own login.
+    provider_id: providers.subscriptionOf(defaults.default_provider_id) ? null : (defaults.default_provider_id ?? null),
+    effort: "high",
+    skills: [],
+    connector_types: [],
+    knowledge_scope: [],
+    inherit_global_instructions: true,
+    permission_mode: "full_access",
+    avatar: "bot",
+  });
+}
+
+function present(row: repo.AgentRow, locale: Locale): Agent {
   const permission = row.permission ?? "view";
+  if (row.kind === "system")
+    return {
+      ...present({ ...row, kind: "standard" }, locale),
+      name: BUILTIN.name[locale],
+      description: BUILTIN.description[locale],
+      kind: "system",
+      source: "builtin",
+      resource_policy: "all_available",
+      readonly: true,
+      deletable: false,
+    };
   return {
     id: row.id,
     slug: row.slug,
@@ -50,6 +109,7 @@ function present(row: repo.AgentRow): Agent {
 
 /** The agent as the caller may see it; 404 when they cannot, 403 when they can but not at this level. */
 export async function require(ctx: Ctx, auth: Auth, slug: string, needed: sharing.Permission = "view") {
+  if (slug === BUILTIN_SLUG) await ensureBuiltin(ctx, auth);
   const row = await repo.findBySlug(ctx.db, auth, slug);
   if (!row?.permission) throw notFound("agent");
   if (!sharing.permissionAtLeast(row.permission, needed))
@@ -57,14 +117,18 @@ export async function require(ctx: Ctx, auth: Auth, slug: string, needed: sharin
   return row;
 }
 
-export const list = async (ctx: Ctx, auth: Auth): Promise<Agent[]> => (await repo.list(ctx.db, auth)).map(present);
+export async function list(ctx: Ctx, auth: Auth): Promise<Agent[]> {
+  await ensureBuiltin(ctx, auth);
+  const locale = await localeOf(ctx, auth);
+  return (await repo.list(ctx.db, auth)).map((row) => present(row, locale));
+}
 
 export const get = async (ctx: Ctx, auth: Auth, slug: string): Promise<Agent> =>
-  present(await require(ctx, auth, slug));
+  present(await require(ctx, auth, slug), await localeOf(ctx, auth));
 
 /** A slug the caller asked for must be free; one derived from the name is made unique. */
 async function chooseSlug(ctx: Ctx, auth: Auth, wanted: string | null | undefined, name: string): Promise<string> {
-  const taken = await repo.slugsInOrg(ctx.db, auth.orgId);
+  const taken = (await repo.slugsInOrg(ctx.db, auth.orgId)).add(BUILTIN_SLUG);
   const slug = wanted?.trim();
   if (!slug) return ensureUniqueSlug(deriveSlug(name), taken);
   if (!isValidSlug(slug))
@@ -136,6 +200,14 @@ export async function update(ctx: Ctx, auth: Auth, slug: string, given: Schema<"
   const changes = Object.fromEntries(
     Object.entries(input).filter(([, value]) => value !== null && value !== undefined),
   ) as Partial<repo.AgentValues>;
+  if (existing.kind === "system") {
+    const fixed = Object.keys(changes).filter((field) => !BUILTIN_EDITABLE.includes(field));
+    if (fixed.length > 0)
+      throw conflict(
+        `the built-in assistant's ${fixed.join(", ")} cannot be changed — only what it runs on`,
+        "builtin_agent",
+      );
+  }
   // Moving to a subscription is the one change that sets the channel to nothing.
   if (toSubscription) changes.provider_id = null;
   if (typeof changes.name === "string" && !changes.name.trim()) throw badRequest("an agent needs a name");
@@ -154,6 +226,7 @@ export async function update(ctx: Ctx, auth: Auth, slug: string, given: Schema<"
 
 export async function remove(ctx: Ctx, auth: Auth, slug: string): Promise<void> {
   const existing = await require(ctx, auth, slug, "admin");
+  if (existing.kind === "system") throw conflict("the built-in assistant cannot be deleted", "builtin_agent");
   await ctx.db.transaction().execute(async (tx) => {
     await sharing.revokeForResource(tx, "agent", existing.id);
     await repo.remove(tx, existing.id);

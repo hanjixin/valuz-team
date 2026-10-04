@@ -71,6 +71,12 @@ export const RpcMethods = {
   "session.interrupt": z.object({ session_id: z.string() }),
   "session.action": z.object({ session_id: z.string(), action: SubmitAction }),
   "session.close": z.object({ session_id: z.string() }),
+  /**
+   * Ask a model one question on this device, outside any conversation: a
+   * throwaway session takes one turn and its answer comes back. Nothing of it
+   * is stored anywhere.
+   */
+  "session.ask": z.object({ session: Session, prompt: z.string(), timeout_ms: z.number().int().default(120_000) }),
   /** Branch a session's thread into a new session's — all of it, or up to an anchor a turn recorded. */
   "session.fork": z.object({
     source_session_id: z.string(),

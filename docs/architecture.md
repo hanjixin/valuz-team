@@ -138,7 +138,7 @@ What agents carry from one session to the next (`modules/memory`). Three scopes 
 size limit: `user` and `global` are a member's own, `project` belongs to a project and is shared with everyone who
 works in it. A turn is shown what is in scope and given a `memory` tool (a third server-hosted toolkit) to add,
 replace and remove entries. When a conversation has been quiet for a minute, a background job (`infra/jobs.ts`)
-asks the session's model what else was worth keeping and applies its answer through the same store — so the same
+asks the session's model — on the session's device, like everything a model does here — what else was worth keeping and applies its answer through the same store — so the same
 limits, secret redaction and scan for hidden instructions cover both paths.
 
 ## Automations
@@ -178,6 +178,9 @@ the device's own sign-in.
 
 Credentials are sealed at rest with `infra/secret-box.ts` (keyed from `APP_SECRET`, per purpose) and are never
 returned by the API.
+
+The server never asks a model anything but "are you there" (checking a channel when it is added). Runtimes are on
+devices: a turn runs there, and so does any one-off question the server needs answered (`session.ask`).
 
 ## Status
 

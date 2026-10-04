@@ -61,6 +61,10 @@ describe("memory", () => {
     return { isError: result.isError === true, value: result.isError ? text : JSON.parse(text) };
   };
 
+  /** The questions put to the model outside any conversation (the reviews), as the device asked them. */
+  const asked = (marker: string) =>
+    model.requests.filter((request) => (request.messages.at(-1)?.content ?? "").includes(marker));
+
   beforeAll(async () => {
     t = await startTestServer({ ALLOW_PRIVATE_UPSTREAMS: "1", MEMORY_REVIEW_IDLE_SECONDS: "1" });
     url = await t.listen();
@@ -103,7 +107,7 @@ describe("memory", () => {
   });
   beforeEach(() => {
     model.replies.length = 0;
-    model.complete = null;
+    model.handler = null;
   });
 
   it("starts empty and switched on, and each member sets it for themselves", async () => {
@@ -190,7 +194,13 @@ describe("memory", () => {
   it("keeps entries distinct, within a size limit, and free of secrets and hidden instructions", async () => {
     const session = await newSession(projectId);
     const add = (content: string, target = "global") => tool(session, { action: "add", target, content });
-    expect((await add("Use pnpm, never npm.")).value).toMatchObject({ entry_count: 1 });
+    // A front-matter header a model wrapped its entry in is not part of the entry.
+    expect((await add("---\nname: tooling\nmetadata:\n  type: user\n---\n\nUse pnpm, never npm.")).value).toMatchObject(
+      {
+        entry_count: 1,
+        entries: ["Use pnpm, never npm."],
+      },
+    );
     expect((await add("  Use pnpm, never npm. ")).value).toMatchObject({
       entry_count: 1,
       message: /already in memory/,
@@ -265,24 +275,27 @@ describe("memory", () => {
       auto_extract: true,
       custom_instructions: "Always keep release dates.",
     });
-    model.complete = (request) =>
-      (request.messages[0]?.content ?? "").includes("You are a memory curator")
-        ? JSON.stringify({
-            ops: [
-              { action: "add", target: "project", content: "The 2.0 release is planned for March." },
-              {
-                action: "replace",
-                target: "user",
-                old_text: "Chinese",
-                content: "Prefers answers in Chinese, briefly.",
-              },
-              { action: "remove", target: "global", old_text: "does not exist" },
-            ],
-            note: "kept the release date",
-          })
+    // The review is a question to the session's own model, asked on its device like any turn.
+    model.handler = (request) =>
+      (request.messages.at(-1)?.content ?? "").includes("You are a memory curator")
+        ? {
+            content: JSON.stringify({
+              ops: [
+                { action: "add", target: "project", content: "The 2.0 release is planned for March." },
+                {
+                  action: "replace",
+                  target: "user",
+                  old_text: "Chinese",
+                  content: "Prefers answers in Chinese, briefly.",
+                },
+                { action: "remove", target: "global", old_text: "does not exist" },
+              ],
+              note: "kept the release date",
+            }),
+          }
         : undefined;
     const session = await newSession(projectId);
-    const before = model.completions.length;
+    const before = asked("You are a memory curator").length;
     model.replies.push({ content: "Understood — March it is. I will plan the milestones backwards from there." });
     await say(
       session,
@@ -294,7 +307,11 @@ describe("memory", () => {
       global: [],
       project: ["Atlas ships on Fridays.", "The 2.0 release is planned for March."],
     });
-    const prompt = model.completions.at(-1)?.messages[0]?.content ?? "";
+    const review = asked("You are a memory curator").at(-1);
+    const prompt = review?.messages.at(-1)?.content ?? "";
+    // Asked bare: none of the conversation's tools or instructions come along.
+    expect(review?.messages[0]?.content).not.toContain("<memory>");
+    expect((review?.tools ?? []).some((tool) => tool.function.name.startsWith("mcp__"))).toBe(false);
     expect(prompt).toContain("USER: We decided the 2.0 release is planned for March");
     expect(prompt).toContain("ASSISTANT: Understood — March it is.");
     expect(prompt).toContain("[REDACTED_SECRET]");
@@ -303,7 +320,7 @@ describe("memory", () => {
     expect(prompt).toContain("Always keep release dates.");
     expect(prompt).toContain("Writable targets: user / global / project.");
     expect(prompt).toContain("  - Atlas ships on Fridays.");
-    expect(model.completions.length).toBe(before + 1);
+    expect(asked("You are a memory curator").length).toBe(before + 1);
 
     // Too little said since the last review: no model call. Switched off: none either.
     model.replies.push({ content: "ok" });
@@ -313,7 +330,10 @@ describe("memory", () => {
     model.replies.push({ content: "Long answer. ".repeat(40) });
     await say(other, "Tell me something long.");
     await new Promise((resolve) => setTimeout(resolve, 2500));
-    expect(model.completions.length).toBe(before + 1);
+    expect(asked("You are a memory curator").length).toBe(before + 1);
+    model.handler = null;
+    // The server itself asked no model anything.
+    expect(model.completions).toEqual([]);
   });
 
   it("reviews a finished task for what the team should carry forward", async () => {
@@ -336,13 +356,15 @@ describe("memory", () => {
     ];
     model.handler = (request) => {
       const system = systemOf(request);
+      if ((request.messages.at(-1)?.content ?? "").includes("MULTI-AGENT TASK that just finished"))
+        return {
+          content: JSON.stringify({
+            ops: [{ action: "add", target: "project", content: "Release notes are drafted by Lead." }],
+          }),
+        };
       if (system.includes("You are the LEAD")) return steps.shift() ?? { content: "Done." };
       return system.includes("You are a MEMBER") ? { content: "Notes drafted." } : undefined;
     };
-    model.complete = (request) =>
-      (request.messages[0]?.content ?? "").includes("MULTI-AGENT TASK that just finished")
-        ? JSON.stringify({ ops: [{ action: "add", target: "project", content: "Release notes are drafted by Lead." }] })
-        : undefined;
     try {
       const task = await call(alice, "POST", `/v1/projects/${projectId}/tasks`, {
         title: "Release notes",
@@ -354,8 +376,7 @@ describe("memory", () => {
         async () => (await memoryOf(alice, projectId)).entries.project.includes("Release notes are drafted by Lead."),
         20_000,
       );
-      const prompt = model.completions.findLast((c) => (c.messages[0]?.content ?? "").includes("MULTI-AGENT TASK"))
-        ?.messages[0]?.content;
+      const prompt = asked("MULTI-AGENT TASK").at(-1)?.messages.at(-1)?.content;
       expect(prompt).toContain("Title: Release notes");
       expect(prompt).toContain("draft: Draft the notes (Lead)");
       expect(prompt).toContain('Result: {"summary":"Release notes drafted."');

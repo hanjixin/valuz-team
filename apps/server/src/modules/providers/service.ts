@@ -22,7 +22,7 @@ import {
   runtimesFor,
   wireShape,
 } from "./catalog.ts";
-import { completeOnce, ModelDiscoveryError, type Upstream, discoverModels, pingModel, pingModels } from "./discover.ts";
+import { ModelDiscoveryError, type Upstream, discoverModels, pingModel, pingModels } from "./discover.ts";
 import * as repo from "./repo.ts";
 import { SUBSCRIPTIONS, type Subscription, subscriptionOf } from "./subscriptions.ts";
 
@@ -217,20 +217,6 @@ export async function credentialsForSession(ctx: Ctx, orgId: string, id: string)
     protocols: compatibleProtocols(row.provider_kind, row.protocol),
     default_model: row.default_model,
   };
-}
-
-/** Ask a session's channel one question on the server's side. Null when the channel is gone or has no key. */
-export async function complete(
-  ctx: Ctx,
-  orgId: string,
-  id: string,
-  model: string,
-  prompt: string,
-): Promise<string | null> {
-  const row = await repo.findInOrg(ctx.db, orgId, id);
-  const upstream = row ? upstreamOf(ctx, row) : null;
-  if (!upstream?.apiKey) return null;
-  return completeOnce(ctx.config, upstream, model, prompt);
 }
 
 /** The channel's protocols and default model, for a caller who may use it. */

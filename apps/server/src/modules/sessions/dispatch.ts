@@ -11,6 +11,7 @@ import {
   Session,
   type SkillBundle,
   type UserMessage,
+  managedCwd,
 } from "@agent-base/protocol";
 import type { Schema } from "@agent-base/contract";
 import type { Auth, Ctx } from "../../infra/context.ts";
@@ -147,6 +148,64 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<{ session: Session; sk
     created_at: row.created_at.getTime(),
   });
   return { session, skillBundles };
+}
+
+/**
+ * Ask a session's model one question, outside the conversation. Runtimes are on
+ * devices — and so is the login a subscription session uses — so the question
+ * is put to the session's device, which answers it with the session's own
+ * runtime and credentials and keeps nothing. Null when there is no device to ask.
+ */
+export async function askOnDevice(ctx: Ctx, sessionId: string, prompt: string): Promise<string | null> {
+  const row = await repo.byId(ctx.db, sessionId);
+  if (!row?.device_id) return null;
+  const channel = row.provider_id ? await providers.credentialsForSession(ctx, row.org_id, row.provider_id) : null;
+  const protocol = channel ? protocolFor(row.runtime_provider, channel.protocols as ApiProtocol[]) : null;
+  if (row.provider_id && !protocol) return null;
+  const session = Session.parse({
+    id: crypto.randomUUID(),
+    // One answer, no tools worth waiting on: anything that would need approval is simply not approved.
+    agent_config: {
+      id: "",
+      name: "aside",
+      model: row.model,
+      runtime_provider: row.runtime_provider,
+      instructions: "",
+      skills: [],
+      permission_mode: "default",
+      max_turns: 1,
+    },
+    cwd: managedCwd("asides"),
+    runtime_provider: row.runtime_provider,
+    user_id: row.owner_id,
+    model: row.model,
+    model_provider:
+      channel && protocol
+        ? {
+            api_key: channel.api_key,
+            base_url: channel.base_url,
+            api_protocol: protocol.replace("-", "_") as KernelProtocol,
+          }
+        : null,
+    instructions: "",
+    permission_mode: "default",
+    status: "running",
+  });
+  const owner = { user_id: row.owner_id, name: await repo.userName(ctx.db, row.owner_id) };
+  try {
+    const answer = (await ctx.hub.call(
+      row.device_id,
+      "session.ask",
+      { session, prompt, timeout_ms: 120_000 },
+      owner,
+      150_000,
+    )) as { text: string };
+    return answer.text;
+  } catch (err) {
+    // The device is away or could not answer: there is simply no answer this time.
+    if (err instanceof HttpError) return null;
+    throw err;
+  }
 }
 
 /** What a conversation is called until someone names it: the start of its first message. */

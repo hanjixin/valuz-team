@@ -145,30 +145,6 @@ export async function pingModel(config: Config, upstream: Upstream, model: strin
   }
 }
 
-/**
- * One question, one answer, no tools: for the server's own small jobs done on a
- * member's channel (reviewing a conversation for what to remember).
- */
-export async function completeOnce(
-  config: Config,
-  upstream: Upstream,
-  model: string,
-  prompt: string,
-  maxTokens = 2000,
-): Promise<string> {
-  await guard(config, upstream);
-  const noRedirect: typeof fetch = (input, init) => fetch(input, { ...init, redirect: "manual" });
-  const options = { apiKey: upstream.apiKey, timeout: 120_000, maxRetries: 1, fetch: noRedirect };
-  const ask = { model, max_tokens: maxTokens, messages: [{ role: "user" as const, content: prompt }] };
-  if (upstream.shape === "anthropic") {
-    const client = new Anthropic({ ...options, baseURL: upstream.baseUrl.replace(/\/v1\/?$/, "") });
-    const reply = await client.messages.create(ask);
-    return reply.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
-  }
-  const client = new OpenAI({ ...options, baseURL: upstream.baseUrl });
-  return (await client.chat.completions.create(ask)).choices[0]?.message.content ?? "";
-}
-
 /** Ping each model; one failing does not stop the others. */
 export async function pingModels(
   config: Config,

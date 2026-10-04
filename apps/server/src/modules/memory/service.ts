@@ -95,7 +95,13 @@ const ok = (target: Target, entries: string[], message: string): WriteResult => 
 });
 
 function checked(target: Target, content: string, others: string[]): string {
-  const text = redactSecrets(content.trim());
+  // An entry is a sentence or two. Some models wrap theirs in a front-matter header out of habit; only the text is kept.
+  const text = redactSecrets(
+    content
+      .trim()
+      .replace(/^---\n[\s\S]*?\n---\n+/, "")
+      .trim(),
+  );
   if (!text) throw new MemoryError("'content' is empty");
   const reason = unsafe(text);
   if (reason) throw new MemoryError(reason);

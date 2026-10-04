@@ -1,5 +1,6 @@
 /**
- * The background review: once a conversation has gone quiet, a model reads
+ * The background review: once a conversation has gone quiet, its own model — on
+ * its own device, like every turn — reads
  * what was said since the last review and writes what is worth remembering —
  * through the same store, under the same limits and checks, as the `memory`
  * tool. Best effort by contract: it never blocks or breaks a turn.
@@ -7,7 +8,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Ctx } from "../../infra/context.ts";
 import { type JobQueue, startJobs } from "../../infra/jobs.ts";
-import * as providers from "../providers/service.ts";
+import { askOnDevice } from "../sessions/dispatch.ts";
 import * as sessions from "../sessions/service.ts";
 import * as tasks from "../tasks/service.ts";
 import { reviewPrompt, taskReviewPrompt } from "./prompts.ts";
@@ -83,7 +84,7 @@ export async function applyOps(ctx: Ctx, owner: memory.Owner, ops: Op[]): Promis
 async function reviewTask(ctx: Ctx, taskId: string): Promise<void> {
   const task = await tasks.find(ctx, taskId);
   const lead = task?.lead_session_id ? await sessions.byId(ctx, task.lead_session_id) : undefined;
-  if (!task || !lead?.provider_id || !lead.model) return;
+  if (!task || !lead) return;
   const owner = await memory.ownerOfSession(ctx, lead);
   const settings = await memory.getSettings(ctx, owner);
   if (!settings.enabled || !settings.auto_extract) return;
@@ -104,11 +105,9 @@ async function reviewTask(ctx: Ctx, taskId: string): Promise<void> {
   const usage = Object.fromEntries(
     Object.entries(current).map(([target, entries]) => [target, memory.usage(entries, target as memory.Target)]),
   );
-  const reply = await providers.complete(
+  const reply = await askOnDevice(
     ctx,
-    lead.org_id,
-    lead.provider_id,
-    lead.model,
+    lead.id,
     taskReviewPrompt({
       digest: memory.redactSecrets(digest),
       transcript,
@@ -126,7 +125,7 @@ async function review(ctx: Ctx, job: ReviewJob): Promise<void> {
   if ((await ctx.redis.get(armedKey(job.sessionId))) !== job.armedBy) return; // the conversation went on
   const session = await sessions.byId(ctx, job.sessionId);
   // Conversations with a person only; a task's sessions talk to each other.
-  if (!session || session.origin !== "user" || !session.provider_id || !session.model) return;
+  if (!session || session.origin !== "user") return;
   const owner = await memory.ownerOfSession(ctx, session);
   const settings = await memory.getSettings(ctx, owner);
   if (!settings.enabled || !settings.auto_extract) return;
@@ -144,11 +143,9 @@ async function review(ctx: Ctx, job: ReviewJob): Promise<void> {
   const usage = Object.fromEntries(
     Object.entries(current).map(([target, entries]) => [target, memory.usage(entries, target as memory.Target)]),
   );
-  const reply = await providers.complete(
+  const reply = await askOnDevice(
     ctx,
-    session.org_id,
-    session.provider_id,
-    session.model,
+    session.id,
     reviewPrompt({
       transcript,
       current,

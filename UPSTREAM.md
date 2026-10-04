@@ -145,9 +145,9 @@ Deliberate differences in behaviour:
 - Memory is rows in PostgreSQL, not files on a disk. `user` and `global` are a member's own (per organization);
   `project` memory belongs to the project, so everyone who can see the project reads it and whoever can edit it
   prunes it. It is rendered into every turn rather than frozen when the session is created. The background review
-  asks the session's model channel directly (one request, no tools) instead of running a throwaway session, so a
-  session on a subscription channel is not reviewed. A finished multi-agent task is reviewed too, from its plan,
-  its result and its lead's transcript.
+  is a question put to the session's own device (`session.ask`), answered there by the session's runtime with its
+  own key or login and stored nowhere — the server calls no model itself. A finished multi-agent task is reviewed
+  too, from its plan, its result and its lead's transcript.
 - Automations run an agent — a conversation, or a team task — by cron, by interval, or by hand. Not supported, and
   refused when asked for: code execution, playbooks, worktrees, and event triggers (`event-sources` is empty).
   An automation belongs to its creator and runs as them, on the device their sessions run on; whoever can see its

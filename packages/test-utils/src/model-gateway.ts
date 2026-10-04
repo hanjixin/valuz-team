@@ -26,9 +26,8 @@ export interface ModelGateway {
   requests: ModelRequest[];
   /** Decide the reply from the request itself (concurrent sessions cannot share a FIFO). */
   handler: ((request: ModelRequest) => ModelReply | undefined) | null;
-  /** Non-streaming requests (the server's own questions to a model), and what answers them. Default: ".". */
+  /** Non-streaming requests that were questions rather than channel checks. The server asks none: runtimes are on devices. */
   completions: ModelRequest[];
-  complete: ((request: ModelRequest) => string | undefined) | null;
   stop(): Promise<void>;
 }
 
@@ -39,7 +38,6 @@ export async function startModelGateway(): Promise<ModelGateway> {
     requests: [],
     handler: null,
     completions: [],
-    complete: null,
     stop: async () => undefined,
   };
   const server: Server = createServer((req, res) => {
@@ -58,7 +56,7 @@ export async function startModelGateway(): Promise<ModelGateway> {
         const asked = { ...(parsed as object), auth: req.headers.authorization ?? "" } as ModelRequest;
         const question = (parsed as { max_tokens?: number }).max_tokens !== 1;
         if (question) gateway.completions.push(asked);
-        const message = { role: "assistant", content: (question && gateway.complete?.(asked)) || "." };
+        const message = { role: "assistant", content: "." };
         return res.end(JSON.stringify({ id: "c", model: parsed.model, choices: [{ index: 0, message }] }));
       }
       const request: ModelRequest = { ...(parsed as object), auth: req.headers.authorization ?? "" } as ModelRequest;

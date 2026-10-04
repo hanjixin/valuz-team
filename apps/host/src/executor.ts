@@ -6,11 +6,12 @@
  * owner can only touch `shared_roots`, and can only run commands when the
  * owner turned `allow_exec` on.
  */
-import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { arch, hostname, platform } from "node:os";
 import path from "node:path";
 import {
   ForkError,
+  MemoryStore,
   type RuntimeFactory,
   SessionOrchestrator,
   createRuntime,
@@ -28,6 +29,7 @@ import {
   SERVER_URL_PLACEHOLDER,
   managedWorkspace,
   type RuntimeAvailability,
+  type Session,
 } from "@agent-base/protocol";
 import { execa } from "execa";
 import type { HostConfig } from "./config.ts";
@@ -198,6 +200,34 @@ export class Host {
     return real;
   }
 
+  /**
+   * One question to a model, answered and forgotten. It runs like a turn — the
+   * same runtime, the same login or key — but in an orchestrator of its own
+   * whose store is in memory, so none of it reaches the server's record.
+   */
+  private async ask(actor: Actor, session: Session, prompt: string, timeoutMs: number): Promise<string> {
+    const cwd = await this.sessionCwd(actor, session.cwd);
+    const store = new MemoryStore();
+    const dataDir = path.join(this.options.dataDir, "asides", session.id);
+    const aside = new SessionOrchestrator(store, this.options.runtimeFactory ?? createRuntime, { dataDir });
+    const scratch = { ...session, cwd, mcp_servers: [] };
+    await store.saveSession(scratch);
+    const timer = setTimeout(() => void aside.interrupt(scratch.id), timeoutMs);
+    try {
+      const message = await aside.runTurn(scratch.user_id, scratch.id, {
+        text: prompt,
+        attachments: [],
+        additional_context: "",
+      });
+      if (message.status === "errored") throw new RpcError("model_failed", JSON.stringify(message.error_message));
+      return message.assistant_message ?? "";
+    } finally {
+      clearTimeout(timer);
+      await aside.shutdown();
+      await rm(dataDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
   private async rpc(method: string, raw: unknown, actor: Actor): Promise<unknown> {
     if (!(method in RpcMethods)) throw new RpcError("unknown_method", `unknown method ${method}`);
     const name = method as keyof typeof RpcMethods;
@@ -248,6 +278,10 @@ export class Host {
         await this.orchestrator.cleanup(p.session_id);
         this.store.forget(p.session_id);
         return { closed: true };
+      }
+      case "session.ask": {
+        const p = parsed.data as ReturnType<(typeof RpcMethods)["session.ask"]["parse"]>;
+        return { text: await this.ask(actor, p.session, p.prompt, p.timeout_ms) };
       }
       case "session.fork": {
         const p = parsed.data as ReturnType<(typeof RpcMethods)["session.fork"]["parse"]>;

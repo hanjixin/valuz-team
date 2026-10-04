@@ -69,7 +69,8 @@ connectors, projects, automations, knowledge base…) are reached by hand-writte
 As each of those modules is ported, its operations are added to the contract here, with shapes taken from the
 frontend's types and the Python routes. Added so far: `auth`, `orgs`, `teams`, `shares`, `devices` (new in
 agent-base), and `providers`, `settings/model-defaults`, `settings/model-options` and the project CRUD under `projects`
-(existing frontend calls), and `connectors`.
+(existing frontend calls), `connectors`, and the knowledge base (`kb`, `projects/{id}/kb-bindings`, and the
+fields the frontend reads on `docs`).
 
 Deliberate differences in behaviour:
 
@@ -96,4 +97,11 @@ Deliberate differences in behaviour:
   the bytes from the device. Attachments are staged on the server only until their message is sent. Agents do
   not register deliverables yet, so the artifact lists are empty. Knowledge-base attachments (`/v1/attachments/kb`)
   are not implemented.
+- Knowledge bases are the one kind of content the server keeps: they belong to the organization, not to a folder
+  on a device, so `root_path` is empty and there is nothing to auto-discover. Documents arrive by upload
+  (`POST /v1/kb/{id}/files`); `docs/import` and `docs/import-folder` stay unimplemented. Every member reads; the
+  creator and organization admins change (`editable`). A folder is a path prefix, not a row. Search is substring
+  matching over parsed text (PostgreSQL trigrams) — no embeddings, and no OCR for scanned documents.
+  The original file cannot be opened from the page yet (`source_path` is null). A project with no bindings
+  consults every knowledge base of its organization.
 - `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

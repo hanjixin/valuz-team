@@ -3,8 +3,11 @@
  * routes the contract cannot describe, and subscriptions to infrastructure.
  */
 import type { FastifyInstance } from "fastify";
-import { mountToolkit } from "../infra/toolkit.ts";
+import { mountToolkit, toolkitServer } from "../infra/toolkit.ts";
 import { registerDeviceLink } from "./devices/link.ts";
+import * as parser from "./knowledge/parse.ts";
+import * as knowledge from "./knowledge/service.ts";
+import { DOCS_INSTRUCTIONS, DOCS_TOOLKIT, DOCS_TOOLS, callTool as callDocsTool } from "./knowledge/tools.ts";
 import * as devices from "./devices/service.ts";
 import { onSessionIdle, onTurnEnd, registerTurnExtras } from "./sessions/dispatch.ts";
 import * as sessions from "./sessions/ingest.ts";
@@ -26,6 +29,22 @@ export function setupModules(app: FastifyInstance): void {
     tools: LEAD_TOOLS,
     authorize: (sessionId) => tasks.authorizeToolCaller(app.ctx, sessionId),
     call: (caller, tool, args) => tasks.callTool(app.ctx, caller, tool, args),
+  });
+
+  // The knowledge base: uploads are parsed in the background, and a session whose
+  // scope holds any document is given the tools to consult it.
+  const stopParser = parser.start(app.ctx);
+  app.addHook("onClose", stopParser);
+  registerTurnExtras(app.ctx, async (session) => {
+    const scope = await knowledge.scopeOf(app.ctx, session.org_id, session.project_id);
+    if (!(await knowledge.hasReachable(app.ctx, scope))) return null;
+    return { instructions: DOCS_INSTRUCTIONS, mcpServers: [toolkitServer(app, session.id, DOCS_TOOLKIT)] };
+  });
+  mountToolkit<knowledge.Scope>(app, {
+    ...DOCS_TOOLKIT,
+    tools: DOCS_TOOLS,
+    authorize: (sessionId) => knowledge.sessionScope(app.ctx, sessionId),
+    call: (scope, tool, args) => callDocsTool(app.ctx, scope, tool, args),
   });
   registerDeviceLink(app);
 }

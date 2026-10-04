@@ -12,6 +12,7 @@ import * as skills from "./0010_skills.ts";
 import * as connectors from "./0011_connectors.ts";
 import * as tasks from "./0012_tasks.ts";
 import * as attachments from "./0013_attachments.ts";
+import * as knowledge from "./0014_knowledge.ts";
 
 /**
  * Every migration, keyed by name; Kysely applies them in key order. Listed
@@ -32,4 +33,5 @@ export const migrations: Record<string, Migration> = {
   "0011_connectors": connectors,
   "0012_tasks": tasks,
   "0013_attachments": attachments,
+  "0014_knowledge": knowledge,
 };

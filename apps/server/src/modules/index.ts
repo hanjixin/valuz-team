@@ -9,6 +9,7 @@ export * from "./connectors/handlers.ts";
 export * from "./devices/handlers.ts";
 export * from "./feedback/handlers.ts";
 export * from "./files/handlers.ts";
+export * from "./knowledge/handlers.ts";
 export * from "./notifications/handlers.ts";
 export * from "./orgs/handlers.ts";
 export * from "./projects/handlers.ts";

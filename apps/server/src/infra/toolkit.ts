@@ -1,7 +1,7 @@
 /**
  * Server-hosted MCP toolkits. A session running on any device, under any
- * runtime, reaches server-side capabilities (task orchestration, and later the
- * knowledge base) through these endpoints, as itself: each turn is handed a
+ * runtime, reaches server-side capabilities (task orchestration, the knowledge
+ * base) through these endpoints, as itself: each turn is handed a
  * token that names its session. Stateless — one MCP server per request — so
  * any replica can answer.
  */

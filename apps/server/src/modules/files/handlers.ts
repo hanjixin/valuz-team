@@ -2,27 +2,9 @@ import type { Schema } from "@agent-base/contract";
 import mime from "mime";
 import { requireAuth } from "../../infra/auth.ts";
 import type { Handler } from "../../infra/context.ts";
-import { HttpError, badRequest } from "../../infra/errors.ts";
+import { uploaded } from "../../infra/upload.ts";
 import * as sessions from "../sessions/service.ts";
 import * as service from "./service.ts";
-
-type Req = Parameters<Handler>[0];
-
-/** The files of a multipart request, each read whole: uploads are small by configuration. */
-async function uploaded(req: Req): Promise<{ name: string; bytes: Buffer; mimeType: string }[]> {
-  if (!req.isMultipart()) throw badRequest("send the file as multipart/form-data");
-  const files: { name: string; bytes: Buffer; mimeType: string }[] = [];
-  try {
-    for await (const part of req.files())
-      files.push({ name: part.filename, bytes: await part.toBuffer(), mimeType: part.mimetype });
-  } catch (err) {
-    if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE")
-      throw new HttpError(413, "file_too_large", "that file is larger than this server accepts");
-    throw err;
-  }
-  if (files.length === 0) throw badRequest("no file was sent");
-  return files;
-}
 
 export const uploadAttachment: Handler = async (req) => {
   const ctx = req.server.ctx;

@@ -105,10 +105,22 @@ gives remote access to them: a folder listing (`fs.tree`), an upload into the pr
 each asked of the device when it is wanted, as the caller, so the device's owner's sharing policy applies.
 A file's bytes are fetched through a short-lived token naming that one file (`POST /v1/files/resolve`).
 
-The one thing the server stores is an upload on its way: a member attaches a file before the message — and
+Of a project's files, the one thing the server stores is an upload on its way: a member attaches a file before the message — and
 sometimes the session — exists, so it waits in storage (`infra/storage.ts`: a directory, or an S3-compatible
 store when replicas must share it) until the message is sent, is then written into the session's workspace on
 the device, and is removed from the server.
+
+## The knowledge base is on the server
+
+The exception to "files stay on the device" is what the organization chooses to share with everyone: its
+knowledge bases. A document is uploaded to storage and kept there, parsed in the background (a BullMQ queue in
+Redis, so any replica parses what another accepted) into text and chunks in PostgreSQL, and searched by substring
+with a trigram index — which works for languages without word boundaries. Every member reads; the creator and
+organization admins change.
+
+Agents consult it through a second server-hosted toolkit (`/v1/mcp/docs`: search, read a window, list), added to
+every turn whose scope holds a document. The scope is the project's bindings — knowledge bases, folders or single
+documents — or, with none, everything the organization has.
 
 ## Calling out on a member's behalf
 
@@ -123,8 +135,8 @@ returned by the API.
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events), and the collaboration UI (Settings → Organization,
-Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access. Not yet: fork, regenerate,
-knowledge base, automations, channels, storage.
+Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base.
+Not yet: fork, regenerate, project memory, automations, channels.
 
 The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),
 module by module. `make contract` reports how much of the contract is implemented.

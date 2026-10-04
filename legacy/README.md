@@ -168,7 +168,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 | 任务 | `projects/:id/tasks` `tasks` `tasks/:id` `tasks/:id/plan` `tasks/:id/events(/stream)` `tasks/:id:intervene` `:inject` `:commit` `:abandon` |
 | 任务工具 | `mcp/tasks`（MCP over HTTP，仅 lead 会话的令牌可用） |
 | 自动化 | `projects/:id/automations` `automations/:id` `automations/:id/run` `automations/:id/runs` |
-| 知识库 | `documents` `documents/search` `documents/:id` `documents/:id/reindex`；智能体侧 `mcp/docs`（`doc_search` `doc_read` `list_doc_scope`） |
+| 知识库 | 已移植（`apps/server/src/modules/knowledge`） |
 | 通知 | `notifications` `notifications/stream` `notifications/read-all` `notifications/:id/read` |
 | 会话排队与反馈 | `sessions/:id/queue` `sessions/:id/queue/resume` `sessions/:id/feedback` |
 | 飞书渠道 | `channels` `channels/:id` `channels/:id/test` `projects/:id/channels`；平台回调 `channels/feishu/:id/callback` |

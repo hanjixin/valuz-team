@@ -4439,6 +4439,121 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/kb": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the organization's knowledge bases */
+        get: operations["listKnowledgeBases"];
+        put?: never;
+        /** Create a knowledge base */
+        post: operations["createKnowledgeBase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/kb/{kb_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One knowledge base */
+        get: operations["getKnowledgeBase"];
+        put?: never;
+        post?: never;
+        /** Delete a knowledge base and its documents */
+        delete: operations["deleteKnowledgeBase"];
+        options?: never;
+        head?: never;
+        /** Rename a knowledge base */
+        patch: operations["updateKnowledgeBase"];
+        trace?: never;
+    };
+    "/v1/kb/{kb_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload documents into a knowledge base
+         * @description Each file's name is where it goes inside the knowledge base ("reports/q3.pdf"). Uploading
+         *     to a path that already holds a document replaces it. Parsing happens in the background;
+         *     follow it with the returned task.
+         */
+        post: operations["uploadKnowledgeBaseFiles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/kb/{kb_id}/rescan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Parse again whatever is not ready */
+        post: operations["rescanKnowledgeBase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/kb/{kb_id}/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A folder of a knowledge base */
+        get: operations["getKnowledgeBaseTree"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/kb-bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What of the knowledge bases a project's agents may consult */
+        get: operations["listProjectKbBindings"];
+        /**
+         * Choose what a project's agents may consult
+         * @description With no bindings a project's agents may consult every knowledge base in the organization.
+         */
+        put: operations["updateProjectKbBindings"];
+        post?: never;
+        /** Go back to consulting everything */
+        delete: operations["deleteProjectKbBindings"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5869,6 +5984,10 @@ export interface components {
             chunk_count: number;
             file_size_bytes: number;
             mime_type?: string | null;
+            kb_id?: string | null;
+            kb_folder_id?: string | null;
+            /** @description Where the document sits inside its knowledge base ("reports/q3.pdf"). */
+            relative_path?: string | null;
             /**
              * Format: int64
              * @description Unix epoch milliseconds (UTC). Format via new Date(ms).
@@ -5889,6 +6008,7 @@ export interface components {
             ok: boolean;
         };
         DocumentDetail: components["schemas"]["DocumentListItem"] & {
+            source_path?: string | null;
             original_path?: string | null;
             managed_path?: string | null;
             parser_mode?: string | null;
@@ -5902,16 +6022,21 @@ export interface components {
             document_id: string;
             /** @description Parsed markdown content */
             markdown: string;
+            offset?: number;
+            returned_bytes?: number;
+            total_bytes?: number;
+            truncated?: boolean;
         };
         ImportTaskResponse: {
             task_id: string;
             /** @enum {string} */
-            task_type?: "import_files" | "import_folder" | "reindex";
+            task_type?: "import_files" | "import_folder" | "reindex" | "rescan";
             /** @enum {string} */
             status: "queued" | "processing" | "completed" | "failed";
             total_items: number;
             processed_items: number;
             failed_items: number;
+            kb_id?: string | null;
             project_id?: string | null;
             /**
              * Format: int64
@@ -5922,6 +6047,8 @@ export interface components {
         SearchRequest: {
             query: string;
             project_id: string;
+            folder_ids?: string[] | null;
+            document_ids?: string[] | null;
             /** @default 5 */
             top_k: number;
         };
@@ -5941,6 +6068,7 @@ export interface components {
             total_documents: number;
             ready_count?: number;
             processing_count?: number;
+            missing_count?: number;
             failed_count?: number;
         };
         ImportFolderRequest: {
@@ -8573,6 +8701,62 @@ export interface components {
             project_id: string;
             written: string[];
         };
+        KnowledgeBase: {
+            id: string;
+            name: string;
+            /** @description Empty — a knowledge base lives on the server, not in a folder. */
+            root_path: string;
+            parser_routing: string;
+            document_count: number;
+            /** @enum {string} */
+            status: "all_ready" | "has_processing" | "has_missing";
+            /** Format: int64 */
+            created_at: number | null;
+            auto_discover?: boolean;
+            /** Format: int64 */
+            last_full_scan_at?: number | null;
+            /** Format: uuid */
+            owner_id?: string;
+            /** @description Whether the caller may change it — its creator, or an organization owner or admin. */
+            editable?: boolean;
+        };
+        KnowledgeBaseList: {
+            knowledge_bases: components["schemas"]["KnowledgeBase"][];
+        };
+        KnowledgeBaseCreateRequest: {
+            name: string;
+            root_path?: string | null;
+            parser_routing?: string | null;
+            auto_discover?: boolean | null;
+        };
+        KnowledgeBaseUpdateRequest: {
+            name?: string | null;
+            parser_routing?: string | null;
+            auto_discover?: boolean | null;
+        };
+        KnowledgeBaseTree: {
+            nodes: {
+                id: string;
+                name: string;
+                relative_path: string;
+                /** @enum {string} */
+                kind: "folder" | "document";
+                status: string;
+                document_count: number;
+            }[];
+        };
+        KbBinding: {
+            project_id?: string;
+            /** @enum {string} */
+            binding_kind: "kb" | "folder" | "document";
+            target_id: string;
+        };
+        KbBindingList: {
+            bindings: components["schemas"]["KbBinding"][];
+        };
+        KbBindingUpdate: {
+            bindings: components["schemas"]["KbBinding"][];
+        };
     };
     responses: never;
     parameters: {
@@ -10861,6 +11045,7 @@ export interface operations {
                 q?: string;
                 /** @description Filter by status (queued, processing, ready, failed) */
                 status?: "queued" | "processing" | "ready" | "failed";
+                kb_id?: string;
             };
             header?: never;
             path?: never;
@@ -11093,7 +11278,10 @@ export interface operations {
     };
     getDocumentPreview: {
         parameters: {
-            query?: never;
+            query?: {
+                offset?: number;
+                max_bytes?: number;
+            };
             header?: never;
             path: {
                 doc_id: string;
@@ -16475,6 +16663,266 @@ export interface operations {
                 };
                 content: {
                     "application/octet-stream": string;
+                };
+            };
+        };
+    };
+    listKnowledgeBases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeBaseList"];
+                };
+            };
+        };
+    };
+    createKnowledgeBase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeBaseCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeBase"];
+                };
+            };
+        };
+    };
+    getKnowledgeBase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kb_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeBase"];
+                };
+            };
+        };
+    };
+    deleteKnowledgeBase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kb_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        kb_id?: string;
+                    };
+                };
+            };
+        };
+    };
+    updateKnowledgeBase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kb_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeBaseUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeBase"];
+                };
+            };
+        };
+    };
+    uploadKnowledgeBaseFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kb_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    files?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportTaskResponse"];
+                };
+            };
+        };
+    };
+    rescanKnowledgeBase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kb_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportTaskResponse"];
+                };
+            };
+        };
+    };
+    getKnowledgeBaseTree: {
+        parameters: {
+            query?: {
+                folder_id?: string;
+            };
+            header?: never;
+            path: {
+                kb_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeBaseTree"];
+                };
+            };
+        };
+    };
+    listProjectKbBindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KbBindingList"];
+                };
+            };
+        };
+    };
+    updateProjectKbBindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KbBindingUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KbBindingList"];
+                };
+            };
+        };
+    };
+    deleteProjectKbBindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"];
                 };
             };
         };

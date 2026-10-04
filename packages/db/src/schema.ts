@@ -423,6 +423,56 @@ export interface AttachmentsTable {
   consumed_at: NullableTime;
 }
 
+export interface KnowledgeBasesTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  name: string;
+  created_at: Timestamp;
+}
+
+export interface KbDocumentsTable {
+  id: string;
+  org_id: string;
+  kb_id: string;
+  owner_id: string;
+  relative_path: string;
+  filename: string;
+  mime_type: string | null;
+  size_bytes: number;
+  storage_key: string;
+  status: ColumnType<"queued" | "processing" | "ready" | "failed", string | undefined, string>;
+  error: string | null;
+  content: ColumnType<string, string | undefined, string>;
+  chunk_count: ColumnType<number, number | undefined, number>;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface KbChunksTable {
+  id: Generated<number>;
+  document_id: string;
+  ord: number;
+  content: string;
+}
+
+export interface KbTasksTable {
+  id: string;
+  org_id: string;
+  kb_id: string | null;
+  task_type: string;
+  total_items: number;
+  processed_items: ColumnType<number, number | undefined, number>;
+  failed_items: ColumnType<number, number | undefined, number>;
+  created_at: Timestamp;
+}
+
+export interface ProjectKbBindingsTable {
+  project_id: string;
+  binding_kind: "kb" | "folder" | "document";
+  target_id: string;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -451,6 +501,11 @@ export interface Database {
   task_events: TaskEventsTable;
   task_mailbox: TaskMailboxTable;
   attachments: AttachmentsTable;
+  knowledge_bases: KnowledgeBasesTable;
+  kb_documents: KbDocumentsTable;
+  kb_chunks: KbChunksTable;
+  kb_tasks: KbTasksTable;
+  project_kb_bindings: ProjectKbBindingsTable;
   message_feedback: MessageFeedbackTable;
   user_settings: UserSettingsTable;
 }

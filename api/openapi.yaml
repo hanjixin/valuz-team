@@ -1878,6 +1878,10 @@ paths:
           schema:
             type: string
             enum: [queued, processing, ready, failed]
+        - name: kb_id
+          in: query
+          required: false
+          schema: {type: string}
       responses:
         "200":
           description: Document list
@@ -2084,6 +2088,14 @@ paths:
           required: true
           schema:
             type: string
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0, default: 0}
+        - name: max_bytes
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 1000000, default: 200000}
       responses:
         "200":
           description: Markdown preview content
@@ -6672,6 +6684,222 @@ paths:
             application/octet-stream:
               schema: {type: string, format: binary}
 
+  # ── Knowledge bases (agent-base) ───────────────────────────────────────────
+  # The organization's shared documents, kept on the server so that every member and
+  # every device's agents can search them whether or not any one computer is on.
+  /v1/kb:
+    get:
+      summary: List the organization's knowledge bases
+      operationId: listKnowledgeBases
+      tags: [docs]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeBaseList"
+    post:
+      summary: Create a knowledge base
+      operationId: createKnowledgeBase
+      tags: [docs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeBaseCreateRequest"
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeBase"
+  /v1/kb/{kb_id}:
+    get:
+      summary: One knowledge base
+      operationId: getKnowledgeBase
+      tags: [docs]
+      parameters:
+        - name: kb_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeBase"
+    patch:
+      summary: Rename a knowledge base
+      operationId: updateKnowledgeBase
+      tags: [docs]
+      parameters:
+        - name: kb_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgeBaseUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeBase"
+    delete:
+      summary: Delete a knowledge base and its documents
+      operationId: deleteKnowledgeBase
+      tags: [docs]
+      parameters:
+        - name: kb_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  kb_id: {type: string}
+  /v1/kb/{kb_id}/files:
+    post:
+      summary: Upload documents into a knowledge base
+      operationId: uploadKnowledgeBaseFiles
+      tags: [docs]
+      description: |
+        Each file's name is where it goes inside the knowledge base ("reports/q3.pdf"). Uploading
+        to a path that already holds a document replaces it. Parsing happens in the background;
+        follow it with the returned task.
+      parameters:
+        - name: kb_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items: {type: string, format: binary}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportTaskResponse"
+  /v1/kb/{kb_id}/rescan:
+    post:
+      summary: Parse again whatever is not ready
+      operationId: rescanKnowledgeBase
+      tags: [docs]
+      parameters:
+        - name: kb_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportTaskResponse"
+  /v1/kb/{kb_id}/tree:
+    get:
+      summary: A folder of a knowledge base
+      operationId: getKnowledgeBaseTree
+      tags: [docs]
+      parameters:
+        - name: kb_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: folder_id
+          in: query
+          required: false
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeBaseTree"
+  /v1/projects/{project_id}/kb-bindings:
+    get:
+      summary: What of the knowledge bases a project's agents may consult
+      operationId: listProjectKbBindings
+      tags: [docs]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KbBindingList"
+    put:
+      summary: Choose what a project's agents may consult
+      operationId: updateProjectKbBindings
+      tags: [docs]
+      description: |
+        With no bindings a project's agents may consult every knowledge base in the organization.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KbBindingUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KbBindingList"
+    delete:
+      summary: Go back to consulting everything
+      operationId: deleteProjectKbBindings
+      tags: [docs]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -8634,6 +8862,12 @@ components:
         mime_type:
           type: string
           nullable: true
+        kb_id: {type: string, nullable: true}
+        kb_folder_id: {type: string, nullable: true}
+        relative_path:
+          type: string
+          nullable: true
+          description: Where the document sits inside its knowledge base ("reports/q3.pdf").
         created_at:
           type: integer
           format: int64
@@ -8662,6 +8896,9 @@ components:
         - $ref: "#/components/schemas/DocumentListItem"
         - type: object
           properties:
+            source_path:
+              type: string
+              nullable: true
             original_path:
               type: string
               nullable: true
@@ -8695,6 +8932,10 @@ components:
         markdown:
           type: string
           description: Parsed markdown content
+        offset: {type: integer}
+        returned_bytes: {type: integer}
+        total_bytes: {type: integer}
+        truncated: {type: boolean}
 
     ImportTaskResponse:
       type: object
@@ -8704,7 +8945,7 @@ components:
           type: string
         task_type:
           type: string
-          enum: [import_files, import_folder, reindex]
+          enum: [import_files, import_folder, reindex, rescan]
         status:
           type: string
           enum: [queued, processing, completed, failed]
@@ -8714,6 +8955,7 @@ components:
           type: integer
         failed_items:
           type: integer
+        kb_id: {type: string, nullable: true}
         project_id:
           type: string
           nullable: true
@@ -8730,6 +8972,14 @@ components:
           type: string
         project_id:
           type: string
+        folder_ids:
+          type: array
+          nullable: true
+          items: {type: string}
+        document_ids:
+          type: array
+          nullable: true
+          items: {type: string}
         top_k:
           type: integer
           default: 5
@@ -8769,6 +9019,7 @@ components:
           type: integer
         processing_count:
           type: integer
+        missing_count: {type: integer}
         failed_count:
           type: integer
 
@@ -12907,3 +13158,84 @@ components:
         written:
           type: array
           items: {type: string}
+    KnowledgeBase:
+      type: object
+      required: [id, name, root_path, parser_routing, document_count, status, created_at]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        root_path:
+          type: string
+          description: Empty — a knowledge base lives on the server, not in a folder.
+        parser_routing: {type: string}
+        document_count: {type: integer}
+        status: {type: string, enum: [all_ready, has_processing, has_missing]}
+        created_at: {type: integer, format: int64, nullable: true}
+        auto_discover: {type: boolean}
+        last_full_scan_at: {type: integer, format: int64, nullable: true}
+        owner_id: {type: string, format: uuid}
+        editable:
+          type: boolean
+          description: Whether the caller may change it — its creator, or an organization owner or admin.
+    KnowledgeBaseList:
+      type: object
+      required: [knowledge_bases]
+      properties:
+        knowledge_bases:
+          type: array
+          items:
+            $ref: "#/components/schemas/KnowledgeBase"
+    KnowledgeBaseCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        root_path: {type: string, nullable: true}
+        parser_routing: {type: string, nullable: true}
+        auto_discover: {type: boolean, nullable: true}
+    KnowledgeBaseUpdateRequest:
+      type: object
+      properties:
+        name: {type: string, nullable: true}
+        parser_routing: {type: string, nullable: true}
+        auto_discover: {type: boolean, nullable: true}
+    KnowledgeBaseTree:
+      type: object
+      required: [nodes]
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [id, name, relative_path, kind, status, document_count]
+            properties:
+              id: {type: string}
+              name: {type: string}
+              relative_path: {type: string}
+              kind: {type: string, enum: [folder, document]}
+              status: {type: string}
+              document_count: {type: integer}
+    KbBinding:
+      type: object
+      required: [binding_kind, target_id]
+      properties:
+        project_id: {type: string}
+        binding_kind: {type: string, enum: [kb, folder, document]}
+        target_id: {type: string}
+    KbBindingList:
+      type: object
+      required: [bindings]
+      properties:
+        bindings:
+          type: array
+          items:
+            $ref: "#/components/schemas/KbBinding"
+    KbBindingUpdate:
+      type: object
+      required: [bindings]
+      properties:
+        bindings:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/KbBinding"

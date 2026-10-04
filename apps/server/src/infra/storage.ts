@@ -1,8 +1,9 @@
 /**
- * A staging area, not a home: projects and their files live on devices. An
- * upload waits here only until the message that carries it is sent, when it is
- * written to the device and removed. A local directory does for one server;
- * replicas need a store they share, hence the S3-compatible option. Chosen by configuration; the
+ * Where the server keeps files. Two things only: the organization's knowledge
+ * base documents, which live here, and an upload on its way to a device, which
+ * waits here until its message is sent and is then removed — projects and their
+ * files live on devices. A local directory does for one server; replicas need a
+ * store they share, hence the S3-compatible option. Chosen by configuration; the
  * rest of the server only sees `put`, `get` and `remove`.
  */
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";

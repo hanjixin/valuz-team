@@ -7,6 +7,7 @@ import jwt from "@fastify/jwt";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import websocket from "@fastify/websocket";
+import { FastifySSEPlugin } from "fastify-sse-v2";
 import Fastify, { type FastifyInstance } from "fastify";
 import { Redis } from "ioredis";
 import type { Config } from "./infra/config.ts";
@@ -41,8 +42,18 @@ export async function buildServer(config: Config): Promise<Server> {
     bodyLimit: 16 * 1024 * 1024,
   });
   const pubsub = new PubSub(redis, (err) => app.log.error({ err }, "redis subscriber"));
-  const hub = new DeviceHub(redis, pubsub, crypto.randomUUID(), (err, message) => app.log.error({ err }, message));
-  const ctx: Ctx = { config, db, redis, pubsub, hub, box: new SecretBox(config.APP_SECRET), startedAt: Date.now() };
+  const log = (err: unknown, message: string): void => app.log.error({ err }, message);
+  const hub = new DeviceHub(redis, pubsub, crypto.randomUUID(), log);
+  const ctx: Ctx = {
+    config,
+    db,
+    redis,
+    pubsub,
+    hub,
+    box: new SecretBox(config.APP_SECRET),
+    log,
+    startedAt: Date.now(),
+  };
   app.decorate("ctx", ctx);
 
   await app.register(cors, {
@@ -72,6 +83,7 @@ export async function buildServer(config: Config): Promise<Server> {
   });
 
   await app.register(websocket);
+  await app.register(FastifySSEPlugin);
   await registerContract(app, handlers as Record<string, Handler>);
   setupModules(app);
   await hub.start();

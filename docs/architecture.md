@@ -66,6 +66,23 @@ and the host streams state back; every state frame is retried until the server a
   folders the owner shared, and may run commands only if the owner switched that on.
 - The link is a WebSocket, so it is not in the HTTP contract; routes like it are registered in `modules/setup.ts`.
 
+## Sessions
+
+A session is created on the server and runs on a device. Sending a message resolves what the turn needs —
+the model channel's key, the agent's current instructions, the project's context — and hands it to the host
+over the device link (`modules/sessions/dispatch.ts`); the session row itself holds no secrets. The host's
+kernel streams events back; `modules/sessions/ingest.ts` stores each once (frames are retried until acked) and
+publishes it, and `events.ts` serves the log as history, as whole-turn windows, and as a live stream that
+replays from a cursor and then follows.
+
+The conversation UI was written against an older event vocabulary with string-only payloads;
+`modules/sessions/translate.ts` maps kernel events to it at the edge.
+
+Who may do what with a session flows from three places: the session (its owner and shares), its project
+(`edit` there lets a teammate drive it, `view`/`use` watch it), and its device (`control` there is remote
+control of everything on it). A session with no folder of its own — a quick chat, a project not bound to a
+folder — works in a workspace the host manages (`@managed/<name>`).
+
 ## Calling out on a member's behalf
 
 A model channel's endpoint is a URL a member typed. Before the server calls one, `infra/outbound.ts` checks it
@@ -77,8 +94,9 @@ returned by the API.
 ## Status
 
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
-the host, the kernel (not yet driven by the server — sessions come next), model channels, model defaults and
-preferences, the agent library, projects and their teams.
+the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
+teams, and sessions (create, send, interrupt, queue, events). Not yet: skills, connectors, approvals, fork, tasks,
+knowledge base, automations, channels, storage.
 
 The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),
 module by module. `make contract` reports how much of the contract is implemented.

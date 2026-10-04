@@ -75,7 +75,7 @@ function present(row: repo.ProviderRow, auth: Auth, defaultProviderId: string | 
     deletable: row.permission === "admin",
     default_model: row.default_model,
     test_status: row.test_status,
-    credential_source: row.secret_enc === null ? "none" : "user_key",
+    credential_source: row.secret_enc === null ? "none" : "secret_ref",
     auth_type: "api_key",
     protocol: row.protocol,
     effective_protocol: protocols[0] as ApiProtocol,
@@ -139,6 +139,29 @@ export async function credentials(ctx: Ctx, auth: Auth, id: string) {
     protocols: compatibleProtocols(row.provider_kind, row.protocol),
     default_model: row.default_model,
   };
+}
+
+/**
+ * The same, for a session that was bound to the channel when it was created:
+ * whoever sends the next message — the owner or a colleague driving the shared
+ * session — the channel is the session's, already authorized.
+ */
+export async function credentialsForSession(ctx: Ctx, orgId: string, id: string) {
+  const row = await repo.findInOrg(ctx.db, orgId, id);
+  const upstream = row ? upstreamOf(ctx, row) : null;
+  if (!row || !upstream?.apiKey) return null;
+  return {
+    api_key: upstream.apiKey,
+    base_url: upstream.baseUrl || null,
+    protocols: compatibleProtocols(row.provider_kind, row.protocol),
+    default_model: row.default_model,
+  };
+}
+
+/** The channel's protocols and default model, for a caller who may use it. */
+export async function describe(ctx: Ctx, auth: Auth, id: string) {
+  const row = await mustFind(ctx, auth, id, "use");
+  return { protocols: compatibleProtocols(row.provider_kind, row.protocol), default_model: row.default_model };
 }
 
 // -- Writing --

@@ -15,7 +15,9 @@ import {
   type DeviceInfo,
   type FsEntry,
   type HostFrame,
+  MANAGED_CWD_PREFIX,
   RpcMethods,
+  managedWorkspace,
   type RuntimeAvailability,
 } from "@agent-base/protocol";
 import { execa } from "execa";
@@ -119,6 +121,28 @@ export class Host {
     throw new RpcError("forbidden", "this path is outside the folders the device owner has shared");
   }
 
+  /**
+   * Where a session runs. A managed workspace lives under the host's own data
+   * directory and is created on demand; anything else is a folder on this
+   * machine, subject to the owner's sharing policy, and must already exist.
+   */
+  private async sessionCwd(actor: Actor, cwd: string): Promise<string> {
+    if (cwd.startsWith(MANAGED_CWD_PREFIX)) {
+      const name = managedWorkspace(cwd);
+      if (!name) throw new RpcError("bad_request", "malformed managed workspace");
+      const dir = path.join(this.options.dataDir, "workspaces", name);
+      await mkdir(dir, { recursive: true });
+      return dir;
+    }
+    const real = await this.authorizePath(actor, cwd);
+    const isDirectory = await stat(real).then(
+      (s) => s.isDirectory(),
+      () => false,
+    );
+    if (!isDirectory) throw new RpcError("bad_request", `working directory does not exist on this device: ${cwd}`);
+    return real;
+  }
+
   private async rpc(method: string, raw: unknown, actor: Actor): Promise<unknown> {
     if (!(method in RpcMethods)) throw new RpcError("unknown_method", `unknown method ${method}`);
     const name = method as keyof typeof RpcMethods;
@@ -129,15 +153,7 @@ export class Host {
     switch (name) {
       case "session.run": {
         const p = parsed.data as ReturnType<(typeof RpcMethods)["session.run"]["parse"]>;
-        const cwd = await this.authorizePath(actor, p.session.cwd);
-        if (
-          !(await stat(cwd).then(
-            (s) => s.isDirectory(),
-            () => false,
-          ))
-        ) {
-          throw new RpcError("bad_request", `working directory does not exist on this device: ${p.session.cwd}`);
-        }
+        const cwd = await this.sessionCwd(actor, p.session.cwd);
         const session = { ...p.session, cwd };
         this.store.adopt(session);
         // Answer "accepted" now; the turn streams back over the link.

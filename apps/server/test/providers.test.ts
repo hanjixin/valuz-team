@@ -78,7 +78,7 @@ describe("model channels", () => {
       deletable: true,
       default_model: "alpha-1",
       test_status: "success",
-      credential_source: "user_key",
+      credential_source: "secret_ref",
       effective_protocol: "anthropic",
       compatible_protocols: ["anthropic", "openai-completion", "openai-response"],
       base_url: `${vendor.url}/`,

@@ -6042,6 +6042,18 @@ export interface components {
             project_id?: string | null;
         };
         SessionListItem: {
+            /**
+             * Format: uuid
+             * @description agent-base: the device the session runs on.
+             */
+            device_id?: string | null;
+            /** Format: uuid */
+            owner_id?: string;
+            /**
+             * @description agent-base: what the caller may do — `control` and above may send, interrupt and queue.
+             * @enum {string}
+             */
+            permission?: "view" | "use" | "edit" | "control" | "admin";
             id: string;
             project_id: string;
             name?: string | null;
@@ -6385,6 +6397,11 @@ export interface components {
             warnings: string[];
         };
         SessionCreateRequest: {
+            /**
+             * Format: uuid
+             * @description agent-base: the device to run on. Defaults to the project's device, else the caller's own online device.
+             */
+            device_id?: string | null;
             project_id: string;
             title?: string | null;
             /**
@@ -15034,7 +15051,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Accepted for compatibility; every listed channel is already usable from the server. */
-                gated?: boolean;
+                gated?: string;
             };
             header?: never;
             path?: never;

@@ -66,3 +66,7 @@ export const update = async (db: Db, id: string, values: Partial<AgentValues>): 
 
 export const remove = async (db: Db, id: string): Promise<void> =>
   void (await db.deleteFrom("agents").where("id", "=", id).execute());
+
+/** An agent by id, with no permission check — for callers that already established the right to it. */
+export const findById = (db: Db, id: string) =>
+  db.selectFrom("agents").selectAll().where("id", "=", id).executeTakeFirst();

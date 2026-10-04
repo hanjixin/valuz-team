@@ -16,6 +16,8 @@ export interface Ctx {
   box: SecretBox;
   /** The links to desktop hosts connected to this replica. */
   hub: DeviceHub;
+  /** Report a failure in work nobody is waiting on (it cannot be returned to a caller). */
+  log(err: unknown, message: string): void;
   startedAt: number;
 }
 

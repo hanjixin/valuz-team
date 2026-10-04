@@ -13,6 +13,21 @@ import { Message, Session, SkillBundle, SubmitAction, UserMessage } from "./doma
 export const DEVICE_LINK_PATH = "/v1/devices/link";
 export const DEVICE_LINK_VERSION = 1;
 
+/**
+ * A session's `cwd` is normally a folder on the device. One that has no folder
+ * of its own — a quick chat, a project not bound to a folder — is given a
+ * workspace the host manages: `@managed/<name>` resolves to a directory under
+ * the host's own data directory, created on first use.
+ */
+export const MANAGED_CWD_PREFIX = "@managed/";
+export const managedCwd = (name: string): string => `${MANAGED_CWD_PREFIX}${name}`;
+/** The workspace name in a managed cwd, or null for an ordinary path (or a malformed token). */
+export function managedWorkspace(cwd: string): string | null {
+  if (!cwd.startsWith(MANAGED_CWD_PREFIX)) return null;
+  const name = cwd.slice(MANAGED_CWD_PREFIX.length);
+  return /^[A-Za-z0-9][A-Za-z0-9-]{0,127}$/.test(name) ? name : null;
+}
+
 export const RuntimeAvailability = z.object({
   runtime: z.string(),
   available: z.boolean(),

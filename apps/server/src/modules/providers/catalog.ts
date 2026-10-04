@@ -108,7 +108,8 @@ export function compatibleProtocols(kind: string, protocol: string | null | unde
 export const RUNTIME_PROTOCOLS: readonly [RuntimeId, readonly ApiProtocol[]][] = [
   ["claude_agent", ["anthropic"]],
   ["codex", ["openai-response"]],
-  ["deepagents", ["anthropic", "openai-completion", "gemini"]],
+  // The native runtime speaks chat completions only, for now.
+  ["deepagents", ["openai-completion"]],
 ];
 
 /** The runtimes a model on these protocols can run on, in order of preference. */
@@ -128,4 +129,10 @@ export function endpointFor(kind: string, protocol: string | null | undefined, b
   const d = descriptorOf(kind);
   if (!d) return "";
   return (wireShape(kind, protocol) === "anthropic" && d.anthropic_base_url) || d.default_base_url;
+}
+
+/** The protocol `runtime` would speak to a channel offering `protocols`, or null when it cannot drive it. */
+export function protocolFor(runtime: string, protocols: readonly ApiProtocol[]): ApiProtocol | null {
+  const accepted = RUNTIME_PROTOCOLS.find(([id]) => id === runtime)?.[1] ?? [];
+  return accepted.find((protocol) => protocols.includes(protocol)) ?? null;
 }

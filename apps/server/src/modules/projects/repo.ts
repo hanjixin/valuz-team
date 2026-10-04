@@ -25,6 +25,7 @@ export const insert = async (
     org_id: string;
     owner_id: string;
     name: string;
+    kind?: "chat" | "project";
     icon: string | null;
     device_id: string | null;
     root_path: string | null;
@@ -44,3 +45,7 @@ export const update = async (
 
 export const remove = async (db: Db, id: string): Promise<void> =>
   void (await db.deleteFrom("projects").where("id", "=", id).execute());
+
+/** A project by id with no permission check — for callers that already established the right to it. */
+export const byId = (db: Db, id: string) =>
+  db.selectFrom("projects").selectAll().where("id", "=", id).executeTakeFirst();

@@ -49,3 +49,7 @@ export async function update(db: Db, id: string, values: Partial<ProviderValues>
 
 export const remove = async (db: Db, id: string): Promise<void> =>
   void (await db.deleteFrom("providers").where("id", "=", id).execute());
+
+/** A channel by id with no permission check — for callers that already established the right to it. */
+export const findInOrg = (db: Db, orgId: string, id: string) =>
+  db.selectFrom("providers").selectAll().where("org_id", "=", orgId).where("id", "=", id).executeTakeFirst();

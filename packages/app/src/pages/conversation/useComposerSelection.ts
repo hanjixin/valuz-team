@@ -93,12 +93,16 @@ export function useComposerSelection({
   useEffect(() => {
     if (defaultsLoading) return;
     if (runtimeList.length === 0) return;
-    const current = runtimeList.find((rt) => rt.id === selectedRuntimeId);
-    if (current && current.available) return;
     const firstAvailable = runtimeList.find((rt) => rt.available);
-    if (firstAvailable) {
-      setSelectedRuntimeId(firstAvailable.id as RuntimeId);
-    }
+    if (!firstAvailable) return;
+    // Decide against the LATEST selection, not the one this render saw: when
+    // the defaults and the runtime list land in the same commit, the effect
+    // above has just queued the configured default, and a plain set here
+    // would overwrite it with ``firstAvailable``.
+    setSelectedRuntimeId((prev) => {
+      const current = runtimeList.find((rt) => rt.id === prev);
+      return current && current.available ? prev : (firstAvailable.id as RuntimeId);
+    });
   }, [runtimeList, selectedRuntimeId, defaultsLoading]);
   const [retryCounts, setRetryCounts] = useState<Record<string, number>>({});
 

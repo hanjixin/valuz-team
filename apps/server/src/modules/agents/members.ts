@@ -9,6 +9,7 @@ import { badRequest, conflict, notFound } from "../../infra/errors.ts";
 import * as audit from "../audit/service.ts";
 import * as projects from "../projects/service.ts";
 import * as repo from "./members-repo.ts";
+import * as agentRepo from "./repo.ts";
 import * as agents from "./service.ts";
 import { deriveSlug, ensureUniqueSlug, isValidSlug } from "./slug.ts";
 
@@ -139,4 +140,18 @@ export async function removeAgent(ctx: Ctx, auth: Auth, slug: string, cascade: b
       "agent_deployed",
     );
   await agents.remove(ctx, auth, slug);
+}
+
+/**
+ * The agent a new session in this project should run as. A handle on the
+ * project's team needs nothing more — being allowed in the project covers it;
+ * any other agent must be one the caller may use.
+ */
+export async function resolveForSession(ctx: Ctx, auth: Auth, projectId: string | null, slug: string) {
+  const member = projectId ? await repo.findInProject(ctx.db, projectId, slug) : undefined;
+  const agent = member
+    ? await agentRepo.findById(ctx.db, member.agent_id)
+    : await agents.require(ctx, auth, slug, "use");
+  if (!agent) throw notFound("agent");
+  return agent;
 }

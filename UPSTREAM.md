@@ -33,6 +33,12 @@ Keep changes in those directories to the documented seams so upstream can be re-
 - `packages/ui/src/components/conversation/markdown-heavy-plugins.test.tsx`: waited the default 1s for a cold
   dynamic import of mermaid/katex, which fails intermittently when the whole suite runs. The waits now allow 10s.
   Worth sending upstream.
+- `packages/app/src/pages/ConversationsHomePage.tsx` and `packages/app/src/pages/conversation/useComposerSelection.ts`
+  (the same code twice): the effect that falls back to the first available runtime
+  overwrote the configured default runtime when the defaults and the runtime list arrived in the same commit — it
+  compared against the selection the render saw rather than the one just queued. Invisible upstream, where the
+  default is usually also the first runtime; here a member whose default is Valuz Agent got Claude Agent. It now
+  decides inside a functional update. Worth sending upstream.
 - `packages/app/src/components/TemplatePrefillDialogs.test.tsx`: the test still asserted the old `border-brand`
   selected style after the action-kind picker became a `SegmentedControl`. It now asserts that control's selected
   style. Worth sending upstream.
@@ -69,4 +75,8 @@ Deliberate differences in behaviour:
 - Agents and projects belong to a member and are shared through the ladder; responses carry `permission` and
   `owner_id`. An agent's slug is unique in its organization. A project's folder is on a device (`device_id`).
 - There are no built-in ("official") agents yet, including the system agent.
+- A session runs on a device (`device_id`); `POST /v1/sessions` picks the project's device or the caller's own
+  when none is named. Deltas are stored as well as final messages, so history replays exactly what a live
+  stream showed, and every frame carries the durable `seq`.
+- The native runtime (`deepagents`) speaks chat completions only for now.
 - `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

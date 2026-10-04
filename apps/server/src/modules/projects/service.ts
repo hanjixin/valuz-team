@@ -77,6 +77,25 @@ export async function create(ctx: Ctx, auth: Auth, input: Schema<"ProjectCreateR
   return get(ctx, auth, id);
 }
 
+/**
+ * A quick chat gets a project of its own (kind `chat`) with no folder: its
+ * session works in a workspace the device manages.
+ */
+export async function createChat(ctx: Ctx, auth: Auth, deviceId: string | null): Promise<repo.ProjectRow> {
+  const id = crypto.randomUUID();
+  await repo.insert(ctx.db, {
+    id,
+    org_id: auth.orgId,
+    owner_id: auth.userId,
+    name: "Chat",
+    kind: "chat",
+    icon: null,
+    device_id: deviceId,
+    root_path: null,
+  });
+  return require(ctx, auth, id);
+}
+
 export async function rename(ctx: Ctx, auth: Auth, id: string, name: string): Promise<Detail> {
   await require(ctx, auth, id, "edit");
   if (!name.trim()) throw badRequest("a project needs a name");
@@ -109,4 +128,10 @@ export async function remove(ctx: Ctx, auth: Auth, id: string): Promise<void> {
     await repo.remove(tx, id);
     await audit.record(tx, auth, "project.delete", { type: "project", id });
   });
+}
+
+/** What a session in the project carries into every turn. No permission check: the session is the authorization. */
+export async function contextForSession(ctx: Ctx, id: string): Promise<{ name: string; instructions: string } | null> {
+  const row = await repo.byId(ctx.db, id);
+  return row ? { name: row.name, instructions: row.instructions_md } : null;
 }

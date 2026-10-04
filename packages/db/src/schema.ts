@@ -177,6 +177,77 @@ export interface ProjectMembersTable {
   created_at: Timestamp;
 }
 
+type Json<T> = ColumnType<T, string | null | undefined, string | null>;
+
+export interface SessionsTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  project_id: string;
+  device_id: string | null;
+  agent_id: string | null;
+  agent_slug: string | null;
+  provider_id: string | null;
+  name: string | null;
+  runtime_provider: string;
+  model: ColumnType<string, string | undefined, string>;
+  cwd: string;
+  effort: string | null;
+  permission_mode: ColumnType<string, string | undefined, string>;
+  mode: ColumnType<string, string | undefined, string>;
+  status: ColumnType<string, string | undefined, string>;
+  origin: ColumnType<string, string | undefined, string>;
+  stop_reason: Json<Record<string, unknown> | null>;
+  runtime_session_id: string | null;
+  todos: Json<Record<string, unknown>[] | null>;
+  metadata: ColumnType<Record<string, unknown>, string | undefined, string>;
+  last_user_message_text: string | null;
+  queue_paused: ColumnType<boolean, boolean | undefined, boolean>;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface MessagesTable {
+  id: string;
+  session_id: string;
+  actor_id: string | null;
+  user_message: ColumnType<Record<string, unknown>, string, string>;
+  status: ColumnType<string, string | undefined, string>;
+  assistant_message: string | null;
+  error_message: Json<Record<string, unknown> | null>;
+  stop_reason: Json<Record<string, unknown> | null>;
+  total_turns: ColumnType<number, number | undefined, number>;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
+  model_usage: Json<Record<string, unknown> | null>;
+  metadata: ColumnType<Record<string, unknown>, string | undefined, string>;
+  todos: Json<Record<string, unknown>[] | null>;
+  started_at: number;
+  ended_at: number | null;
+}
+
+export interface EventsTable {
+  seq: Generated<number>;
+  session_id: string;
+  message_id: string;
+  type: string;
+  data: ColumnType<Record<string, unknown>, string, string>;
+  ts: number;
+  event_uid: string;
+}
+
+export interface QueuedInputsTable {
+  id: string;
+  session_id: string;
+  actor_id: string;
+  text: string;
+  position: Generated<number>;
+  created_at: Timestamp;
+  updated_at: ColumnType<Date | null, Date | undefined, Date | null>;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -192,5 +263,9 @@ export interface Database {
   agents: AgentsTable;
   projects: ProjectsTable;
   project_members: ProjectMembersTable;
+  sessions: SessionsTable;
+  messages: MessagesTable;
+  events: EventsTable;
+  queued_inputs: QueuedInputsTable;
   user_settings: UserSettingsTable;
 }

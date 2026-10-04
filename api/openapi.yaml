@@ -5874,7 +5874,7 @@ paths:
         - name: gated
           in: query
           required: false
-          schema: {type: boolean, default: false}
+          schema: {type: string}
           description: Accepted for compatibility; every listed channel is already usable from the server.
       responses:
         "200":
@@ -9107,6 +9107,16 @@ components:
       type: object
       required: [id, project_id, status, origin, updated_at]
       properties:
+        device_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "agent-base: the device the session runs on."
+        owner_id: {type: string, format: uuid}
+        permission:
+          type: string
+          enum: [view, use, edit, control, admin]
+          description: "agent-base: what the caller may do — `control` and above may send, interrupt and queue."
         id:
           type: string
         project_id:
@@ -9608,6 +9618,13 @@ components:
       type: object
       required: [project_id]
       properties:
+        device_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            agent-base: the device to run on. Defaults to the project's device, else
+            the caller's own online device.
         project_id:
           type: string
         title:

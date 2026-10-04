@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { startPostgres, startProviderUpstream, startRedis } from "@agent-base/test-utils";
+import { startModelGateway, startPostgres, startProviderUpstream, startRedis } from "@agent-base/test-utils";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const PORT = 18790;
@@ -14,7 +14,15 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     if (!existsSync(file))
       throw new Error(`${path.relative(root, file)} is missing — run \`pnpm test:e2e\`, which builds first`);
   }
-  const [pg, redis, vendor] = await Promise.all([startPostgres(), startRedis(), startProviderUpstream()]);
+  const [pg, redis, vendor, model] = await Promise.all([
+    startPostgres(),
+    startRedis(),
+    startProviderUpstream(),
+    startModelGateway(),
+  ]);
+  // Conversations in the specs are answered by this stand-in model.
+  model.handler = () => ({ content: "The answer is forty-two." });
+  process.env["E2E_MODEL_URL"] = model.url;
   // Specs add model channels that point at this stand-in vendor.
   process.env["E2E_VENDOR_URL"] = vendor.url;
   process.env["E2E_VENDOR_KEY"] = vendor.apiKey;
@@ -33,7 +41,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   });
   const stop = async (): Promise<void> => {
     server.kill("SIGTERM");
-    await Promise.all([pg.stop(), redis.stop(), vendor.stop()]);
+    await Promise.all([pg.stop(), redis.stop(), vendor.stop(), model.stop()]);
   };
   for (let attempt = 0; ; attempt++) {
     const healthy = await fetch(`http://127.0.0.1:${PORT}/health`).then(

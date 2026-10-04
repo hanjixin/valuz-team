@@ -169,3 +169,6 @@ export async function copy(ctx: Ctx, auth: Auth, slug: string, input: Schema<"Co
     avatar: source.avatar,
   });
 }
+
+/** The agent a session is bound to, as it is now. No permission check: the session is the authorization. */
+export const forSession = (ctx: Ctx, id: string) => repo.findById(ctx.db, id);

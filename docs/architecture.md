@@ -78,7 +78,7 @@ returned by the API.
 
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host, the kernel (not yet driven by the server — sessions come next), model channels, model defaults and
-preferences.
+preferences, the agent library, projects and their teams.
 
 The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),
 module by module. `make contract` reports how much of the contract is implemented.

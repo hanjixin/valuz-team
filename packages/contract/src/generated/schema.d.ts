@@ -4051,6 +4051,111 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the projects the caller can see */
+        get: operations["listProjects"];
+        put?: never;
+        /** Create a project */
+        post: operations["createProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One project */
+        get: operations["getProject"];
+        put?: never;
+        post?: never;
+        /** Delete a project */
+        delete: operations["deleteProject"];
+        options?: never;
+        head?: never;
+        /** Rename a project */
+        patch: operations["renameProject"];
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/default-lead": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Choose which member leads tasks by default */
+        put: operations["setProjectDefaultLead"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/instructions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the project's instructions */
+        put: operations["updateProjectInstructions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/delete-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What deleting the project would take with it */
+        get: operations["getProjectDeletePreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/last-session-pick": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The runtime, channel and model last used in the project */
+        get: operations["getProjectLastSessionPick"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5060,6 +5165,17 @@ export interface components {
             deletable: boolean;
             /** @description Preset icon key or uploaded asset URL for the agent's avatar. v1 supports preset keys only. null = no avatar set. */
             avatar?: string | null;
+            /**
+             * @description agent-base: what the caller may do with it.
+             * @enum {string}
+             */
+            permission?: "view" | "use" | "edit" | "control" | "admin";
+            /**
+             * Format: uuid
+             * @description agent-base: the member it belongs to.
+             */
+            owner_id?: string;
+            owner_name?: string;
         };
         CreateAgentRequest: {
             slug?: string | null;
@@ -7924,6 +8040,74 @@ export interface components {
                 key: string;
                 providers: components["schemas"]["ModelOptionProvider"][];
             }[];
+        };
+        ProjectListItem: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "chat" | "project";
+            root_path: string | null;
+            icon: string | null;
+            cwd: string | null;
+            /**
+             * Format: uuid
+             * @description agent-base: the device whose folder backs the project.
+             */
+            device_id?: string | null;
+            /** @enum {string} */
+            permission?: "view" | "use" | "edit" | "control" | "admin";
+            /** Format: uuid */
+            owner_id?: string;
+        };
+        ProjectList: {
+            projects: components["schemas"]["ProjectListItem"][];
+        };
+        ProjectDetail: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "chat" | "project";
+            root_path: string | null;
+            icon: string | null;
+            cwd: string | null;
+            /**
+             * Format: uuid
+             * @description agent-base: the device whose folder backs the project.
+             */
+            device_id?: string | null;
+            /** @enum {string} */
+            permission?: "view" | "use" | "edit" | "control" | "admin";
+            /** Format: uuid */
+            owner_id?: string;
+            instructions_md: string | null;
+            default_lead_agent_slug?: string | null;
+        };
+        ProjectCreateRequest: {
+            name: string;
+            /** @description An absolute folder on the device. */
+            root_path?: string;
+            /**
+             * Format: uuid
+             * @description agent-base: the device the folder is on. Defaults to the caller's own device when they have exactly one.
+             */
+            device_id?: string;
+            icon?: string | null;
+        };
+        ProjectDeletePreview: {
+            session_count: number;
+            doc_binding_count: number;
+            schedule_count: number;
+            skill_config_count: number;
+        };
+        LastSessionPick: {
+            runtime_provider: string | null;
+            provider_id: string | null;
+            model_id: string | null;
+            agent_slug?: string | null;
+            task_agent_slug?: string | null;
+        };
+        OkResponse: {
+            ok: boolean;
         };
     };
     responses: never;
@@ -15161,6 +15345,211 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelOptionsResponse"];
+                };
+            };
+        };
+    };
+    listProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectList"];
+                };
+            };
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    getProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    deleteProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    renameProject: {
+        parameters: {
+            query: {
+                /** @description The new name. */
+                name: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    setProjectDefaultLead: {
+        parameters: {
+            query?: {
+                /** @description A member's handle in this project. Omit to clear. */
+                agent_slug?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+        };
+    };
+    updateProjectInstructions: {
+        parameters: {
+            query: {
+                /** @description Markdown shared with every agent working in the project. */
+                instructions_md: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"];
+                };
+            };
+        };
+    };
+    getProjectDeletePreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDeletePreview"];
+                };
+            };
+        };
+    };
+    getProjectLastSessionPick: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LastSessionPick"];
                 };
             };
         };

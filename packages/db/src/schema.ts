@@ -130,6 +130,53 @@ export interface UserSettingsTable {
   updated_at: Timestamp;
 }
 
+type JsonList = ColumnType<string[], string | undefined, string>;
+
+export interface AgentsTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  slug: string;
+  name: string;
+  description: ColumnType<string, string | undefined, string>;
+  instructions: ColumnType<string, string | undefined, string>;
+  runtime: string;
+  model: string;
+  provider_id: string | null;
+  effort: string | null;
+  skills: JsonList;
+  connector_types: JsonList;
+  knowledge_scope: JsonList;
+  inherit_global_instructions: ColumnType<boolean, boolean | undefined, boolean>;
+  permission_mode: ColumnType<string, string | undefined, string>;
+  avatar: string | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface ProjectsTable {
+  id: string;
+  org_id: string;
+  owner_id: string;
+  name: string;
+  kind: ColumnType<"chat" | "project", "chat" | "project" | undefined, "chat" | "project">;
+  icon: string | null;
+  instructions_md: ColumnType<string, string | undefined, string>;
+  default_lead_agent_slug: string | null;
+  device_id: string | null;
+  root_path: string | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface ProjectMembersTable {
+  id: string;
+  project_id: string;
+  agent_id: string;
+  agent_slug: string;
+  created_at: Timestamp;
+}
+
 export interface Database {
   app_meta: AppMetaTable;
   users: UsersTable;
@@ -142,5 +189,8 @@ export interface Database {
   audit_logs: AuditLogsTable;
   devices: DevicesTable;
   providers: ProvidersTable;
+  agents: AgentsTable;
+  projects: ProjectsTable;
+  project_members: ProjectMembersTable;
   user_settings: UserSettingsTable;
 }

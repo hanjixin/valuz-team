@@ -57,7 +57,8 @@ valuz-agent's `api/openapi.yaml` does not describe everything its frontend calls
 connectors, projects, automations, knowledge base…) are reached by hand-written clients in `packages/core/src/api`.
 As each of those modules is ported, its operations are added to the contract here, with shapes taken from the
 frontend's types and the Python routes. Added so far: `auth`, `orgs`, `teams`, `shares`, `devices` (new in
-agent-base), and `providers` plus `settings/model-defaults` and `settings/model-options` (existing frontend calls).
+agent-base), and `providers`, `settings/model-defaults`, `settings/model-options` and the project CRUD under `projects`
+(existing frontend calls).
 
 Deliberate differences in behaviour:
 
@@ -65,4 +66,7 @@ Deliberate differences in behaviour:
   `source: "org"`. The default channel and model are per member.
 - Subscription channels (Claude Pro/Max, Codex · ChatGPT) are not offered by the server: they sign in through a CLI
   on the machine that runs the agent, so they will belong to a device.
+- Agents and projects belong to a member and are shared through the ladder; responses carry `permission` and
+  `owner_id`. An agent's slug is unique in its organization. A project's folder is on a device (`device_id`).
+- There are no built-in ("official") agents yet, including the system agent.
 - `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

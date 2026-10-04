@@ -121,6 +121,10 @@ export async function get(ctx: Ctx, auth: Auth, id: string): Promise<Channel> {
   return present(row, auth, (await storedDefaults(ctx, auth)).default_provider_id);
 }
 
+/** Throws unless the caller may run models through this channel. */
+export const assertUsable = async (ctx: Ctx, auth: Auth, id: string): Promise<void> =>
+  void (await mustFind(ctx, auth, id, "use"));
+
 /**
  * What a runtime needs to call the channel's model. Needs `use`: the key is
  * handed to the kernel on the member's behalf, never to the member.

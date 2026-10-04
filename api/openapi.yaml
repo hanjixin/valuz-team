@@ -6110,6 +6110,172 @@ paths:
               schema:
                 $ref: "#/components/schemas/ModelOptionsResponse"
 
+  # ── Projects: a workplace for a team of agents ─────────────────────────────
+  # agent-base: a project belongs to a member and is shared through the ladder. Its
+  # folder lives on a device (`device_id` + `root_path`), not on the server.
+  /v1/projects:
+    get:
+      summary: List the projects the caller can see
+      operationId: listProjects
+      tags: [projects]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectList"
+    post:
+      summary: Create a project
+      operationId: createProject
+      tags: [projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+
+  /v1/projects/{project_id}:
+    get:
+      summary: One project
+      operationId: getProject
+      tags: [projects]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+    patch:
+      summary: Rename a project
+      operationId: renameProject
+      tags: [projects]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: name
+          in: query
+          required: true
+          schema: {type: string}
+          description: The new name.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+    delete:
+      summary: Delete a project
+      operationId: deleteProject
+      tags: [projects]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "204":
+          description: Deleted
+
+  /v1/projects/{project_id}/default-lead:
+    put:
+      summary: Choose which member leads tasks by default
+      operationId: setProjectDefaultLead
+      tags: [projects]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: agent_slug
+          in: query
+          required: false
+          schema: {type: string}
+          description: A member's handle in this project. Omit to clear.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+
+  /v1/projects/{project_id}/instructions:
+    put:
+      summary: Replace the project's instructions
+      operationId: updateProjectInstructions
+      tags: [projects]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: instructions_md
+          in: query
+          required: true
+          schema: {type: string}
+          description: Markdown shared with every agent working in the project.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /v1/projects/{project_id}/delete-preview:
+    get:
+      summary: What deleting the project would take with it
+      operationId: getProjectDeletePreview
+      tags: [projects]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDeletePreview"
+
+  /v1/projects/{project_id}/last-session-pick:
+    get:
+      summary: The runtime, channel and model last used in the project
+      operationId: getProjectLastSessionPick
+      tags: [projects]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LastSessionPick"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -7508,6 +7674,12 @@ components:
           description: >-
             Preset icon key or uploaded asset URL for the agent's avatar.
             v1 supports preset keys only. null = no avatar set.
+        permission:
+          type: string
+          enum: [view, use, edit, control, admin]
+          description: "agent-base: what the caller may do with it."
+        owner_id: {type: string, format: uuid, description: "agent-base: the member it belongs to."}
+        owner_name: {type: string}
     CreateAgentRequest:
       type: object
       required: [name]
@@ -11987,3 +12159,83 @@ components:
                 type: array
                 items:
                   $ref: "#/components/schemas/ModelOptionProvider"
+    ProjectListItem:
+      type: object
+      required: [id, name, kind, root_path, icon, cwd]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        kind: {type: string, enum: [chat, project]}
+        root_path: {type: string, nullable: true}
+        icon: {type: string, nullable: true}
+        cwd: {type: string, nullable: true}
+        device_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "agent-base: the device whose folder backs the project."
+        permission: {type: string, enum: [view, use, edit, control, admin]}
+        owner_id: {type: string, format: uuid}
+    ProjectList:
+      type: object
+      required: [projects]
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectListItem"
+    ProjectDetail:
+      type: object
+      required: [id, name, kind, root_path, icon, cwd, instructions_md]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        kind: {type: string, enum: [chat, project]}
+        root_path: {type: string, nullable: true}
+        icon: {type: string, nullable: true}
+        cwd: {type: string, nullable: true}
+        device_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "agent-base: the device whose folder backs the project."
+        permission: {type: string, enum: [view, use, edit, control, admin]}
+        owner_id: {type: string, format: uuid}
+        instructions_md: {type: string, nullable: true}
+        default_lead_agent_slug: {type: string, nullable: true}
+    ProjectCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 256}
+        root_path:
+          type: string
+          maxLength: 4096
+          description: An absolute folder on the device.
+        device_id:
+          type: string
+          format: uuid
+          description: "agent-base: the device the folder is on. Defaults to the caller's own device when they have exactly one."
+        icon: {type: string, nullable: true}
+    ProjectDeletePreview:
+      type: object
+      required: [session_count, doc_binding_count, schedule_count, skill_config_count]
+      properties:
+        session_count: {type: integer}
+        doc_binding_count: {type: integer}
+        schedule_count: {type: integer}
+        skill_config_count: {type: integer}
+    LastSessionPick:
+      type: object
+      required: [runtime_provider, provider_id, model_id]
+      properties:
+        runtime_provider: {type: string, nullable: true}
+        provider_id: {type: string, nullable: true}
+        model_id: {type: string, nullable: true}
+        agent_slug: {type: string, nullable: true}
+        task_agent_slug: {type: string, nullable: true}
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok: {type: boolean}

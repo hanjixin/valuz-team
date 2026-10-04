@@ -38,8 +38,9 @@ export function routablePaths<T extends { paths?: Record<string, unknown> }>(spe
 /**
  * The contract declares OpenAPI 3.1 but still marks optional values with 3.0's
  * `nullable: true`, which is not a JSON Schema keyword. Rewrite it to the 3.1
- * form the validator understands: a `null` member in `type`, or an `anyOf` with
- * `null` where the schema has no `type` of its own (a `$ref`, an `allOf`…).
+ * form the validator understands: a `null` member in `type` (and in `enum`, when
+ * there is one), or an `anyOf` with `null` where the schema has no `type` of its
+ * own (a `$ref`, an `allOf`…).
  */
 export function normalizeNullable(node: unknown): unknown {
   if (Array.isArray(node)) return node.map(normalizeNullable);
@@ -47,6 +48,8 @@ export function normalizeNullable(node: unknown): unknown {
   const { nullable, ...rest } = node as Record<string, unknown>;
   const out = Object.fromEntries(Object.entries(rest).map(([key, value]) => [key, normalizeNullable(value)]));
   if (nullable !== true) return out;
+  // A nullable enum is meant to admit null even when the list does not spell it out.
+  if (Array.isArray(out["enum"]) && !out["enum"].includes(null)) out["enum"] = [...out["enum"], null];
   if (typeof out["type"] === "string") return { ...out, type: [out["type"], "null"] };
   if (Array.isArray(out["type"])) return { ...out, type: [...new Set([...(out["type"] as string[]), "null"])] };
   const { description, ...schema } = out;

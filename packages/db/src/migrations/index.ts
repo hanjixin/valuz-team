@@ -4,6 +4,8 @@ import * as identity from "./0002_identity.ts";
 import * as collaboration from "./0003_collaboration.ts";
 import * as devices from "./0004_devices.ts";
 import * as providers from "./0005_providers.ts";
+import * as agents from "./0006_agents.ts";
+import * as projects from "./0007_projects.ts";
 
 /**
  * Every migration, keyed by name; Kysely applies them in key order. Listed
@@ -16,4 +18,6 @@ export const migrations: Record<string, Migration> = {
   "0003_collaboration": collaboration,
   "0004_devices": devices,
   "0005_providers": providers,
+  "0006_agents": agents,
+  "0007_projects": projects,
 };

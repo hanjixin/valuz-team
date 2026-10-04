@@ -20,6 +20,7 @@ import {
 } from "./memory/tools.ts";
 import { onSessionIdle, onTurnEnd, registerTurnExtras } from "./sessions/dispatch.ts";
 import * as sessions from "./sessions/ingest.ts";
+import * as teamChat from "./tasks/chat.ts";
 import { TASK_TOOLKIT } from "./tasks/prompts.ts";
 import * as tasks from "./tasks/service.ts";
 import { LEAD_TOOLS } from "./tasks/tools.ts";
@@ -38,6 +39,22 @@ export function setupModules(app: FastifyInstance): void {
     tools: LEAD_TOOLS,
     authorize: (sessionId) => tasks.authorizeToolCaller(app.ctx, sessionId),
     call: (caller, tool, args) => tasks.callTool(app.ctx, caller, tool, args),
+  });
+
+  // A conversation in a project with a team can hand work to it.
+  registerTurnExtras(app.ctx, async (session) =>
+    (await teamChat.available(app.ctx, session))
+      ? {
+          instructions: teamChat.CHAT_INSTRUCTIONS,
+          mcpServers: [toolkitServer(app, session.id, teamChat.CHAT_TOOLKIT)],
+        }
+      : null,
+  );
+  mountToolkit<teamChat.ChatCaller>(app, {
+    ...teamChat.CHAT_TOOLKIT,
+    tools: teamChat.CHAT_TOOLS,
+    authorize: (sessionId) => teamChat.authorize(app.ctx, sessionId),
+    call: (caller, tool, args) => teamChat.callTool(app, caller, tool, args),
   });
 
   // The knowledge base: uploads are parsed in the background, and a session whose

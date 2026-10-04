@@ -100,6 +100,9 @@ through one entry point: a tool call from the lead, a turn ending on a device, a
 Every plan write happens under a row lock; anything that talks to a device runs after the commit. Messages for
 a lead or member that is mid-turn wait in a mailbox and become its next turn.
 
+A conversation can hand work to the team too: in a project with a team, the agent talking with a member is given
+a second toolkit (`tasks/chat.ts`: draft, plan, commit, follow, inject), and the task it opens is that member's.
+
 Tasks ride on sessions without sessions knowing about them: `sessions/dispatch.ts` lets other modules add to a
 turn (`registerTurnExtras`) and hear when a turn ends or a session falls idle.
 

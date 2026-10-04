@@ -4,6 +4,7 @@ import path from "node:path";
 import { Host } from "@agent-base/host";
 import { type ModelGateway, type ModelReply, startModelGateway } from "@agent-base/test-utils";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { signToolToken } from "../src/infra/toolkit.ts";
 import { type Account, type TestServer, eventually, joinOrg, signUp, startTestServer } from "./harness.ts";
 
 // Tests assert on arbitrary response shapes; typing each one would only add casts.
@@ -469,6 +470,97 @@ describe("tasks", () => {
     expect((await call(alice, "POST", `/v1/tasks/${other.task_id}:commit`, { caller_session_id: "chat" })).status).toBe(
       409,
     );
+  });
+
+  it("lets a conversation in the project hand work to the team: draft, plan, start, follow", async () => {
+    const chat = (await call(alice, "POST", "/v1/sessions", { project_id: projectId, agent_slug: "Analyst" })).body;
+    /** Call the team toolkit the way the conversation's agent would: with that session's token. */
+    const team = async (sessionId: string, name: string, args: object = {}) => {
+      const res = await fetch(`${url}/v1/mcp/team`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${signToolToken(t.server.app, sessionId)}`,
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+      });
+      if (res.status !== 200) return { status: res.status };
+      const { result } = (await res.json()) as Json;
+      const text = result.content[0].text as string;
+      return result.isError ? { error: text } : JSON.parse(text);
+    };
+
+    // The agent is told about the team and offered the tools…
+    model.replies.push({ content: "Shall I hand this to the team?" });
+    await call(alice, "POST", `/v1/sessions/${chat.id}/messages`, { prompt: "We need a launch plan." });
+    await eventually(async () => (await call(alice, "GET", `/v1/sessions/${chat.id}`)).body.status === "idle");
+    const turn = model.requests.findLast((r) => !systemOf(r).includes("### Task:")) as Json;
+    expect(systemOf(turn)).toContain("## Team tasks");
+    expect(turn.tools.map((offered: Json) => offered.function.name)).toEqual(
+      expect.arrayContaining(["mcp__team__draft_task", "mcp__team__plan_task", "mcp__team__commit_task"]),
+    );
+    expect((await team(chat.id, "list_members")).members.map((m: Json) => m.slug)).toEqual([
+      "Analyst",
+      "Researcher",
+      "Writer",
+    ]);
+
+    // …drafts a task, which belongs to the member the conversation is with…
+    expect((await team(chat.id, "draft_task", { goal: "x", lead_agent: "Nobody" })).error).toMatch(/not a member/);
+    const draft = await team(chat.id, "draft_task", { goal: "Plan the launch.\nAll channels.", title: "Launch plan" });
+    expect(draft).toMatchObject({ title: "Launch plan", status: "draft", lead_agent: "Analyst" });
+    expect((await detail(draft.task_id)).task).toMatchObject({ status: "draft", created_by: alice.userId });
+    // …plans it, and is told what it got wrong…
+    const bad = await team(chat.id, "plan_task", {
+      task_id: draft.task_id,
+      subtasks: [{ key: "a", title: "A", agent: "Stranger" }],
+    });
+    expect(bad.error).toMatch(/"Stranger" is not a member of this project/);
+    const planned = await team(chat.id, "plan_task", {
+      task_id: draft.task_id,
+      subtasks: [{ key: "write", title: "Write", goal: "Write the plan.", agent: "Writer" }],
+    });
+    expect(planned).toMatchObject({ task_id: draft.task_id, ready: ["write"] });
+    expect(await team(chat.id, "inject_into_task", { task_id: draft.task_id, text: "hi" })).toEqual({
+      task_id: draft.task_id,
+      delivered: false,
+      reason: "TASK_DRAFT",
+    });
+
+    // …and starts it. The lead takes it from there.
+    leadScripts.set("Launch plan", [
+      tool("dispatch", { subtask_key: "write" }),
+      tool("await_members", { timeout_s: 30 }),
+      tool("review_subtask", { subtask_key: "write", decision: "approve" }),
+      tool("finish_task", { summary: "Launch plan written." }),
+      { content: "Done." },
+    ]);
+    expect(await team(chat.id, "commit_task", { task_id: draft.task_id })).toMatchObject({ status: "active" });
+    expect((await team(chat.id, "commit_task", { task_id: draft.task_id })).error).toMatch(/not a draft/);
+    await until(draft.task_id, "completed");
+    const followed = await team(chat.id, "get_task", { task_id: draft.task_id });
+    expect(followed).toMatchObject({ status: "completed", result: { summary: "Launch plan written." } });
+    expect(followed.plan.subtasks.map((node: Json) => [node.key, node.status])).toEqual([["write", "completed"]]);
+    expect((await team(chat.id, "list_tasks")).tasks.map((task: Json) => task.title)).toContain("Launch plan");
+    // The timeline says who did what: the conversation's agent drafted and planned.
+    const events = (await call(alice, "GET", `/v1/tasks/${draft.task_id}/events`)).body.events.map((e: Json) => [
+      e.type,
+      e.actor,
+    ]);
+    expect(events).toEqual(expect.arrayContaining([["task_planned", "Analyst"]]));
+
+    // Only a member's own conversation in a project with a team is offered this:
+    // not a quick chat, and not a task's own lead or members.
+    const quick = (await call(alice, "POST", "/v1/sessions", { project_id: "chat-default" })).body;
+    expect(await team(quick.id, "list_members")).toEqual({ status: 401 });
+    const lead = (await detail(draft.task_id)).task.lead_session_id;
+    expect(await team(lead, "list_members")).toEqual({ status: 401 });
+    // A task of another project is not this conversation's to touch.
+    const elsewhere = (await call(alice, "POST", "/v1/projects", { name: "Elsewhere" })).body.id;
+    await call(alice, "POST", `/v1/projects/${elsewhere}/agents:deploy`, { source_agent_slug: "Analyst" });
+    const other = (await call(alice, "POST", "/v1/sessions", { project_id: elsewhere })).body;
+    expect((await team(other.id, "get_task", { task_id: draft.task_id })).error).toMatch(/no task/);
   });
 
   it("shows what is in flight, and deleting a task takes its runs' conversations with it", async () => {

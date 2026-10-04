@@ -82,6 +82,9 @@ const clip = (text: string): string =>
 
 const loadTask = (db: Db, id: string) => db.selectFrom("tasks").selectAll().where("id", "=", id).executeTakeFirst();
 
+/** A task by id, for a caller that has already been authorized another way. */
+export const find = (ctx: Ctx, id: string) => loadTask(ctx.db, id);
+
 async function mutate<T>(ctx: Ctx, taskId: string, fn: (s: Scope) => Promise<T>): Promise<T> {
   const after: (() => Promise<unknown>)[] = [];
   const published: TaskEventRow[] = [];

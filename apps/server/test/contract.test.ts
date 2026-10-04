@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { loadConfig } from "../src/infra/config.ts";
 import * as handlers from "../src/modules/index.ts";
-import { type TestServer, startTestServer } from "./harness.ts";
+import { type TestServer, signUp, startTestServer } from "./harness.ts";
 
 describe("contract-driven server", () => {
   let t: TestServer;
@@ -90,19 +90,3 @@ describe("contract-driven server", () => {
     );
   });
 });
-
-async function signUp(
-  t: TestServer,
-  name: string,
-): Promise<{ token: string; refresh: string; orgId: string; userId: string }> {
-  const res = await t.call("POST", "/v1/auth/register", {
-    body: { email: `${name}@example.com`, password: "correct horse battery", name },
-  });
-  expect(res.status).toBe(201);
-  return {
-    token: res.body.access_token,
-    refresh: res.body.refresh_token,
-    orgId: res.body.org_id,
-    userId: res.body.user.id,
-  };
-}

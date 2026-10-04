@@ -30,3 +30,9 @@ export async function requireAuth(ctx: Ctx, req: FastifyRequest): Promise<Auth> 
       : forbidden("you are not a member of any organization", "no_organization");
   return { userId: req.userId, name: row.name, orgId: row.org_id, role: row.role };
 }
+
+export const isOrgAdmin = (auth: Auth): boolean => auth.role === "owner" || auth.role === "admin";
+
+export function requireOrgAdmin(auth: Auth): void {
+  if (!isOrgAdmin(auth)) throw forbidden("only organization owners and admins can do this");
+}

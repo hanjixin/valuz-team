@@ -1,3 +1,6 @@
+> **Already ported and removed from here:** accounts, organizations, invites, teams, the share ladder and the audit trail
+> (`src/auth.ts`, `src/acl.ts`, `src/routes/{auth,orgs,shares}.ts`). What is left no longer runs on its own — it is reference for porting.
+
 # agent-base
 
 valuz-agent 的 Node.js 重写：后端不再有 Python，架构从 local-first 改为 **cloud-first + 团队协作**。

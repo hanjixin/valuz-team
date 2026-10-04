@@ -5218,6 +5218,366 @@ paths:
               schema:
                 $ref: "#/components/schemas/Me"
 
+  # ── Organizations, members, invites (agent-base) ───────────────────────────
+  /v1/orgs:
+    post:
+      summary: Create another organization, owned by the caller
+      operationId: createOrg
+      tags: [orgs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrgNameRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Org"
+
+  /v1/org:
+    get:
+      summary: The organization this request acts in
+      operationId: getOrg
+      tags: [orgs]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Org"
+    patch:
+      summary: Rename the organization
+      operationId: updateOrg
+      tags: [orgs]
+      description: |
+        Owners and admins only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrgNameRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Org"
+
+  /v1/org/members:
+    get:
+      summary: List the organization's members
+      operationId: listOrgMembers
+      tags: [orgs]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgMemberList"
+
+  /v1/org/members/{user_id}:
+    patch:
+      summary: Change a member's role
+      operationId: updateOrgMember
+      tags: [orgs]
+      description: |
+        Owners and admins only; only an owner may grant or take away the owner role.\nAn organization always keeps at least one owner.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrgMemberRoleRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgMember"
+    delete:
+      summary: Remove a member, or leave the organization
+      operationId: removeOrgMember
+      tags: [orgs]
+      description: |
+        Anyone may remove themselves. Removing a member ends every share granted to them\nin this organization and their team memberships.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Removed
+
+  /v1/org/invites:
+    get:
+      summary: List pending invites
+      operationId: listOrgInvites
+      tags: [orgs]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgInviteList"
+    post:
+      summary: Invite someone by email
+      operationId: createOrgInvite
+      tags: [orgs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrgInviteRequest"
+      responses:
+        "201":
+          description: Invite created; the token is returned only here
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgInviteCreated"
+
+  /v1/org/invites/{invite_id}:
+    delete:
+      summary: Revoke a pending invite
+      operationId: revokeOrgInvite
+      tags: [orgs]
+      parameters:
+        - name: invite_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Revoked
+
+  /v1/invites/accept:
+    post:
+      summary: Join an organization with an invite token
+      operationId: acceptOrgInvite
+      tags: [orgs]
+      description: |
+        For someone who already has an account. The invite must have been sent to their email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptInviteRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptInviteResponse"
+
+  /v1/org/audit-logs:
+    get:
+      summary: The organization's audit trail, newest first
+      operationId: listAuditLogs
+      tags: [orgs]
+      description: |
+        Owners and admins only. Page backwards by passing the smallest id seen as `before`.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+        - name: before
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogList"
+
+  # ── Teams: groups of members a resource can be shared with (agent-base) ────
+  /v1/org/teams:
+    get:
+      summary: List teams
+      operationId: listTeams
+      tags: [teams]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamList"
+    post:
+      summary: Create a team
+      operationId: createTeam
+      tags: [teams]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamNameRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+
+  /v1/org/teams/{team_id}:
+    patch:
+      summary: Rename a team
+      operationId: updateTeam
+      tags: [teams]
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamNameRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+    delete:
+      summary: Delete a team and every share granted to it
+      operationId: deleteTeam
+      tags: [teams]
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Deleted
+
+  /v1/org/teams/{team_id}/members:
+    put:
+      summary: Replace a team's members
+      operationId: setTeamMembers
+      tags: [teams]
+      parameters:
+        - name: team_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamMembersRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+
+  # ── Shares: who else may use a resource, and how far (agent-base) ──────────
+  /v1/shares/{resource_type}/{resource_id}:
+    get:
+      summary: List who a resource is shared with
+      operationId: listShares
+      tags: [shares]
+      description: |
+        Needs `admin` on the resource: its owner, or an organization owner/admin.
+      parameters:
+        - name: resource_type
+          in: path
+          required: true
+          schema: {$ref: "#/components/schemas/ShareableType"}
+        - name: resource_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareList"
+    put:
+      summary: Share a resource, or change an existing share
+      operationId: putShare
+      tags: [shares]
+      description: |
+        One share per principal: sharing again with the same principal replaces its permission.
+      parameters:
+        - name: resource_type
+          in: path
+          required: true
+          schema: {$ref: "#/components/schemas/ShareableType"}
+        - name: resource_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShareRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Share"
+
+  /v1/shares/{resource_type}/{resource_id}/{share_id}:
+    delete:
+      summary: Stop sharing with one principal
+      operationId: deleteShare
+      tags: [shares]
+      parameters:
+        - name: resource_type
+          in: path
+          required: true
+          schema: {$ref: "#/components/schemas/ShareableType"}
+        - name: resource_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: share_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Removed
+
 components:
   securitySchemes:
     bearerAuth:
@@ -10472,3 +10832,176 @@ components:
             $ref: "#/components/schemas/OrgMembership"
         current_org_id: {type: string, format: uuid}
         role: {type: string, enum: [owner, admin, member]}
+    OrgNameRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+    Org:
+      type: object
+      required: [id, name, role]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        role: {type: string, enum: [owner, admin, member]}
+    OrgMember:
+      type: object
+      required: [id, email, name, role, joined_at]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        name: {type: string}
+        role: {type: string, enum: [owner, admin, member]}
+        joined_at: {type: string, format: date-time}
+    OrgMemberList:
+      type: object
+      required: [members]
+      properties:
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgMember"
+    OrgMemberRoleRequest:
+      type: object
+      required: [role]
+      additionalProperties: false
+      properties:
+        role: {type: string, enum: [owner, admin, member]}
+    OrgInviteRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email: {type: string, format: email, maxLength: 320}
+        role: {type: string, enum: [admin, member], default: member}
+    OrgInvite:
+      type: object
+      required: [id, email, role, expires_at, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string}
+        role: {type: string, enum: [admin, member]}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+    OrgInviteCreated:
+      allOf:
+        - $ref: "#/components/schemas/OrgInvite"
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: Shown once. Only its hash is stored.
+    OrgInviteList:
+      type: object
+      required: [invites]
+      properties:
+        invites:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgInvite"
+    AcceptInviteRequest:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token: {type: string, minLength: 1}
+    AcceptInviteResponse:
+      type: object
+      required: [org_id]
+      properties:
+        org_id: {type: string, format: uuid}
+    AuditLog:
+      type: object
+      required: [id, action, detail, created_at]
+      properties:
+        id: {type: integer}
+        action: {type: string}
+        actor_id: {type: string, format: uuid, nullable: true}
+        actor_name: {type: string, nullable: true}
+        resource_type: {type: string, nullable: true}
+        resource_id: {type: string, nullable: true}
+        detail: {type: object, additionalProperties: true}
+        created_at: {type: string, format: date-time}
+    AuditLogList:
+      type: object
+      required: [logs]
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+    TeamNameRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+    TeamMembersRequest:
+      type: object
+      required: [user_ids]
+      additionalProperties: false
+      properties:
+        user_ids:
+          type: array
+          maxItems: 1000
+          items: {type: string, format: uuid}
+    Team:
+      type: object
+      required: [id, name, member_ids]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        member_ids:
+          type: array
+          items: {type: string, format: uuid}
+    TeamList:
+      type: object
+      required: [teams]
+      properties:
+        teams:
+          type: array
+          items:
+            $ref: "#/components/schemas/Team"
+    ShareableType:
+      type: string
+      enum: [agent, skill, connector, provider, project, device, session, file]
+    SharePermission:
+      type: string
+      enum: [view, use, edit, control]
+      description: |
+        A ladder — each level includes the ones before it. `view` sees it, `use` runs
+        things with it, `edit` changes it, `control` drives it remotely (devices, sessions).
+        The owner and organization owners/admins hold `admin`, which is never granted by a share.
+    ShareRequest:
+      type: object
+      required: [principal_type, permission]
+      additionalProperties: false
+      properties:
+        principal_type: {type: string, enum: [org, team, user]}
+        principal_id:
+          type: string
+          format: uuid
+          description: The team or user. Omit for `org` — it is always the caller's organization.
+        permission:
+          $ref: "#/components/schemas/SharePermission"
+    Share:
+      type: object
+      required: [id, principal_type, principal_id, permission]
+      properties:
+        id: {type: string, format: uuid}
+        principal_type: {type: string, enum: [org, team, user]}
+        principal_id: {type: string, format: uuid}
+        principal_name: {type: string, nullable: true}
+        permission:
+          $ref: "#/components/schemas/SharePermission"
+        created_at: {type: string, format: date-time}
+    ShareList:
+      type: object
+      required: [shares]
+      properties:
+        shares:
+          type: array
+          items:
+            $ref: "#/components/schemas/Share"

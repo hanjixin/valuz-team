@@ -2,7 +2,7 @@ import type { Schema } from "@agent-base/contract";
 import { requireAuth } from "../../infra/auth.ts";
 import type { Handler } from "../../infra/context.ts";
 import { notFound } from "../../infra/errors.ts";
-import * as repo from "./repo.ts";
+import * as orgs from "../orgs/service.ts";
 import * as service from "./service.ts";
 
 export const registerAccount: Handler = async (req, reply) =>
@@ -21,7 +21,7 @@ export const logout: Handler = async (req, reply) => {
 export const getMe: Handler = async (req): Promise<Schema<"Me">> => {
   const ctx = req.server.ctx;
   const auth = await requireAuth(ctx, req);
-  const user = await repo.findUserById(ctx.db, auth.userId);
+  const user = await service.findUser(ctx.db, auth.userId);
   if (!user) throw notFound("user");
-  return { user, orgs: await repo.listMemberships(ctx.db, auth.userId), current_org_id: auth.orgId, role: auth.role };
+  return { user, orgs: await orgs.listMemberships(ctx.db, auth.userId), current_org_id: auth.orgId, role: auth.role };
 };

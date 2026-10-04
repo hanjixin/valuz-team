@@ -44,7 +44,18 @@ apps/server/src/
     repo.ts               SQL for this module's tables — private to the module
 ```
 
+## Access control
+
+Every shareable row carries `org_id` and `owner_id`. The caller's permission on it is `admin` for its owner
+and for organization owners/admins, otherwise the strongest share that reaches them — granted to the whole
+organization, to one of their teams, or to them — on the ladder `view < use < edit < control`. With no share
+the row is invisible (404, not 403). `modules/sharing/service.ts` owns this: a module registers its table with
+`registerShareable`, filters lists with `permissionOf`, and guards single rows with `requirePermission`.
+Changes that matter are written to the audit trail with `audit.record`, inside the transaction that makes them.
+
 ## Status
+
+Ported so far: accounts, organizations, members, invites, teams, sharing, audit.
 
 The repository is being rebuilt from the prototype in `legacy/` (tag `prototype-v0`),
 module by module. `make contract` reports how much of the contract is implemented.

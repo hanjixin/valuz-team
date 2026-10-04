@@ -51,3 +51,42 @@ export async function startTestServer(env: Record<string, string> = {}): Promise
     },
   };
 }
+
+export interface Account {
+  token: string;
+  refresh: string;
+  orgId: string;
+  userId: string;
+  email: string;
+}
+
+/** Register `<name>@example.com`. With an invite token the account joins the inviting organization. */
+export async function signUp(t: TestServer, name: string, inviteToken?: string): Promise<Account> {
+  const email = `${name}@example.com`;
+  const res = await t.call("POST", "/v1/auth/register", {
+    body: { email, password: "correct horse battery", name, ...(inviteToken ? { invite_token: inviteToken } : {}) },
+  });
+  if (res.status !== 201) throw new Error(`sign-up failed: ${res.status} ${JSON.stringify(res.body)}`);
+  return {
+    token: res.body.access_token,
+    refresh: res.body.refresh_token,
+    orgId: res.body.org_id,
+    userId: res.body.user.id,
+    email,
+  };
+}
+
+/** Invite `<name>@example.com` into the owner's organization and register them with the invite. */
+export async function joinOrg(
+  t: TestServer,
+  owner: Account,
+  name: string,
+  role: "admin" | "member" = "member",
+): Promise<Account> {
+  const invite = await t.call("POST", "/v1/org/invites", {
+    token: owner.token,
+    body: { email: `${name}@example.com`, role },
+  });
+  if (invite.status !== 201) throw new Error(`invite failed: ${invite.status} ${JSON.stringify(invite.body)}`);
+  return signUp(t, name, invite.body.token);
+}

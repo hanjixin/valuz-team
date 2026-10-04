@@ -2,5 +2,9 @@
  * Every implemented contract operation, keyed by operationId. Adding a module
  * means re-exporting its handlers here; `make contract` reports what is covered.
  */
+export * from "./audit/handlers.ts";
 export * from "./auth/handlers.ts";
+export * from "./orgs/handlers.ts";
+export * from "./sharing/handlers.ts";
 export * from "./system/handlers.ts";
+export * from "./teams/handlers.ts";

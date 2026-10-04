@@ -1,3 +1,4 @@
+import { hash } from "@node-rs/argon2";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type TestServer, startTestServer } from "./harness.ts";
 
@@ -131,5 +132,24 @@ describe("accounts with signup disabled", () => {
     const res = await t.call("POST", "/v1/auth/register", { body: account("mallory") });
     expect([res.status, res.body.code]).toEqual([403, "signup_disabled"]);
     expect(await t.server.ctx.db.selectFrom("users").select("id").execute()).toEqual([]);
+  });
+
+  it("locks an account for a while after ten wrong passwords, then lets the right one in again", async () => {
+    // Signup is off on this server, so the account is put in place directly.
+    const db = t.server.ctx.db;
+    const user = { id: crypto.randomUUID(), email: "locked@example.com", name: "locked" };
+    await db
+      .insertInto("users")
+      .values({ ...user, password_hash: await hash("correct horse battery") })
+      .execute();
+    await db.insertInto("orgs").values({ id: user.id, name: "Locked", created_by: user.id }).execute();
+    await db.insertInto("org_members").values({ org_id: user.id, user_id: user.id, role: "owner" }).execute();
+    const attempt = (password: string) =>
+      t.call("POST", "/v1/auth/login", { body: { email: "locked@example.com", password } });
+    for (let i = 0; i < 10; i++) expect((await attempt("nope")).status).toBe(401);
+    const locked = await attempt("correct horse battery");
+    expect([locked.status, locked.body.code]).toEqual([429, "too_many_attempts"]);
+    await t.server.ctx.redis.del("login-fail:locked@example.com"); // the lock expiring
+    expect((await attempt("correct horse battery")).status).toBe(200);
   });
 });

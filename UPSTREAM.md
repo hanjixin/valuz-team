@@ -149,5 +149,6 @@ Deliberate differences in behaviour:
   read (each team and its roles' names, descriptions and instructions). The skills and connectors the packs name are
   not bundled, so a role arrives with its instructions only. A role's slug is unique in the organization: the first
   member to add it gets the plain slug, a colleague gets `<slug>-<their id prefix>`. The example project has no
-  folder of its own (it works in a workspace the device manages). Agent pack export/import is not implemented.
+  folder of its own (it works in a workspace the device manages). An exported pack (`.valuzpack`, a zip) carries the agents and the
+  skills they use; connectors are named, not carried, and are listed for the importer to set up.
 - `GET /v1/runtimes` reports a runtime as available when an online device the caller may use has it.

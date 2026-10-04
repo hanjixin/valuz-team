@@ -41,7 +41,7 @@ async function localeOf(ctx: Ctx, auth: Auth): Promise<keyof Localized> {
 const slugsFor = (auth: Auth, slug: string): [string, string] => [slug, `${slug}-${auth.userId.slice(0, 6)}`];
 
 /** The member's copy of a role, if they have one (their own, or one shared with them). */
-async function held(ctx: Ctx, auth: Auth, slug: string): Promise<Agent | null> {
+export async function held(ctx: Ctx, auth: Auth, slug: string): Promise<Agent | null> {
   for (const candidate of slugsFor(auth, slug)) {
     const agent = await agents.get(ctx, auth, candidate).catch(() => null);
     if (agent) return agent;
@@ -50,17 +50,17 @@ async function held(ctx: Ctx, auth: Auth, slug: string): Promise<Agent | null> {
 }
 
 /** What a new agent runs on: the member's default channel, model and runtime. 422 when they have none. */
-async function modelDefaults(ctx: Ctx, auth: Auth) {
+export async function modelDefaults(ctx: Ctx, auth: Auth) {
   const defaults = await providers.getDefaults(ctx, auth);
   if (!defaults.default_provider_id)
     throw new HttpError(422, "no_model_channel", "add a model channel in Settings → Models first");
   return defaults;
 }
 
-async function ensure(
+export async function ensure(
   ctx: Ctx,
   auth: Auth,
-  role: ReturnType<typeof localize>,
+  role: ReturnType<typeof localize> & { skills?: string[] },
 ): Promise<{ agent: Agent; created: boolean }> {
   const existing = await held(ctx, auth, role.slug);
   if (existing) return { agent: existing, created: false };
@@ -75,6 +75,7 @@ async function ensure(
     provider_id: defaults.default_provider_id,
     runtime: defaults.default_runtime,
     model: defaults.default_model ?? "",
+    skills: role.skills ?? [],
   };
   const taken = await agents.slugTaken(ctx, auth, own);
   const agent = await agents.create(ctx, auth, {

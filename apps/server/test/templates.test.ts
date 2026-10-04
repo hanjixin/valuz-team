@@ -123,4 +123,85 @@ describe("agent templates and the first-run tour", () => {
     expect((await call(alice, "GET", `/v1/projects/${first.body.project_id}/agents`)).body.agents).toHaveLength(4);
     expect((await call(alice, "POST", "/v1/onboarding/example-project", { team_id: "nope" })).status).toBe(400);
   });
+  it("carries agents and their skills to a colleague as one file", async () => {
+    const skill = (
+      await call(alice, "POST", "/v1/skills", {
+        name: "House style",
+        description: "How we write",
+        instructions_markdown: "# House style\n\nShort sentences.",
+      })
+    ).body;
+    await call(alice, "POST", "/v1/agents", {
+      name: "Editor",
+      slug: "editor",
+      description: "Edits copy",
+      instructions: "You edit copy.",
+      skills: [skill.slug],
+      connector_types: ["github"],
+    });
+    const exported = await t.server.app.inject({
+      method: "POST",
+      url: "/v1/agent-packs/export",
+      headers: { authorization: `Bearer ${alice.token}` },
+      payload: { agent_slugs: ["editor"], collection: { name: "Editorial" } },
+    });
+    expect(exported.statusCode).toBe(200);
+    expect(exported.headers["content-type"]).toBe("application/zip");
+    expect(exported.headers["content-disposition"]).toContain("editor.valuzpack");
+    expect((await call(alice, "POST", "/v1/agent-packs/export", { agent_slugs: ["nobody"] })).status).toBe(404);
+    // Nothing of the channel travels with it.
+    expect(exported.rawPayload.toString("latin1")).not.toContain("provider_id");
+
+    const url = await t.listen();
+    const upload = async (account: Account, bytes: Uint8Array) => {
+      const form = new FormData();
+      form.append("file", new Blob([bytes]), "editor.valuzpack");
+      const res = await fetch(`${url}/v1/agent-packs/import`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${account.token}` },
+        body: form,
+      });
+      return { status: res.status, body: (await res.json()) as Json };
+    };
+    expect((await upload(bob, new TextEncoder().encode("not a zip"))).body.code).toBe("invalid_pack");
+
+    const preview = await upload(bob, exported.rawPayload);
+    expect(preview.status).toBe(200);
+    expect(preview.body).toMatchObject({
+      collection: { name: "Editorial" },
+      agents: [{ slug: "editor", name: "Editor", in_library: false }],
+      skills: [{ slug: skill.slug, source: "embedded" }],
+      connectors: [{ slug: "github", already_present: false, requires_setup: true }],
+    });
+    // Looking changed nothing.
+    expect((await call(bob, "GET", "/v1/agents")).body.agents).toHaveLength(4);
+
+    const imported = (
+      await call(bob, "POST", "/v1/agent-packs/import/confirm", { preview_id: preview.body.preview_id })
+    ).body;
+    expect(imported).toMatchObject({ created: 1, skipped: 0, connectors_to_configure: [{ slug: "github" }] });
+    const editor = imported.roles[0];
+    expect(editor).toMatchObject({
+      name: "Editor",
+      instructions: "You edit copy.",
+      owner_id: bob.userId,
+      model: "test-model",
+    });
+    expect(editor.slug).toBe(`editor-${bob.userId.slice(0, 6)}`); // Alice holds the plain slug
+    // The skill came along as Bob's own copy, and the agent carries that copy.
+    expect(editor.skills).toHaveLength(1);
+    const copy = (await call(bob, "GET", `/v1/skills/${editor.skills[0]}`)).body;
+    expect(copy).toMatchObject({ name: "House style" });
+    expect(editor.skills[0]).not.toBe(skill.slug);
+
+    // A preview is confirmed once; importing the same pack again adds nothing.
+    const reused = await call(bob, "POST", "/v1/agent-packs/import/confirm", { preview_id: preview.body.preview_id });
+    expect([reused.status, reused.body.code]).toEqual([400, "preview_expired"]);
+    const second = await upload(bob, exported.rawPayload);
+    expect(second.body.agents[0].in_library).toBe(true);
+    const again = (await call(bob, "POST", "/v1/agent-packs/import/confirm", { preview_id: second.body.preview_id }))
+      .body;
+    expect(again).toMatchObject({ created: 0, skipped: 1 });
+    expect((await call(bob, "GET", "/v1/skills")).body.skills).toHaveLength(1);
+  });
 });

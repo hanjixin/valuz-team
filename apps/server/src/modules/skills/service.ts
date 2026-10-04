@@ -133,6 +133,16 @@ async function createWith(ctx: Ctx, auth: Auth, content: repo.Content, origin: s
   return view(ctx, auth, id);
 }
 
+/** A skill as a package to carry elsewhere: its name, description and files. */
+export async function packageOf(ctx: Ctx, auth: Auth, key: string): Promise<repo.Content & { slug: string }> {
+  const row = await mustFind(ctx, auth, key);
+  return { slug: row.slug, name: row.name, description: row.description, files: row.files };
+}
+
+/** Add a skill that arrived as a package (an imported agent pack). */
+export const createFromPackage = (ctx: Ctx, auth: Auth, content: repo.Content): Promise<View> =>
+  createWith(ctx, auth, content, "imported");
+
 export function create(ctx: Ctx, auth: Auth, input: Schema<"SkillCreateRequest">): Promise<View> {
   const name = input.name.trim();
   if (!name) throw badRequest("a skill needs a name");

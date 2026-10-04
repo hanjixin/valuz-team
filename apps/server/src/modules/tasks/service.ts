@@ -234,6 +234,27 @@ async function markBlocked(ctx: Ctx, s: Scope, reason: string, extra: Record<str
 
 // ------------------------------------------------------------ people's API
 
+/** A page of the tasks in these projects, newest first — ordered like `sessions.recent`, to interleave with it. */
+export async function recent(
+  ctx: Ctx,
+  projectIds: string[],
+  page: { projectId?: string; before?: { sortAt: number; id: string }; limit: number },
+) {
+  if (projectIds.length === 0) return [];
+  const sortAt = sql<string>`floor(extract(epoch from updated_at) * 1000)::bigint`;
+  let query = ctx.db
+    .selectFrom("tasks")
+    .select(["id", "title", "status", "project_id", sortAt.as("sort_at")])
+    .where("project_id", "in", projectIds)
+    .orderBy(sortAt, "desc")
+    .orderBy("id", "desc")
+    .limit(page.limit);
+  if (page.projectId) query = query.where("project_id", "=", page.projectId);
+  if (page.before)
+    query = query.where(sql<boolean>`(${sortAt}, id) < (${page.before.sortAt}::bigint, ${page.before.id}::uuid)`);
+  return query.execute();
+}
+
 export interface NewTask {
   owner: Auth;
   projectId: string;

@@ -34,6 +34,44 @@ export function list(db: Db, auth: Auth, projectIds: string[], filter: { project
   return query.execute();
 }
 
+/** A position in a newest-first feed: everything strictly older than it comes next. */
+export interface Before {
+  sortAt: number;
+  id: string;
+}
+
+/**
+ * The caller's conversations with a person, newest first, a page at a time.
+ * Ordered by the millisecond a session last changed, then by id, so a cursor
+ * taken from one page lands exactly on the next.
+ */
+export async function recent(
+  db: Db,
+  auth: Auth,
+  projectIds: string[],
+  page: { projectId?: string; before?: Before; limit: number },
+) {
+  const sortAt = sql<string>`floor(extract(epoch from r.updated_at) * 1000)::bigint`;
+  let query = db
+    .selectFrom("sessions as r")
+    .select(["r.id", "r.name", "r.status", "r.project_id", sortAt.as("sort_at")])
+    .where("r.org_id", "=", auth.orgId)
+    .where("r.origin", "=", "user")
+    .where((eb) =>
+      eb.or([
+        sql<boolean>`${permissionOf(auth, "session", "r")} IS NOT NULL`,
+        ...(projectIds.length ? [eb("r.project_id", "in", projectIds)] : []),
+      ]),
+    )
+    .orderBy(sortAt, "desc")
+    .orderBy("r.id", "desc")
+    .limit(page.limit);
+  if (page.projectId) query = query.where("r.project_id", "=", page.projectId);
+  if (page.before)
+    query = query.where(sql<boolean>`(${sortAt}, r.id) < (${page.before.sortAt}::bigint, ${page.before.id}::uuid)`);
+  return query.execute();
+}
+
 export interface NewSession {
   id: string;
   org_id: string;

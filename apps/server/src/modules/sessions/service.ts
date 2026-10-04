@@ -125,6 +125,14 @@ export async function list(ctx: Ctx, auth: Auth, filter: { projectId?: string; q
   return rows.map((row) => present(row, row.permission ?? (editable.has(row.project_id) ? "control" : "view")));
 }
 
+/** A page of the conversations the caller can see, for a feed that interleaves them with other things. */
+export const recent = (
+  ctx: Ctx,
+  auth: Auth,
+  projectIds: string[],
+  page: { projectId?: string; before?: repo.Before; limit: number },
+) => repo.recent(ctx.db, auth, projectIds, page);
+
 /** The device a new session runs on: the one named, the project's, else the caller's own that is online. */
 export const deviceFor = (ctx: Ctx, auth: Auth, wanted: string | null | undefined, projectDevice: string | null) =>
   chooseDevice(ctx, auth, wanted, projectDevice);

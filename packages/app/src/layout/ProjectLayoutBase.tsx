@@ -1061,7 +1061,9 @@ export function ProjectLayoutBase({
             activePath={location.pathname}
             activeProjectId={activeProjectId}
             projectGroups={projectGroups}
-            bottomItems={navItemsList}
+            // agent-base: with an account menu in the footer, Settings is reached from it —
+            // the sidebar does not offer it a second time.
+            bottomItems={sidebarFooter ? navItemsList.filter((item) => item.id !== "settings") : navItemsList}
             navGroups={navGroupsList}
             chats={chatItems}
             onRecentRename={(sessionId, newName) => {

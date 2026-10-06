@@ -1,12 +1,12 @@
 /**
  * The bottom-left corner of the sidebar: who is signed in and which
  * organization they are working in, with the way to another organization and
- * out of the account. Settings has its own entry in the sidebar, so it is not
- * repeated here. (agent-base addition — it fills the sidebar's footer
+ * out of the account — and to Settings, which the sidebar then no longer lists
+ * on its own (`ProjectLayoutBase` drops it when a footer is given). (agent-base addition — it fills the sidebar's footer
  * slot, which upstream leaves for exactly this.)
  */
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronsUpDown, LogOut, Users } from "lucide-react";
+import { Check, ChevronsUpDown, LogOut, Settings, Users } from "lucide-react";
 import { authApi } from "@valuz/core";
 import {
   DropdownMenu,
@@ -84,6 +84,10 @@ export function AccountMenu() {
           {t("team.account.manage")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => navigate("/settings")}>
+          <Settings className="mr-2 h-3.5 w-3.5" />
+          {t("nav.settings")}
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => void signOut()}>
           <LogOut className="mr-2 h-3.5 w-3.5" />
           {t("team.account.signOut")}

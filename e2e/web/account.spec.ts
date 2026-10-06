@@ -22,6 +22,13 @@ test("the bottom-left corner says who is signed in and where, and is the way to 
   await expect(menu).not.toContainText("Second Org");
   await expect(page.getByText("Only In Second")).toHaveCount(0);
 
+  // Settings is reached from this menu, and the sidebar does not offer it a second time.
+  await expect(page.getByRole("link", { name: "设置", exact: true })).toHaveCount(0);
+  await menu.click();
+  await page.getByRole("menuitem", { name: "设置" }).click();
+  await expect(page).toHaveURL(/\/settings/);
+  await page.goto("/");
+
   // Move to the other organization: the app starts over there.
   await menu.click();
   await page.getByRole("menuitem", { name: "Second Org" }).click();

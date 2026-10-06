@@ -4,7 +4,7 @@
  * disk, approvals, and interruption are exercised over the actual wire format.
  */
 import { type Server, createServer } from "node:http";
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -35,6 +35,21 @@ describe("DeepAgentRuntime", () => {
       req.on("end", () => {
         requests.push(JSON.parse(body));
         const reply = replies.shift() ?? { content: "done" };
+        // A call that does not ask to stream (the library summarizing a long thread) is answered whole.
+        if (!JSON.parse(body).stream) {
+          res.writeHead(200, { "content-type": "application/json" });
+          return res.end(
+            JSON.stringify({
+              id: `chatcmpl-${requests.length}`,
+              object: "chat.completion",
+              model: "test-model",
+              choices: [
+                { index: 0, message: { role: "assistant", content: reply.content ?? "" }, finish_reason: "stop" },
+              ],
+              usage: { prompt_tokens: 100, completion_tokens: 7, total_tokens: 107 },
+            }),
+          );
+        }
         res.writeHead(200, { "content-type": "text/event-stream" });
         const send = (o: object) =>
           res.write(
@@ -227,6 +242,51 @@ describe("DeepAgentRuntime", () => {
       ?.messages.filter((m) => m.role === "assistant" && m.content)
       .map((m) => m.content);
     expect(said).toEqual(["Answer 1.", "Answer 2.", "Answer 3."]);
+  });
+
+  it("summarizes a thread that outgrows the model's window, and keeps what it replaced on the device", async () => {
+    // A small window, declared by the channel: the thread is compacted at 80% of it.
+    const session = await newSession({
+      model_settings: {
+        temperature: null,
+        max_tokens: null,
+        effort: null,
+        max_input_tokens: 30_000,
+        input_modalities: null,
+      },
+    });
+    const long = (label: string) => `${label}: ${"lorem ipsum dolor sit amet ".repeat(1200)}`;
+    replies.push({ content: "Noted the first." }, { content: "Noted the second." });
+    await orch.runTurn("u1", session.id, user(long("first report")));
+    await orch.runTurn("u1", session.id, user(long("second report")));
+    expect(store.events.filter((e) => e.type === "compaction")).toEqual([]);
+
+    // The third turn does not fit: the older part is summarized first, then the turn is answered.
+    replies.push({ content: "SUMMARY: two reports were noted." }, { content: "Noted the third." });
+    const message = await orch.runTurn("u1", session.id, user(long("third report")));
+    expect(message.status).toBe("completed");
+    expect(message.assistant_message).toBe("Noted the third.");
+    expect(store.events.filter((e) => e.type === "compaction")).toHaveLength(1);
+    // The summary is not part of the answer.
+    const streamed = store.events.filter((e) => e.type === "text_delta").map((e) => e.data["text"]);
+    expect(streamed.join("")).not.toContain("SUMMARY");
+
+    // The model was shown the summary in place of what it replaced…
+    const shown = JSON.stringify(requests.at(-1)?.messages);
+    expect(shown).toContain("SUMMARY: two reports were noted.");
+    expect(shown).not.toContain("first report");
+    // …and the full text is kept on the device, outside the session's own folder.
+    const history = path.join(dir, "data", "history", session.id);
+    const [file] = await readdir(history);
+    expect(await readFile(path.join(history, String(file)), "utf8")).toContain("first report");
+    expect(await readdir(dir)).not.toContain("conversation_history");
+    expect(shown).toContain(history);
+
+    // The next turn continues from the summarized thread without summarizing again.
+    replies.push({ content: "Short answer." });
+    await orch.runTurn("u1", session.id, user("thanks"));
+    expect(store.events.filter((e) => e.type === "compaction")).toHaveLength(1);
+    expect(JSON.stringify(requests.at(-1)?.messages)).toContain("SUMMARY: two reports were noted.");
   });
 
   it("parks a mutating tool on approval and honors a rejection", async () => {

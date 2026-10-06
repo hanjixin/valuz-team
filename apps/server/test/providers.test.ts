@@ -90,8 +90,8 @@ describe("model channels", () => {
       permission: "admin",
     });
     expect(created.body.models).toEqual([
-      { id: "alpha-1", label: null, runtimes: ["claude_agent", "codex", "deepagents"] },
-      { id: "beta-2", label: "Beta Two", runtimes: ["claude_agent", "codex", "deepagents"] },
+      { id: "alpha-1", label: null, runtimes: ["claude_agent", "codex", "deepagents"], max_input_tokens: null },
+      { id: "beta-2", label: "Beta Two", runtimes: ["claude_agent", "codex", "deepagents"], max_input_tokens: null },
     ]);
     expect(JSON.stringify(created.body)).not.toContain(vendor.apiKey);
 
@@ -256,6 +256,20 @@ describe("model channels", () => {
     });
     expect(anthropic.body.ok).toEqual(["alpha-1"]);
     expect(vendor.hits).toContain("POST /v1/messages");
+
+    // A gateway's own model names say nothing about their size: the owner declares the input window.
+    const windows = (body: { models: { id: string; max_input_tokens: number | null }[] }) =>
+      Object.fromEntries(body.models.map((model) => [model.id, model.max_input_tokens]));
+    expect(windows(custom.body)).toEqual({ "beta-2": null, "alpha-1": null });
+    const declared = await call(alice, "PATCH", `/v1/providers/${custom.body.id}`, {
+      model_limits: { "beta-2": 32_000, "no-such-model": 8000 },
+    });
+    expect(windows(declared.body)).toEqual({ "beta-2": 32_000, "alpha-1": null });
+    // Rewriting the model list keeps what its models had; 0 withdraws a declaration.
+    const relisted = await call(alice, "PATCH", `/v1/providers/${custom.body.id}`, { models: ["alpha-1", "beta-2"] });
+    expect(windows(relisted.body)).toEqual({ "alpha-1": null, "beta-2": 32_000 });
+    const cleared = await call(alice, "PATCH", `/v1/providers/${custom.body.id}`, { model_limits: { "beta-2": 0 } });
+    expect(windows(cleared.body)).toEqual({ "alpha-1": null, "beta-2": null });
   });
 
   it("catches an upstream that answers with a different model than the one asked for", async () => {

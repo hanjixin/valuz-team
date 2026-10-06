@@ -169,7 +169,11 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<{ session: Session; sk
             api_protocol: protocol.replace("-", "_") as KernelProtocol,
           }
         : null,
-    model_settings: row.effort ? { effort: row.effort } : null,
+    // The model's input window, where its channel declares one: the runtime compacts the context against it.
+    model_settings:
+      row.effort || channel?.windowOf(row.model)
+        ? { effort: row.effort ?? null, max_input_tokens: channel?.windowOf(row.model) ?? null }
+        : null,
     instructions,
     skills: equipped,
     mcp_servers: mcpServers,

@@ -12943,6 +12943,10 @@ components:
         id: {type: string}
         label: {type: string, nullable: true}
         selection_hint: {type: string, nullable: true}
+        max_input_tokens:
+          type: integer
+          nullable: true
+          description: "agent-base: the model's input window in tokens, when the channel declares it (see `model_limits`)."
         input_modalities:
           type: array
           nullable: true
@@ -13045,6 +13049,15 @@ components:
           nullable: true
           maxItems: 200
           items: {type: string, minLength: 1, maxLength: 200}
+        model_limits:
+          type: object
+          nullable: true
+          description: |
+            agent-base: the input window, in tokens, of models whose size the runtimes cannot
+            know by name (a gateway's own aliases) — keyed by model id. A session on such a
+            model compacts its context against this number instead of a fixed fallback.
+            A model left out keeps what it had; 0 clears it.
+          additionalProperties: {type: integer, minimum: 0, maximum: 10000000}
     ProviderUpdateRequest:
       type: object
       properties:
@@ -13059,6 +13072,15 @@ components:
           nullable: true
           maxItems: 200
           items: {type: string, minLength: 1, maxLength: 200}
+        model_limits:
+          type: object
+          nullable: true
+          description: |
+            agent-base: the input window, in tokens, of models whose size the runtimes cannot
+            know by name (a gateway's own aliases) — keyed by model id. A session on such a
+            model compacts its context against this number instead of a fixed fallback.
+            A model left out keeps what it had; 0 clears it.
+          additionalProperties: {type: integer, minimum: 0, maximum: 10000000}
     ProviderValidateRequest:
       type: object
       required: [provider_kind]

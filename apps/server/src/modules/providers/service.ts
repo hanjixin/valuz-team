@@ -81,7 +81,12 @@ function present(row: repo.ProviderRow, auth: Auth, defaultProviderId: string | 
     protocol: row.protocol,
     effective_protocol: protocols[0] as ApiProtocol,
     compatible_protocols: protocols,
-    models: models.map((model) => ({ id: model.id, label: model.label ?? null, runtimes })),
+    models: models.map((model) => ({
+      id: model.id,
+      label: model.label ?? null,
+      runtimes,
+      max_input_tokens: model.max_input_tokens ?? null,
+    })),
     permission: row.permission ?? "view",
     owner_id: row.owner_id,
     // Only someone who may edit the channel learns where it points.
@@ -182,6 +187,22 @@ export async function get(ctx: Ctx, auth: Auth, id: string): Promise<Channel> {
   return present(row, auth, (await storedDefaults(ctx, auth)).default_provider_id);
 }
 
+/**
+ * A model list with the input windows that apply to it: what its models had
+ * before, overlaid with what is declared now (0 withdraws a declaration).
+ */
+function withLimits(
+  models: StoredModel[],
+  before: StoredModel[],
+  declared: Record<string, number> | null | undefined,
+): StoredModel[] {
+  const had = new Map(before.map((model) => [model.id, model.max_input_tokens]));
+  return models.map(({ max_input_tokens: own, ...model }) => {
+    const limit = declared?.[model.id] ?? own ?? had.get(model.id);
+    return limit ? { ...model, max_input_tokens: limit } : model;
+  });
+}
+
 /** Throws unless the caller may run models through this channel. */
 export const assertUsable = async (ctx: Ctx, auth: Auth, id: string): Promise<void> =>
   void (subscriptionOf(id) ?? (await mustFind(ctx, auth, id, "use")));
@@ -216,6 +237,9 @@ export async function credentialsForSession(ctx: Ctx, orgId: string, id: string)
     base_url: upstream.baseUrl || null,
     protocols: compatibleProtocols(row.provider_kind, row.protocol),
     default_model: row.default_model,
+    /** The input window the channel declares for a model, if it does. */
+    windowOf: (model: string): number | null =>
+      row.models.find((candidate) => candidate.id === model)?.max_input_tokens ?? null,
   };
 }
 
@@ -252,7 +276,11 @@ export async function create(ctx: Ctx, auth: Auth, input: Schema<"ProviderCreate
   const typed = [...new Set(input.models ?? [])].map((id) => ({ id }));
   if (custom && typed.length === 0) throw new HttpError(422, "model_discovery_failed", "至少需要 1 个模型 id");
   // Listing the models doubles as the credential check: nothing unusable is stored.
-  const models = custom ? typed : await discoverModels(ctx.config, upstream).catch(unusable);
+  const models = withLimits(
+    custom ? typed : await discoverModels(ctx.config, upstream).catch(unusable),
+    [],
+    input.model_limits,
+  );
   if (custom) await pingModel(ctx.config, upstream, (input.default_model ?? typed[0]?.id) as string).catch(unusable);
 
   const id = crypto.randomUUID();
@@ -301,6 +329,9 @@ export async function update(
     // Where it points or how it signs in changed: the model list is asked again, which also re-checks the key.
     next.models = await discoverModels(ctx.config, upstreamOf(ctx, merged)).catch(unusable);
   }
+  // A list that was rewritten keeps the windows its models had; new declarations are laid over them.
+  if (next.models || input.model_limits)
+    next.models = withLimits(next.models ?? existing.models, existing.models, input.model_limits);
   const models = next.models ?? existing.models;
   if (input.default_model != null || next.models)
     next.default_model = chooseDefaultModel(

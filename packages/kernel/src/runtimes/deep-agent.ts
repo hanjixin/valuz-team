@@ -12,7 +12,8 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOpenAI } from "@langchain/openai";
 import { type Connection, MultiServerMCPClient } from "@langchain/mcp-adapters";
 import type { McpServerConfig, Session, SubmitAction, UserMessage } from "@agent-base/protocol";
-import { LocalShellBackend, createDeepAgent } from "deepagents";
+import path from "node:path";
+import { FilesystemBackend, LocalShellBackend, createDeepAgent, createSummarizationMiddleware } from "deepagents";
 import { ToolMessage, createMiddleware, todoListMiddleware } from "langchain";
 import { buildUserPrompt, modelRejectsImages } from "../prompt-builder.ts";
 import { RuntimeConfigError, type RuntimeDeps, type RuntimePort, forkSourceOf } from "../runtime.ts";
@@ -58,13 +59,14 @@ function mcpConnection(server: McpServerConfig): Connection {
 }
 
 /** The session's model, spoken to in the protocol its channel uses: chat completions, or Anthropic messages. */
-function chatModel(session: Session): ChatOpenAI | ChatAnthropic {
+function chatModel(session: Session, tags: string[] = []): ChatOpenAI | ChatAnthropic {
   const provider = session.model_provider as NonNullable<Session["model_provider"]>;
   const settings = session.model_settings;
   const common = {
     model: session.model,
     apiKey: provider.api_key,
     maxRetries: 0,
+    tags,
     ...(settings?.temperature != null ? { temperature: settings.temperature } : {}),
     ...(settings?.max_tokens != null ? { maxTokens: settings.max_tokens } : {}),
   };
@@ -84,6 +86,35 @@ function chatModel(session: Session): ChatOpenAI | ChatAnthropic {
   });
 }
 
+/**
+ * Marks the model calls that are the agent speaking. The library also calls the
+ * model on its own account — to summarize a long thread — and what that call
+ * says is not the session's answer.
+ */
+const ANSWER = "agent-base:answer";
+
+/** Without a known window, compact well before the smallest window a current model is likely to have. */
+const FALLBACK_COMPACT_AT_TOKENS = 100_000;
+
+/**
+ * When a long thread is summarized, and how much of its tail is kept as it is.
+ * Against the model's input window when the channel declares one; left to the
+ * library when it knows the model by name; a fixed size otherwise.
+ */
+function compactionPolicy(model: ChatOpenAI | ChatAnthropic, declared: number | null | undefined) {
+  if (declared)
+    return {
+      trigger: { type: "tokens" as const, value: Math.floor(declared * 0.8) },
+      keep: { type: "tokens" as const, value: Math.floor(declared * 0.1) },
+    };
+  const known = (model as { profile?: { maxInputTokens?: unknown } }).profile?.maxInputTokens;
+  if (typeof known === "number") return {};
+  return {
+    trigger: { type: "tokens" as const, value: FALLBACK_COMPACT_AT_TOKENS },
+    keep: { type: "messages" as const, value: 6 },
+  };
+}
+
 export class DeepAgentRuntime implements RuntimePort {
   private sink: EventSink;
   private abort: AbortController | null = null;
@@ -93,6 +124,8 @@ export class DeepAgentRuntime implements RuntimePort {
   private thread: FileCheckpointer | null = null;
   /** The session as of the turn in flight: the agent is built once, but each turn brings its own settings. */
   private session: Session | null = null;
+  /** The session's model, marked as the one that answers. */
+  private answering: ChatOpenAI | ChatAnthropic | null = null;
   private modelCalls = 0;
   private readonly approvals = new ApprovalBridge(() => this.sink);
   private readonly sessionApproved = new Set<string>();
@@ -120,7 +153,11 @@ export class DeepAgentRuntime implements RuntimePort {
         this.modelCalls += 1;
         // The library builds the system prompt as content blocks; plenty of OpenAI-compatible
         // gateways only take a string there.
-        return handler({ ...request, systemMessage: new SystemMessage(textOf(request.systemMessage.content, "\n\n")) });
+        return handler({
+          ...request,
+          model: this.answering ?? request.model,
+          systemMessage: new SystemMessage(textOf(request.systemMessage.content, "\n\n")),
+        });
       },
       wrapToolCall: async (request, handler) => {
         const session = this.session as Session;
@@ -192,6 +229,10 @@ export class DeepAgentRuntime implements RuntimePort {
       });
     }
     const model = chatModel(session);
+    this.answering = chatModel(session, [ANSWER]);
+    // What a summary replaces is kept in full, on this device, outside the member's own folder:
+    // the summary names the file, and the agent can read it back when it needs a detail.
+    const history = path.join(this.deps.dataDir, "history", session.id);
     this.agent = createDeepAgent({
       model,
       tools: this.mcp ? await this.mcp.getTools() : [],
@@ -199,7 +240,17 @@ export class DeepAgentRuntime implements RuntimePort {
       // Files and commands act on the session's own folder, on this machine.
       backend: new LocalShellBackend({ rootDir: session.cwd, virtualMode: false, inheritEnv: true }),
       // Planning (`write_todos`) is langchain's; the gate reports and asks before tools run.
-      middleware: [todoListMiddleware(), this.gate()],
+      // Ours takes the place of the library's own summarization (same name), configured for this model.
+      middleware: [
+        todoListMiddleware(),
+        createSummarizationMiddleware({
+          model,
+          backend: new FilesystemBackend({ rootDir: history, virtualMode: false }),
+          historyPathPrefix: history,
+          ...compactionPolicy(model, session.model_settings?.max_input_tokens),
+        }),
+        this.gate(),
+      ],
       checkpointer: this.thread,
     });
     await this.sink.emit(makeEvent("turn_phase", { phase: "runtime_init", duration_ms: Date.now() - started }));
@@ -233,9 +284,10 @@ export class DeepAgentRuntime implements RuntimePort {
       );
       for await (const [mode, chunk] of stream as AsyncIterable<[string, unknown]>) {
         if (mode === "messages") {
-          const [message, meta] = chunk as [AIMessageChunk, { langgraph_checkpoint_ns?: string }];
-          // What a sub-agent says while it works is not the session's answer.
+          const [message, meta] = chunk as [AIMessageChunk, { langgraph_checkpoint_ns?: string; tags?: string[] }];
+          // What a sub-agent says while it works is not the session's answer; nor is a summary the library asks for.
           if (meta.langgraph_checkpoint_ns?.includes("tools:") || message.getType() !== "ai") continue;
+          if (!meta.tags?.includes(ANSWER)) continue;
           if (!dispatched) {
             dispatched = true;
             await this.sink.emit(makeEvent("turn_phase", { phase: "dispatch", duration_ms: Date.now() - started }));
@@ -247,8 +299,12 @@ export class DeepAgentRuntime implements RuntimePort {
           if (text) await this.sink.emit(makeEvent("text_delta", { text }));
           continue;
         }
-        for (const update of Object.values(chunk as Record<string, { messages?: BaseMessage[]; todos?: unknown }>)) {
+        for (const update of Object.values(
+          chunk as Record<string, { messages?: BaseMessage[]; todos?: unknown; _summarizationEvent?: unknown }>,
+        )) {
           if (!update) continue;
+          // The thread was just summarized to fit the model's window.
+          if (update._summarizationEvent) await this.sink.emit(makeEvent("compaction", { trigger: "auto" }));
           if (Array.isArray(update.todos)) await this.sink.emit(makeEvent("todo_update", { todos: update.todos }));
           for (const message of Array.isArray(update.messages) ? update.messages : []) {
             if (message.getType?.() !== "ai") continue;

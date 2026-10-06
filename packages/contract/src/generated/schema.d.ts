@@ -8577,6 +8577,8 @@ export interface components {
             id: string;
             label: string | null;
             selection_hint?: string | null;
+            /** @description agent-base: the model's input window in tokens, when the channel declares it (see `model_limits`). */
+            max_input_tokens?: number | null;
             input_modalities?: string[] | null;
             runtimes: string[] | null;
         };
@@ -8654,6 +8656,15 @@ export interface components {
             default_model?: string | null;
             protocol?: string | null;
             models?: string[] | null;
+            /**
+             * @description agent-base: the input window, in tokens, of models whose size the runtimes cannot
+             *     know by name (a gateway's own aliases) — keyed by model id. A session on such a
+             *     model compacts its context against this number instead of a fixed fallback.
+             *     A model left out keeps what it had; 0 clears it.
+             */
+            model_limits?: {
+                [key: string]: number;
+            } | null;
         };
         ProviderUpdateRequest: {
             name?: string | null;
@@ -8663,6 +8674,15 @@ export interface components {
             protocol?: string | null;
             auth_type?: string | null;
             models?: string[] | null;
+            /**
+             * @description agent-base: the input window, in tokens, of models whose size the runtimes cannot
+             *     know by name (a gateway's own aliases) — keyed by model id. A session on such a
+             *     model compacts its context against this number instead of a fixed fallback.
+             *     A model left out keeps what it had; 0 clears it.
+             */
+            model_limits?: {
+                [key: string]: number;
+            } | null;
         };
         ProviderValidateRequest: {
             provider_kind: string;

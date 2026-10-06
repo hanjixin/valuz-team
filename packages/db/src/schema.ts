@@ -104,6 +104,8 @@ export interface DevicesTable {
 export interface StoredModel {
   id: string;
   label?: string;
+  /** The model's input window in tokens, where the channel's owner declared it. */
+  max_input_tokens?: number;
 }
 
 export interface ProvidersTable {

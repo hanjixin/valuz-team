@@ -62,6 +62,15 @@ export async function enterAccount(accessToken: string, orgId: string, userId: s
   }
 }
 
+/** The team server this desktop app is connected to; null in a browser, which is simply at its server's address. */
+export async function serverOfThisDesktop(): Promise<string | null> {
+  try {
+    return (await bridge()?.invoke<Connection>("team_connection"))?.server_url || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Nobody is signed in any more: nothing of theirs keeps running on this computer. */
 export async function leaveAccount(): Promise<void> {
   try {

@@ -14,6 +14,7 @@ const COPY = zh
       placeholder: "https://agents.example.com",
       connect: "连接",
       connecting: "连接中…",
+      back: "返回",
     }
   : {
       title: "Connect to your team's server",
@@ -21,10 +22,21 @@ const COPY = zh
       placeholder: "https://agents.example.com",
       connect: "Connect",
       connecting: "Connecting…",
+      back: "Back",
     };
 
-export function ConnectScreen({ onConnect }: { onConnect: (url: string) => Promise<void> }) {
-  const [url, setUrl] = useState("");
+export function ConnectScreen({
+  onConnect,
+  current = "",
+  onCancel,
+}: {
+  onConnect: (url: string) => Promise<void>;
+  /** The server it is connected to now, when the question is "which one instead". */
+  current?: string;
+  /** Present when there is a server to go back to. */
+  onCancel?: () => void;
+}) {
+  const [url, setUrl] = useState(current);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +66,11 @@ export function ConnectScreen({ onConnect }: { onConnect: (url: string) => Promi
       <Button type="submit" disabled={busy || !url.trim()}>
         {busy ? COPY.connecting : COPY.connect}
       </Button>
+      {onCancel ? (
+        <Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>
+          {COPY.back}
+        </Button>
+      ) : null}
     </form>
   );
 }

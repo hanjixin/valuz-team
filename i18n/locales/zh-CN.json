@@ -3490,6 +3490,8 @@
     "playbookDetail": "手册详情"
   },
   "auth": {
+    "server": "服务器：",
+    "changeServer": "更换服务器",
     "signIn": "登录",
     "register": "注册",
     "email": "邮箱",

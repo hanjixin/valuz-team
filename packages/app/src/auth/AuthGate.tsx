@@ -5,7 +5,7 @@
 import { type FormEvent, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import { authApi, getAuthSession, subscribeAuthSession } from "@valuz/core";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Tabs, TabsList, TabsTrigger, useI18n } from "@valuz/ui";
-import { enterAccount } from "../team/ThisComputer";
+import { enterAccount, serverOfThisDesktop } from "../team/ThisComputer";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const session = useSyncExternalStore(subscribeAuthSession, getAuthSession, getAuthSession);
@@ -32,6 +32,12 @@ function SignInPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) => setForm({ ...form, [key]: event.target.value });
+
+  // In the desktop app: which server this is, and the way to another.
+  const [server, setServer] = useState<string | null>(null);
+  useEffect(() => {
+    void serverOfThisDesktop().then(setServer);
+  }, []);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -97,6 +103,20 @@ function SignInPage() {
               {mode === "signIn" ? t("auth.submitSignIn") : t("auth.submitRegister")}
             </Button>
           </form>
+          {server ? (
+            <p className="mt-4 flex items-center justify-between gap-2 text-xs text-muted-foreground" data-testid="auth-server">
+              <span className="min-w-0 truncate">
+                {t("auth.server")} {server}
+              </span>
+              <button
+                type="button"
+                className="shrink-0 underline underline-offset-2 hover:text-foreground"
+                onClick={() => window.dispatchEvent(new CustomEvent("agent-base:change-server"))}
+              >
+                {t("auth.changeServer")}
+              </button>
+            </p>
+          ) : null}
         </CardContent>
       </Card>
     </div>

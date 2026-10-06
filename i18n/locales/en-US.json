@@ -3490,6 +3490,8 @@
     "playbookDetail": "Playbook detail"
   },
   "auth": {
+    "server": "Server:",
+    "changeServer": "Change server",
     "signIn": "Sign in",
     "register": "Create account",
     "email": "Email",

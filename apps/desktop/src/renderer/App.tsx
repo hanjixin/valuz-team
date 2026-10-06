@@ -126,6 +126,19 @@ export const App = () => {
       .catch(() => setServer(""));
   }, [transport]);
 
+  // Asked for from the sign-in page: which server instead of this one. Only there — a signed-in
+  // session belongs to the server it was made on.
+  const [previous, setPrevious] = useState<string | null>(null);
+  useEffect(() => {
+    const change = () =>
+      setServer((now) => {
+        if (typeof now === "string" && now) setPrevious(now);
+        return null;
+      });
+    window.addEventListener("agent-base:change-server", change);
+    return () => window.removeEventListener("agent-base:change-server", change);
+  }, []);
+
   let content;
   if (server === undefined) {
     content = (
@@ -136,11 +149,14 @@ export const App = () => {
   } else if (server === null) {
     content = (
       <ConnectScreen
+        current={previous ?? ""}
+        onCancel={previous ? () => setServer(previous) : undefined}
         onConnect={async (url) => {
           const connection = await transport.invoke<{ server_url: string }>(
             "team_set_server_url",
             { url },
           );
+          setPrevious(null);
           setServer(connection.server_url);
         }}
       />

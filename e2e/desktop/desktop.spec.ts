@@ -104,6 +104,12 @@ test("a new desktop connects to the team's server, links this computer, and runs
     await page.getByRole("menuitem", { name: "退出登录" }).click();
     await expect(page.locator("#auth-email")).toBeVisible();
     await expect.poll(online, { timeout: 30_000 }).toBe(0);
+    // Signed out, the app says which server it is on and offers another; backing out changes nothing.
+    await expect(page.getByTestId("auth-server")).toContainText(SERVER);
+    await page.getByRole("button", { name: "更换服务器" }).click();
+    await expect(page.getByTestId("connect-screen").locator("input")).toHaveValue(SERVER);
+    await page.getByRole("button", { name: /返回|Back/ }).click();
+    await expect(page.locator("#auth-email")).toBeVisible();
     // …and signing back in takes up the same link: no second device for the same computer.
     const before = ((await (await request.get("/v1/devices", { headers })).json()).devices as unknown[]).length;
     await page.locator("#auth-email").fill("desk@example.com");

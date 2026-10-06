@@ -159,6 +159,15 @@ Deliberate differences in behaviour:
   the agent, one binding per agent in the organization; `channel_instance_id` is the binding's id and the last
   segment of its callback URL. The conversations people have with the bot are the binder's own sessions (a quick
   chat per Feishu chat), on the binder's device. Events arrive only over the long connection the binder's device dials (the server holds none; `connection_status` is what that device reports, `disconnected` while it is away). There is no HTTP callback: `feishuChannelCallback` is unimplemented, a Verification Token or Encrypt Key sent with a binding is ignored, and `has_verification_token` / `has_encrypt_key` are always false. Text messages only. Binding chats to projects is not implemented.
+- Skills an agent writes itself are new here (valuz-agent has only the member-driven skill-creator flow): the
+  `skill_manage` toolkit, the review after a turn or task, `creation_origin: "learned"` (added to the contract's
+  enum, shown as a badge), `GET/PATCH /v1/skills/settings`, and a switch at the top of the skills pane
+  (`SkillsPane.tsx`).
+- Memory: `POST /v1/memory/consolidate` and `/restore`, `MemoryView.snapshots`, and "整理 / 还原" on the memory
+  settings page (`MemorySection.tsx`) are additions. The review also runs on compaction, every
+  `MEMORY_REVIEW_EVERY_TURNS` turns, and for automation sessions (project scope only).
+- A channel's models can declare an input window (`model_limits` on create/update, `LLMModel.max_input_tokens`);
+  there is no field for it in the channel form yet — it is set through the API.
 - Packaging (`apps/desktop/build`): the app archive leaves out all of node_modules and names back only what the
   main process loads at run time (electron-updater and its dependencies) — upstream excludes a list of large
   packages instead, and its test of that list is changed to match. `afterPack.cjs` is new: it checks that

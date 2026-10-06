@@ -164,9 +164,47 @@ documents — or, with none, everything the organization has.
 What agents carry from one session to the next (`modules/memory`). Three scopes of short entries, each with a hard
 size limit: `user` and `global` are a member's own, `project` belongs to a project and is shared with everyone who
 works in it. A turn is shown what is in scope and given a `memory` tool (a third server-hosted toolkit) to add,
-replace and remove entries. When a conversation has been quiet for a minute, a background job (`infra/jobs.ts`)
-asks the session's model — on the session's device, like everything a model does here — what else was worth keeping and applies its answer through the same store — so the same
-limits, secret redaction and scan for hidden instructions cover both paths.
+replace and remove entries.
+
+What an agent did not think to keep is caught by a review (`memory/review.ts`): the session's model — on the
+session's device, like everything a model does here — reads what was said since the last review and answers with
+what was worth keeping, applied through the same store, so the same limits, secret redaction and scan for hidden
+instructions cover both paths. A conversation is reviewed once it has been quiet for a minute, every so many turns
+if it never goes quiet, and the moment a runtime compacts its context — while what the summary dropped is still in
+the transcript here. A finished task is reviewed for what its team should carry forward; what an automation ran
+is reviewed into its project's memory only.
+
+Entries only pile up, so a scope is also tidied (`memory/consolidate.ts`): rewritten as a shorter list that says
+the same — overlaps merged, a contradiction settled for the newer entry, stale state dropped. It happens in the
+background once a scope is four-fifths full, at once when a write would not fit (tidy, then write), and when a
+member asks from the settings page. The model proposes; the store decides: the result is taken whole or not at
+all, passes every check a single write does, and may never hold more text than what it replaces. What the scope
+held is kept as a snapshot (`memory_snapshots`, the last five), one step from being restored.
+
+## Skills an agent writes itself
+
+Memory keeps facts; a skill keeps how to do something. An agent can save a procedure it worked out as a skill in
+its member's library, or correct a skill of theirs it found wrong (`modules/skills/learn.ts`, `tools.ts`) — as it
+works, with the `skill_manage` tool (a server-hosted toolkit like the others), or afterwards: a turn that used
+many tools, and every finished task, is read again by the session's own model, on its device, for a procedure
+worth keeping. The reviewer is shown what was said, each tool call and how it came out, the skills that exist (so
+nothing is written twice) and — in full — the ones the work used that may be corrected.
+
+Either way the change goes through the skill library's own doors: a new skill is the member's, marked `learned`;
+a correction is a new version of a skill they may edit, never of a built-in one or one merely shared for use. The
+text is held to what memory is — a later agent will read it as instructions — and a review adds at most one
+skill. The member is told each time, the agent that wrote a skill is given it, the version history is the way
+back, and the whole thing is theirs to switch off.
+
+## Context that outgrows the model
+
+A long conversation is summarized by its runtime, on the device: the Claude and Codex runtimes do it themselves,
+and the native one through its library's summarization (`packages/kernel/src/runtimes/deep-agent.ts`), configured
+here against the model's input window — the channel's own declaration when it has one (`model_limits`, for a
+gateway's aliases whose size no name reveals), the library's knowledge of the model otherwise, a fixed size
+failing both. What a summary replaces is kept in full in the device's data folder, not the member's project, and
+the summary names the file so the agent can read a detail back. A compaction is reported as an event, which is
+what sets off the memory review above.
 
 ## Automations
 
@@ -227,7 +265,7 @@ devices: a turn runs there, and so does any one-off question the server needs an
 Ported so far: accounts, organizations, members, invites, teams, sharing, audit, devices and remote control,
 the host and the kernel, model channels, model defaults and preferences, the agent library, projects and their
 teams, sessions (create, send, interrupt, queue, events, fork), and the collaboration UI (Settings → Organization,
-Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations, the Feishu and WeCom channels, the desktop app, agent templates and the first-run tour.
+Devices, Sharing), notifications, per-turn feedback, the skill library with versions, connectors (MCP servers), approvals and session controls, multi-agent tasks, attachments and remote file access, the knowledge base, memory, the activity feed, automations, the Feishu and WeCom channels, the desktop app, agent templates and the first-run tour, the marketplace, skills agents write themselves, memory that tidies itself.
 Not provided: playbooks, plugin bundles, backup.
 
 The repository was rebuilt from a prototype (tag `prototype-v0`), module by module; the prototype itself is no

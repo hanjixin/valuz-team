@@ -57,7 +57,8 @@ const Env = z.object({
   AUTOMATION_MIN_INTERVAL_SECONDS: z.coerce.number().int().min(1).default(30),
   /**
    * A turn that used at least this many tools is reviewed afterwards for a procedure worth
-   * keeping as a skill. 0 turns the review off (agents can still write skills themselves).
+   * keeping as a skill — as is, with fewer, one where the agent got past a failure or the
+   * user corrected it. 0 turns the review off (agents can still write skills themselves).
    */
   SKILL_LEARN_MIN_TOOL_CALLS: z.coerce.number().int().min(0).default(8),
   /** A long conversation is also reviewed for what to remember every this many turns. 0 = only once it is quiet. */

@@ -137,6 +137,39 @@ function skillsTouched(calls: sessions.ToolCall[]): Set<string> {
 }
 
 /**
+ * Whether a tool call came to nothing. Runtimes flag some failures; plenty of
+ * tools just say so in words, so the start of what came back is read as well.
+ */
+const SAYS_FAILED =
+  /^\s*(error|failed|fatal|traceback|exception)\b|not found|no such file|permission denied|command failed|exit(ed with)? code [1-9]|is not recognized|cannot find/i;
+const cameToNothing = (call: sessions.ToolCall): boolean =>
+  call.failed === true || SAYS_FAILED.test(call.result.slice(0, 400));
+
+/** The agent hit a wall and got past it: a tool that failed was tried again and worked. */
+const recovered = (calls: sessions.ToolCall[]): boolean =>
+  calls.some(
+    (call, index) =>
+      cameToNothing(call) && calls.slice(index + 1).some((later) => later.name === call.name && !cameToNothing(later)),
+  );
+
+/** The user said the agent was doing it wrong. Deliberately loose: it only decides whether to look, not what to keep. */
+const CORRECTS =
+  /不对|不是这样|错了|搞错|别这样|不要这样|不应该|应该(是|用|先|要)|重新(来|做)|以后(都|要|别|不要)|记住.{0,6}(要|别|不要)|that'?s (wrong|not right|not what)|you'?re wrong|not what i (asked|meant|wanted)|\bshould(n'?t| not)? have\b|\binstead of\b|\bnext time\b|\bfrom now on\b|\bdon'?t do\b/i;
+const corrected = (turns: { user: string }[]): boolean => turns.some((turn) => CORRECTS.test(turn.user));
+
+/**
+ * Why work is worth a second look, if it is: it took many tool calls, the agent
+ * got past a failure, or the user corrected how it went about things. Null
+ * when it is none of these — most turns.
+ */
+export function worthALook(calls: sessions.ToolCall[], turns: { user: string }[], manyCalls: number): string | null {
+  if (calls.length >= manyCalls) return "it took a good deal of work";
+  if (calls.length >= 2 && recovered(calls)) return "the agent hit a failure and found a way past it";
+  if (calls.length >= 1 && corrected(turns)) return "the user corrected how the agent went about it";
+  return null;
+}
+
+/**
  * What the work looked like from outside: each tool call and what came back.
  * The start of a result is shown either way — plenty of tools report a failure
  * in words rather than as an error.
@@ -146,7 +179,7 @@ const toolLines = (calls: sessions.ToolCall[]): string =>
     .slice(-MAX_TOOL_LINES)
     .map((call, index) => {
       const came = clip(call.result.replace(/\s+/g, " "), 160);
-      return `${index + 1}. ${call.name}(${clip(call.input, 240)}) → ${call.failed ? "FAILED" : "ok"}${came ? `: ${came}` : ""}`;
+      return `${index + 1}. ${call.name}(${clip(call.input, 240)}) → ${cameToNothing(call) ? "FAILED" : "ok"}${came ? `: ${came}` : ""}`;
     })
     .join("\n") || "(no tools)";
 
@@ -155,7 +188,7 @@ async function digestOf(
   auth: Auth,
   sessionIds: string[],
   since: number,
-): Promise<(Digest & { calls: number; until: number }) | null> {
+): Promise<(Digest & { calls: sessions.ToolCall[]; turns: { user: string }[]; until: number }) | null> {
   const turns = (await Promise.all(sessionIds.map((id) => sessions.transcriptSince(ctx, id, since)))).flat();
   const calls = (await Promise.all(sessionIds.map((id) => sessions.toolCallsSince(ctx, id, since)))).flat();
   const last = turns.at(-1);
@@ -182,7 +215,8 @@ async function digestOf(
     tools: redactSecrets(toolLines(calls)),
     library,
     used,
-    calls: calls.length,
+    calls,
+    turns,
     until: Math.max(...turns.map((turn) => turn.endedAt)),
   };
 }
@@ -195,8 +229,9 @@ async function reviewSession(ctx: Ctx, sessionId: string): Promise<void> {
   if (!auth || !(await skills.learningSettings(ctx, auth)).auto_learn) return;
   const since = Number((await ctx.redis.get(reviewedKey(sessionId))) ?? 0);
   const digest = await digestOf(ctx, auth, [sessionId], since);
-  if (!digest || digest.calls < ctx.config.SKILL_LEARN_MIN_TOOL_CALLS) return;
-  const reply = await askOnDevice(ctx, sessionId, learnPrompt({ ...digest, what: "conversation" }));
+  const why = digest ? worthALook(digest.calls, digest.turns, ctx.config.SKILL_LEARN_MIN_TOOL_CALLS) : null;
+  if (!digest || !why) return;
+  const reply = await askOnDevice(ctx, sessionId, learnPrompt({ ...digest, what: "conversation", why }));
   if (reply === null) return;
   await applyOps(
     ctx,
@@ -218,11 +253,16 @@ async function reviewTask(ctx: Ctx, taskId: string): Promise<void> {
     node.latest_run_session_id ? [node.latest_run_session_id] : [],
   );
   const digest = await digestOf(ctx, auth, [lead.id, ...members], 0);
-  if (!digest || digest.calls === 0) return;
+  if (!digest || digest.calls.length === 0) return;
   const reply = await askOnDevice(
     ctx,
     lead.id,
-    learnPrompt({ ...digest, transcript: `GOAL: ${task.goal}\n\n${digest.transcript}`, what: "task" }),
+    learnPrompt({
+      ...digest,
+      transcript: `GOAL: ${task.goal}\n\n${digest.transcript}`,
+      what: "task",
+      why: "a team finished a task together",
+    }),
   );
   if (reply === null) return;
   // A team's lesson goes to the library; no single member's agent is given it unasked.

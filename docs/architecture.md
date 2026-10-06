@@ -185,9 +185,10 @@ held is kept as a snapshot (`memory_snapshots`, the last five), one step from be
 
 Memory keeps facts; a skill keeps how to do something. An agent can save a procedure it worked out as a skill in
 its member's library, or correct a skill of theirs it found wrong (`modules/skills/learn.ts`, `tools.ts`) — as it
-works, with the `skill_manage` tool (a server-hosted toolkit like the others), or afterwards: a turn that used
-many tools, and every finished task, is read again by the session's own model, on its device, for a procedure
-worth keeping. The reviewer is shown what was said, each tool call and how it came out, the skills that exist (so
+works, with the `skill_manage` tool (a server-hosted toolkit like the others), or afterwards: every finished task,
+and a turn that used many tools, got past a failure (a tool that came to nothing, then worked), or drew a
+correction from the user, is read again by the session's own model, on its device, for a procedure worth
+keeping. Those three tests are deliberately loose — they decide whether to look, not what to keep. The reviewer is shown what was said, each tool call and how it came out, the skills that exist (so
 nothing is written twice) and — in full — the ones the work used that may be corrected.
 
 Either way the change goes through the skill library's own doors: a new skill is the member's, marked `learned`;

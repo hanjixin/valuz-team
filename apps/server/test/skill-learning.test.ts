@@ -1,11 +1,11 @@
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Host } from "@agent-base/host";
 import { type ModelGateway, type ModelRequest, startModelGateway } from "@agent-base/test-utils";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { signToolToken } from "../src/infra/toolkit.ts";
-import { parseOps } from "../src/modules/skills/learn.ts";
+import { parseOps, worthALook } from "../src/modules/skills/learn.ts";
 import { type Account, type TestServer, eventually, joinOrg, signUp, startTestServer } from "./harness.ts";
 
 // Tests assert on arbitrary response shapes; typing each one would only add casts.
@@ -100,6 +100,8 @@ describe("skills an agent writes itself", () => {
       dataDir: path.join(dir, "data"),
     });
     await host.start();
+    await mkdir(path.join(dir, "data"), { recursive: true });
+    await writeFile(path.join(dir, "data", "config.json"), '{"PORT":8787}');
     await eventually(async () => (await call(alice, "GET", `/v1/devices/${device.id}`)).body.online === true);
     const channel = (
       await call(alice, "POST", "/v1/providers", {
@@ -288,6 +290,72 @@ describe("skills an agent writes itself", () => {
     // Asked on the device, like everything a model does here.
     expect(model.completions).toEqual([]);
     expect(reviews()).toHaveLength(1);
+  });
+
+  it("knows work worth a second look: a lot of it, a failure got past, or a correction from the user", () => {
+    const call = (name: string, result = "", failed = false) => ({ messageId: "m", name, input: {}, failed, result });
+    const said = (...texts: string[]) => texts.map((user) => ({ user }));
+    // Most turns are none of these.
+    expect(worthALook([], said("hi"), 8)).toBeNull();
+    expect(worthALook([call("ls"), call("read_file")], said("where is the config?"), 8)).toBeNull();
+    expect(
+      worthALook(
+        Array.from({ length: 8 }, () => call("ls")),
+        said("go"),
+        8,
+      ),
+    ).toMatch(/good deal of work/);
+    // A failure the runtime flagged, or one a tool only reported in words — then the same tool working.
+    expect(worthALook([call("execute", "", true), call("execute", "ok")], said("build it"), 8)).toMatch(/way past it/);
+    expect(
+      worthALook(
+        [call("read_file", "Error: File '/x' not found"), call("ls"), call("read_file", "PORT=8787")],
+        said("x"),
+        8,
+      ),
+    ).toMatch(/way past it/);
+    // A failure never got past is not a lesson; nor is a different tool succeeding.
+    expect(worthALook([call("execute", "command failed: exit code 2"), call("ls", "a b")], said("x"), 8)).toBeNull();
+    // The user corrects how it was done — in either language — after work was done.
+    expect(worthALook([call("execute")], said("跑一下测试", "不对，应该先装依赖再跑"), 8)).toMatch(/corrected/);
+    expect(worthALook([call("execute")], said("deploy it", "next time run the checks first"), 8)).toMatch(/corrected/);
+    // Words alone, with nothing done, are a conversation: memory's business, not a skill's.
+    expect(worthALook([], said("不对，我说的是另一个"), 8)).toBeNull();
+  });
+
+  it("looks again when the agent got past a failure or was corrected, though little was done", async () => {
+    model.handler = (request) =>
+      lastPrompt(request).includes(REVIEW) ? { content: JSON.stringify({ ops: [], note: "nothing" }) } : undefined;
+    // Two calls — under the bar — but the first came to nothing and the second, the same tool, worked.
+    const retried = await newSession("Releaser");
+    const before = reviews().length;
+    model.replies.push(
+      { tool: { name: "read_file", args: { file_path: path.join(dir, "missing.env") } } },
+      { content: "There is no env file here." },
+    );
+    await say(retried, "What is in the env file?");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(reviews()).toHaveLength(before); // a failure nobody got past is not a lesson
+    model.replies.push(
+      { tool: { name: "read_file", args: { file_path: path.join(dir, "data", "config.json") } } },
+      { content: "Found it." },
+    );
+    await say(retried, "Try the data folder");
+    await eventually(async () => reviews().length === before + 1, 15_000);
+    expect(lastPrompt(reviews().at(-1) as ModelRequest)).toContain("the agent hit a failure and found a way past it");
+
+    // One call, then the user says it was the wrong way to go about it.
+    const told = await newSession("Releaser");
+    model.replies.push({ tool: { name: "ls", args: { path: dir } } }, { content: "Listed." });
+    await say(told, "Check the project is ready to release");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(reviews()).toHaveLength(before + 1);
+    model.replies.push({ content: "Understood — checks first, from now on." });
+    await say(told, "不对，应该先跑一遍检查再看目录");
+    await eventually(async () => reviews().length === before + 2, 15_000);
+    const prompt = lastPrompt(reviews().at(-1) as ModelRequest);
+    expect(prompt).toContain("the user corrected how the agent went about it");
+    expect(prompt).toContain("USER: 不对，应该先跑一遍检查再看目录");
   });
 
   it("is the member's to switch off: no tool, no second look", async () => {

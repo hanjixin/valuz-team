@@ -176,6 +176,55 @@ export const clear = (ctx: Ctx, owner: Owner, target: Target): Promise<WriteResu
     remove: current.map((entry) => entry.id),
   }));
 
+// ------------------------------------------------------------------ rewriting a scope as a whole
+
+/** How full a scope is, from 0 to 1. */
+export const fullness = (entries: string[], target: Target): number => size(entries) / CHAR_LIMITS[target];
+
+/** A scope's entries as a consolidation is shown them: with when and by whom each was written. */
+export const detailed = (ctx: Ctx, owner: Owner, target: Target) => repo.detailed(ctx.db, scopeOf(owner, target));
+
+/**
+ * Replace a scope with a tidier list worked out from `from` (the entries as
+ * they were read). Refused as a whole — nothing is written — unless every new
+ * entry passes the checks any write does and together they hold no more text
+ * than before: tidying may lose words, never add them. False when the scope
+ * changed while the list was being worked out.
+ */
+export async function rewrite(
+  ctx: Ctx,
+  owner: Owner,
+  target: Target,
+  from: { id: string; content: string }[],
+  entries: string[],
+): Promise<boolean> {
+  const next: string[] = [];
+  for (const entry of entries) {
+    const text = checked(target, entry, next);
+    if (!next.includes(text)) next.push(text);
+  }
+  if (from.length > 0 && next.length === 0) throw new MemoryError("a consolidation may not empty a scope");
+  if (size(next) > size(from.map((entry) => entry.content)))
+    throw new MemoryError("a consolidation may not make a scope longer");
+  return repo.rewrite(ctx.db, scopeOf(owner, target), {
+    expected: from.map((entry) => entry.id),
+    entries: next.map((content) => ({ content, source: "consolidated" })),
+    reason: "consolidated",
+  });
+}
+
+/** Put a scope back as it was before it was last rewritten. False when it never was. */
+export async function restore(ctx: Ctx, owner: Owner, target: Target): Promise<boolean> {
+  const scope = scopeOf(owner, target);
+  const snapshot = await repo.latestSnapshot(ctx.db, scope);
+  if (!snapshot) return false;
+  return repo.rewrite(ctx.db, scope, {
+    expected: null,
+    entries: snapshot.entries.map((entry) => ({ content: entry.content, source: entry.source })),
+    reason: "restored",
+  });
+}
+
 /** Every scope the owner can reach, keyed by target. */
 export async function all(ctx: Ctx, owner: Owner): Promise<Record<string, string[]>> {
   const targets = TARGETS.filter((target) => target !== "project" || owner.projectId);
@@ -246,7 +295,7 @@ export async function ownerOfSession(
 // ------------------------------------------------------------------ for the app
 
 /** The member looking at memory in the app; a project's memory needs the project to be visible to them. */
-async function ownerFor(ctx: Ctx, auth: Auth, projectId: string | undefined, change = false): Promise<Owner> {
+export async function ownerFor(ctx: Ctx, auth: Auth, projectId: string | undefined, change = false): Promise<Owner> {
   if (!projectId) return { orgId: auth.orgId, userId: auth.userId, projectId: null };
   const project = await projects.require(ctx, auth, projectId, change ? "edit" : "view");
   return { orgId: auth.orgId, userId: auth.userId, projectId: project.id };
@@ -254,7 +303,14 @@ async function ownerFor(ctx: Ctx, auth: Auth, projectId: string | undefined, cha
 
 export async function view(ctx: Ctx, auth: Auth, projectId?: string): Promise<Schema<"MemoryView">> {
   const owner = await ownerFor(ctx, auth, projectId);
-  return { ...(await getSettings(ctx, owner)), entries: await all(ctx, owner) };
+  const targets = TARGETS.filter((target) => target !== "project" || owner.projectId);
+  const taken = await Promise.all(targets.map((target) => repo.latestSnapshot(ctx.db, scopeOf(owner, target))));
+  const snapshots = Object.fromEntries(
+    targets.flatMap((target, i) =>
+      taken[i] ? [[target, (taken[i] as { created_at: Date }).created_at.getTime()]] : [],
+    ),
+  );
+  return { ...(await getSettings(ctx, owner)), entries: await all(ctx, owner), snapshots };
 }
 
 async function change(

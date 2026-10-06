@@ -24,6 +24,7 @@ import { everythingFor } from "../agents/available.ts";
 import * as agents from "../agents/service.ts";
 import * as audit from "../audit/service.ts";
 import * as connectors from "../connectors/service.ts";
+import * as devices from "../devices/service.ts";
 import * as projects from "../projects/service.ts";
 import { type ApiProtocol, protocolFor } from "../providers/catalog.ts";
 import * as providers from "../providers/service.ts";
@@ -197,6 +198,41 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<{ session: Session; sk
 export async function askOnDevice(ctx: Ctx, sessionId: string, prompt: string): Promise<string | null> {
   const row = await repo.byId(ctx.db, sessionId);
   if (!row?.device_id) return null;
+  return ask(ctx, { ...row, device_id: row.device_id }, prompt);
+}
+
+/**
+ * Ask a member's own model one question when no conversation is at hand (they
+ * pressed a button in the app): their default channel and model, on a device of
+ * theirs that is online. Throws when there is none to ask.
+ */
+export async function askMember(ctx: Ctx, auth: Auth, prompt: string): Promise<string> {
+  const mine = (await devices.list(ctx, auth)).find((device) => device.owner_id === auth.userId && device.online);
+  if (!mine) throw conflict("none of your devices is online to ask — open the desktop app and try again", "no_device");
+  const defaults = await providers.getDefaults(ctx, auth);
+  const channel = defaults.default_provider_id;
+  const answer = await ask(
+    ctx,
+    {
+      org_id: auth.orgId,
+      owner_id: auth.userId,
+      device_id: mine.id,
+      // A subscription channel is "no channel": the runtime uses the device's own login.
+      provider_id: providers.subscriptionOf(channel) ? null : (channel ?? null),
+      runtime_provider: defaults.default_runtime,
+      model: defaults.default_model ?? "",
+    },
+    prompt,
+  );
+  if (answer === null) throw conflict("your device could not answer; try again", "device_offline");
+  return answer;
+}
+
+async function ask(
+  ctx: Ctx,
+  row: Pick<Row, "org_id" | "owner_id" | "provider_id" | "runtime_provider" | "model"> & { device_id: string },
+  prompt: string,
+): Promise<string | null> {
   const channel = row.provider_id ? await providers.credentialsForSession(ctx, row.org_id, row.provider_id) : null;
   const protocol = channel ? protocolFor(row.runtime_provider, channel.protocols as ApiProtocol[]) : null;
   if (row.provider_id && !protocol) return null;

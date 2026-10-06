@@ -116,6 +116,7 @@ describe("memory", () => {
       auto_extract: true,
       custom_instructions: "",
       entries: { user: [], global: [] },
+      snapshots: {},
     });
     expect((await memoryOf(alice, projectId)).entries).toEqual({ user: [], global: [], project: [] });
     const patched = await call(alice, "PATCH", "/v1/memory/settings", { custom_instructions: `  ${"x".repeat(2000)}` });

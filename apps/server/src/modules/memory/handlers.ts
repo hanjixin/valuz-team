@@ -1,6 +1,7 @@
 import type { Schema } from "@agent-base/contract";
 import { requireAuth } from "../../infra/auth.ts";
 import type { Handler } from "../../infra/context.ts";
+import * as consolidation from "./consolidate.ts";
 import * as service from "./service.ts";
 
 export const getMemory: Handler = async (req) => {
@@ -21,4 +22,14 @@ export const deleteMemoryEntry: Handler = async (req) => {
 export const clearMemoryScope: Handler = async (req) => {
   const ctx = req.server.ctx;
   return service.clearScope(ctx, await requireAuth(ctx, req), req.body as Schema<"MemoryClear">);
+};
+
+export const consolidateMemory: Handler = async (req) => {
+  const ctx = req.server.ctx;
+  return consolidation.consolidateScope(ctx, await requireAuth(ctx, req), req.body as Schema<"MemoryClear">);
+};
+
+export const restoreMemory: Handler = async (req) => {
+  const ctx = req.server.ctx;
+  return consolidation.restoreScope(ctx, await requireAuth(ctx, req), req.body as Schema<"MemoryClear">);
 };

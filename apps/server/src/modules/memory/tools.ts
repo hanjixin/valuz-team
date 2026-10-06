@@ -1,8 +1,11 @@
 /** The `memory` tool: one tool, six actions, for an agent to keep and manage what it remembers. */
 import type { Ctx } from "../../infra/context.ts";
 import { ToolError } from "../../infra/toolkit.ts";
+import { askOnDevice } from "../sessions/dispatch.ts";
 import * as sessions from "../sessions/service.ts";
+import { consolidate } from "./consolidate.ts";
 import { TOOL_DESCRIPTION } from "./prompts.ts";
+import { tidyIfFull } from "./review.ts";
 import * as memory from "./service.ts";
 
 export const MEMORY_TOOLKIT = { name: "memory", path: "/v1/mcp/memory" };
@@ -28,15 +31,18 @@ export const MEMORY_TOOLS = [
   },
 ];
 
+/** Who is calling: the session, and whose memory it reads and writes. */
+export type Caller = memory.Owner & { sessionId: string };
+
 /** Who a session is to the memory toolkit: its owner, in its project. */
-export async function authorize(ctx: Ctx, sessionId: string): Promise<memory.Owner | null> {
+export async function authorize(ctx: Ctx, sessionId: string): Promise<Caller | null> {
   const session = await sessions.byId(ctx, sessionId);
-  return session ? memory.ownerOfSession(ctx, session) : null;
+  return session ? { ...(await memory.ownerOfSession(ctx, session)), sessionId: session.id } : null;
 }
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
 
-export async function callTool(ctx: Ctx, owner: memory.Owner, tool: string, args: Record<string, unknown>) {
+export async function callTool(ctx: Ctx, owner: Caller, tool: string, args: Record<string, unknown>) {
   if (tool !== "memory") throw new ToolError(`unknown tool "${tool}"`);
   const action = args["action"] as (typeof ACTIONS)[number];
   if (!ACTIONS.includes(action)) throw new ToolError("memory: 'action' must be add|replace|remove|list|clear|settings");
@@ -60,11 +66,25 @@ export async function callTool(ctx: Ctx, owner: memory.Owner, tool: string, args
   if (action === "replace" && (!oldText || !content))
     throw new ToolError("memory: 'old_text' and 'content' are required for replace");
   if (action === "remove" && !oldText) throw new ToolError("memory: 'old_text' is required for remove");
+  const write = () => {
+    if (action === "add") return memory.add(ctx, owner, target, content, "agent");
+    if (action === "replace") return memory.replace(ctx, owner, target, oldText, content, "agent");
+    if (action === "remove") return memory.remove(ctx, owner, target, oldText);
+    return memory.clear(ctx, owner, target);
+  };
   try {
-    if (action === "add") return await memory.add(ctx, owner, target, content, "agent");
-    if (action === "replace") return await memory.replace(ctx, owner, target, oldText, content, "agent");
-    if (action === "remove") return await memory.remove(ctx, owner, target, oldText);
-    return await memory.clear(ctx, owner, target);
+    const result = await write().catch(async (err: unknown) => {
+      // No room: tidy the scope — the session's own model does it — and try this once more.
+      if (!(err instanceof memory.MemoryError) || !err.message.includes("memory is full")) throw err;
+      const tidied = await consolidate(ctx, owner, target, (prompt) => askOnDevice(ctx, owner.sessionId, prompt)).catch(
+        () => null,
+      );
+      if (!tidied?.changed) throw err;
+      return write();
+    });
+    // Nearly full after this write: tidied in the background, before the next one is refused.
+    if (action === "add" || action === "replace") await tidyIfFull(ctx, owner, target, owner.sessionId);
+    return result;
   } catch (err) {
     if (err instanceof memory.MemoryError) throw new ToolError(`memory: ${err.message}`);
     throw err;

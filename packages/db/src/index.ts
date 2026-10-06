@@ -12,6 +12,7 @@ export type {
   OrgRole,
   PrincipalType,
   SharePermission,
+  MemorySnapshotEntry,
   SkillFile,
   StoredModel,
 } from "./schema.ts";

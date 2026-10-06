@@ -1467,6 +1467,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/MemoryView"
 
+  /v1/memory/consolidate:
+    post:
+      summary: Tidy a memory scope — merge what overlaps, drop what is stale
+      operationId: consolidateMemory
+      tags: [memory]
+      description: |
+        agent-base: asks the member's model, on one of their devices, to rewrite
+        ``target`` as a shorter list that says the same. What the scope held is
+        kept as a snapshot (see ``restoreMemory``). The result never holds more
+        text than before, and passes the same checks as any memory write.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryClear"
+      responses:
+        "200":
+          description: What changed, and the memory view after it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryConsolidation"
+        "409":
+          description: No device of the member's is online to ask, or the scope changed meanwhile
+
+  /v1/memory/restore:
+    post:
+      summary: Put a memory scope back as it was before it was last rewritten
+      operationId: restoreMemory
+      tags: [memory]
+      description: |
+        agent-base: restores ``target`` from its latest snapshot. What it holds
+        now becomes a snapshot in turn, so restoring twice undoes the restore.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryClear"
+      responses:
+        "200":
+          description: Memory view after restoring
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryView"
+        "404":
+          description: The scope has no snapshot
+
   # ── System (backend status & log path discovery) ────────────────────
 
   /v1/system/status:
@@ -7781,6 +7831,20 @@ components:
             type: array
             items: {type: string}
           description: Entries per scope, keyed by target (user / global / project).
+        snapshots:
+          type: object
+          additionalProperties: {type: integer}
+          description: >-
+            agent-base: when each scope was last rewritten as a whole (epoch ms),
+            keyed by target — present for scopes that can be restored.
+    MemoryConsolidation:
+      type: object
+      required: [changed, before, after, memory]
+      properties:
+        changed: {type: boolean, description: "False when there was nothing to tidy."}
+        before: {type: integer, description: "Entries before."}
+        after: {type: integer, description: "Entries after."}
+        memory: {$ref: "#/components/schemas/MemoryView"}
     MemorySettings:
       type: object
       required: [enabled, auto_extract, custom_instructions]

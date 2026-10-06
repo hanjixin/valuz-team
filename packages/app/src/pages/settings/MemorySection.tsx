@@ -101,6 +101,33 @@ export const MemorySection = () => {
     }
   };
 
+  // agent-base: tidying asks the member's own model, so it takes a moment — one scope at a time.
+  const [tidying, setTidying] = useState<MemoryTarget | null>(null);
+  const tidyScope = async (target: MemoryTarget) => {
+    setTidying(target);
+    try {
+      const result = await memoryApi.consolidate({ target });
+      setView(result.memory);
+      toast.success(
+        result.changed
+          ? t("settings.memory.tidied", { before: result.before, after: result.after })
+          : t("settings.memory.alreadyTidy"),
+      );
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : t("settings.memory.saveFailed"));
+    } finally {
+      setTidying(null);
+    }
+  };
+  const restoreScope = async (target: MemoryTarget) => {
+    try {
+      setView(await memoryApi.restore({ target }));
+      toast.success(t("settings.memory.restored"));
+    } catch {
+      toast.error(t("settings.memory.saveFailed"));
+    }
+  };
+
   const clearScope = async (target: MemoryTarget) => {
     try {
       setView(await memoryApi.clearScope({ target }));
@@ -250,15 +277,39 @@ export const MemorySection = () => {
               <span className="text-sm font-medium text-ink-heading">
                 {label}
               </span>
-              {entries.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setClearTarget(target)}
-                >
-                  {t("settings.memory.clearScope")}
-                </Button>
-              )}
+              <span className="flex items-center gap-1">
+                {view?.snapshots?.[target] !== undefined && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={tidying !== null}
+                    onClick={() => void restoreScope(target)}
+                  >
+                    {t("settings.memory.restore")}
+                  </Button>
+                )}
+                {entries.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={tidying !== null}
+                    onClick={() => void tidyScope(target)}
+                  >
+                    {tidying === target
+                      ? t("settings.memory.tidying")
+                      : t("settings.memory.tidy")}
+                  </Button>
+                )}
+                {entries.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setClearTarget(target)}
+                  >
+                    {t("settings.memory.clearScope")}
+                  </Button>
+                )}
+              </span>
             </div>
             <Card className="rounded-xl shadow-xs">
               <CardContent className="py-2">

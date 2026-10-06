@@ -490,6 +490,23 @@ export interface MemoriesTable {
   created_at: Timestamp;
 }
 
+export interface MemorySnapshotEntry {
+  content: string;
+  source: string;
+  created_at: string;
+}
+
+export interface MemorySnapshotsTable {
+  id: string;
+  org_id: string;
+  target: "user" | "global" | "project";
+  user_id: string | null;
+  project_id: string | null;
+  entries: ColumnType<MemorySnapshotEntry[], string, string>;
+  reason: string;
+  created_at: Timestamp;
+}
+
 export interface MemoryReviewsTable {
   session_id: string;
   reviewed_until: number;
@@ -619,6 +636,7 @@ export interface Database {
   automation_runs: AutomationRunsTable;
   memories: MemoriesTable;
   memory_reviews: MemoryReviewsTable;
+  memory_snapshots: MemorySnapshotsTable;
   message_feedback: MessageFeedbackTable;
   user_settings: UserSettingsTable;
 }

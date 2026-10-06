@@ -9,6 +9,7 @@ import type { FastifyInstance } from "fastify";
 import type { Ctx } from "../../infra/context.ts";
 import { type JobQueue, startJobs } from "../../infra/jobs.ts";
 import { askOnDevice } from "../sessions/dispatch.ts";
+import { TIDY_AT, consolidate } from "./consolidate.ts";
 import * as sessions from "../sessions/service.ts";
 import * as tasks from "../tasks/service.ts";
 import { reviewPrompt, taskReviewPrompt } from "./prompts.ts";
@@ -17,10 +18,15 @@ import * as memory from "./service.ts";
 type ReviewJob =
   | {
       sessionId: string;
-      /** The turn that armed this review; a later turn re-arms and this one stands down. */
-      armedBy: string;
+      /**
+       * The turn that armed this review; a later turn re-arms and this one stands down.
+       * Absent for a review that does not wait for quiet: the conversation is long, or its
+       * context was just compacted and what the summary dropped is about to be out of reach.
+       */
+      armedBy?: string;
     }
-  | { taskId: string };
+  | { taskId: string }
+  | { tidy: { owner: memory.Owner; target: memory.Target }; sessionId: string };
 
 export interface Op {
   action: "add" | "replace" | "remove";
@@ -63,10 +69,15 @@ export function parseOps(raw: string): Op[] {
   });
 }
 
-/** Apply what the reviewer decided. An operation the store refuses is skipped; the rest still apply. */
-export async function applyOps(ctx: Ctx, owner: memory.Owner, ops: Op[]): Promise<number> {
+/**
+ * Apply what the reviewer decided. An operation the store refuses is skipped; the rest still apply.
+ * `sessionId` is the conversation whose model is asked to tidy a scope this leaves nearly full.
+ */
+export async function applyOps(ctx: Ctx, owner: memory.Owner, ops: Op[], sessionId?: string): Promise<number> {
   let applied = 0;
+  const touched = new Set<memory.Target>();
   for (const op of ops) {
+    touched.add(op.target);
     try {
       if (op.action === "add") await memory.add(ctx, owner, op.target, op.content ?? "", "auto");
       else if (op.action === "replace")
@@ -77,7 +88,24 @@ export async function applyOps(ctx: Ctx, owner: memory.Owner, ops: Op[]): Promis
       if (!(err instanceof memory.MemoryError)) throw err;
     }
   }
+  if (sessionId) for (const target of touched) await tidyIfFull(ctx, owner, target, sessionId);
   return applied;
+}
+
+/** Queue a tidying of a scope that has grown nearly full; the session's model, on its device, does it. */
+export async function tidyIfFull(
+  ctx: Ctx,
+  owner: memory.Owner,
+  target: memory.Target,
+  sessionId: string,
+): Promise<void> {
+  if (target === "project" && !owner.projectId) return;
+  if (memory.fullness(await memory.read(ctx, owner, target), target) < TIDY_AT) return;
+  // One at a time per scope: several writes in a row ask for one tidying.
+  const key = `memory:tidy:${owner.orgId}:${target}:${target === "project" ? owner.projectId : owner.userId}`;
+  if ((await ctx.redis.set(key, "1", "EX", 600, "NX")) === null) return;
+  const plain = { orgId: owner.orgId, userId: owner.userId, projectId: owner.projectId };
+  await queues.get(ctx)?.add([{ tidy: { owner: plain, target }, sessionId }]);
 }
 
 /** A task finished: review what the team did for what is worth carrying into the project's later work. */
@@ -117,16 +145,35 @@ async function reviewTask(ctx: Ctx, taskId: string): Promise<void> {
       customInstructions: settings.custom_instructions,
     }),
   );
-  if (reply !== null) await applyOps(ctx, owner, parseOps(reply));
+  if (reply !== null) await applyOps(ctx, owner, parseOps(reply), lead.id);
+}
+
+async function tidy(ctx: Ctx, job: Extract<ReviewJob, { tidy: unknown }>): Promise<void> {
+  const { owner, target } = job.tidy;
+  try {
+    await consolidate(ctx, owner, target, (prompt) => askOnDevice(ctx, job.sessionId, prompt));
+  } catch (err) {
+    // Best effort: a result the store would not take leaves the scope as it was.
+    if (!(err instanceof memory.MemoryError)) throw err;
+  } finally {
+    await ctx.redis.del(
+      `memory:tidy:${owner.orgId}:${target}:${target === "project" ? owner.projectId : owner.userId}`,
+    );
+  }
 }
 
 async function review(ctx: Ctx, job: ReviewJob): Promise<void> {
   if ("taskId" in job) return reviewTask(ctx, job.taskId);
-  if ((await ctx.redis.get(armedKey(job.sessionId))) !== job.armedBy) return; // the conversation went on
+  if ("tidy" in job) return tidy(ctx, job);
+  // The conversation went on: the turn that ends it arms the review again.
+  if (job.armedBy && (await ctx.redis.get(armedKey(job.sessionId))) !== job.armedBy) return;
   const session = await sessions.byId(ctx, job.sessionId);
-  // Conversations with a person only; a task's sessions talk to each other.
-  if (!session || session.origin !== "user") return;
+  // Conversations with a person, and what an automation ran; a task's sessions talk to each other.
+  if (!session || (session.origin !== "user" && session.origin !== "automation")) return;
   const owner = await memory.ownerOfSession(ctx, session);
+  // An automation works for a project, not for its owner's own notes: it writes project memory only.
+  const projectOnly = session.origin === "automation";
+  if (projectOnly && !owner.projectId) return;
   const settings = await memory.getSettings(ctx, owner);
   if (!settings.enabled || !settings.auto_extract) return;
 
@@ -139,7 +186,8 @@ async function review(ctx: Ctx, job: ReviewJob): Promise<void> {
   // Too little was said to hold anything durable; wait for more before spending a model call.
   if (transcript.length < MIN_TRANSCRIPT_CHARS) return;
 
-  const current = await memory.all(ctx, owner);
+  const everything = await memory.all(ctx, owner);
+  const current = projectOnly ? { project: everything["project"] ?? [] } : everything;
   const usage = Object.fromEntries(
     Object.entries(current).map(([target, entries]) => [target, memory.usage(entries, target as memory.Target)]),
   );
@@ -155,7 +203,12 @@ async function review(ctx: Ctx, job: ReviewJob): Promise<void> {
     }),
   );
   if (reply === null) return;
-  await applyOps(ctx, owner, parseOps(reply));
+  await applyOps(
+    ctx,
+    owner,
+    parseOps(reply).filter((op) => op.target in current),
+    session.id,
+  );
   await memory.markReviewed(ctx, session.id, last.endedAt);
 }
 
@@ -165,6 +218,15 @@ export function start(app: FastifyInstance): void {
     ctx,
     startJobs<ReviewJob>(app, "memory-review", (job) => review(ctx, job), { concurrency: 1 }),
   );
+  // A runtime just summarized a long conversation to fit its model's window. What the summary
+  // left out is still in the transcript here: review it now, while this is the turn it mattered in.
+  ctx.hub.listen({
+    async state(device, frame) {
+      if (frame.t !== "event" || frame.type !== "compaction" || ctx.config.MEMORY_REVIEW_IDLE_SECONDS <= 0) return;
+      const session = await sessions.byId(ctx, frame.session_id);
+      if (session?.device_id === device.id) await queues.get(ctx)?.add([{ sessionId: session.id }]);
+    },
+  });
 }
 
 /** A turn finished: review the session once it has been quiet for a while. A later turn starts the wait again. */
@@ -173,6 +235,12 @@ export async function arm(ctx: Ctx, turn: { id: string; session_id: string; stat
   if (turn.status !== "completed" || delayMs <= 0) return;
   await ctx.redis.set(armedKey(turn.session_id), turn.id, "EX", ctx.config.MEMORY_REVIEW_IDLE_SECONDS + 3600);
   await queues.get(ctx)?.add([{ sessionId: turn.session_id, armedBy: turn.id }], { delayMs });
+  // A conversation that never goes quiet is reviewed as it goes, every so many turns.
+  const every = ctx.config.MEMORY_REVIEW_EVERY_TURNS;
+  if (every > 0) {
+    const since = await sessions.turnsSince(ctx, turn.session_id, await memory.reviewedUntil(ctx, turn.session_id));
+    if (since > 0 && since % every === 0) await queues.get(ctx)?.add([{ sessionId: turn.session_id }]);
+  }
 }
 
 /** A task completed: queue its review. Off when the background review is off altogether. */

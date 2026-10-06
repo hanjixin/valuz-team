@@ -858,6 +858,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/memory/consolidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tidy a memory scope — merge what overlaps, drop what is stale
+         * @description agent-base: asks the member's model, on one of their devices, to rewrite
+         *     ``target`` as a shorter list that says the same. What the scope held is
+         *     kept as a snapshot (see ``restoreMemory``). The result never holds more
+         *     text than before, and passes the same checks as any memory write.
+         */
+        post: operations["consolidateMemory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/memory/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put a memory scope back as it was before it was last rewritten
+         * @description agent-base: restores ``target`` from its latest snapshot. What it holds
+         *     now becomes a snapshot in turn, so restoring twice undoes the restore.
+         */
+        post: operations["restoreMemory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/system/status": {
         parameters: {
             query?: never;
@@ -5173,6 +5217,19 @@ export interface components {
             entries: {
                 [key: string]: string[];
             };
+            /** @description agent-base: when each scope was last rewritten as a whole (epoch ms), keyed by target — present for scopes that can be restored. */
+            snapshots?: {
+                [key: string]: number;
+            };
+        };
+        MemoryConsolidation: {
+            /** @description False when there was nothing to tidy. */
+            changed: boolean;
+            /** @description Entries before. */
+            before: number;
+            /** @description Entries after. */
+            after: number;
+            memory: components["schemas"]["MemoryView"];
         };
         MemorySettings: {
             enabled: boolean;
@@ -11103,6 +11160,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MemoryView"];
                 };
+            };
+        };
+    };
+    consolidateMemory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryClear"];
+            };
+        };
+        responses: {
+            /** @description What changed, and the memory view after it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryConsolidation"];
+                };
+            };
+            /** @description No device of the member's is online to ask, or the scope changed meanwhile */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    restoreMemory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryClear"];
+            };
+        };
+        responses: {
+            /** @description Memory view after restoring */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryView"];
+                };
+            };
+            /** @description The scope has no snapshot */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

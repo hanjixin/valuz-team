@@ -18,6 +18,7 @@ import * as memory from "./memory/service.ts";
 import {
   MEMORY_TOOLKIT,
   MEMORY_TOOLS,
+  type Caller as MemoryCaller,
   authorize as authorizeMemory,
   callTool as callMemoryTool,
 } from "./memory/tools.ts";
@@ -104,7 +105,7 @@ export async function setupModules(app: FastifyInstance): Promise<void> {
   });
   onTurnEnd(app.ctx, (turn) => memoryReview.arm(app.ctx, turn));
   tasks.onTaskFinished(app.ctx, (taskId) => memoryReview.taskFinished(app.ctx, taskId));
-  mountToolkit<memory.Owner>(app, {
+  mountToolkit<MemoryCaller>(app, {
     ...MEMORY_TOOLKIT,
     tools: MEMORY_TOOLS,
     authorize: (sessionId) => authorizeMemory(app.ctx, sessionId),

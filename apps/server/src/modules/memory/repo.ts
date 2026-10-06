@@ -1,4 +1,4 @@
-import type { Db } from "@agent-base/db";
+import type { Db, MemorySnapshotEntry } from "@agent-base/db";
 import { sql } from "kysely";
 
 export type Target = "user" | "global" | "project";
@@ -64,6 +64,108 @@ export async function mutate<T>(
     return result;
   });
 }
+
+/** A scope's entries with when and by whom each was written, oldest first. */
+export const detailed = (db: Db, scope: Scope) =>
+  within(db, scope).select(["id", "content", "source", "created_at"]).orderBy("created_at").orderBy("id").execute();
+
+const lock = (db: Db, scope: Scope) => {
+  const key = `memory:${scope.orgId}:${scope.target}:${scope.target === "project" ? scope.projectId : scope.userId}`;
+  return sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`.execute(db);
+};
+
+const snapshotsOf = (db: Db, scope: Scope) => {
+  const query = db.selectFrom("memory_snapshots").where("org_id", "=", scope.orgId).where("target", "=", scope.target);
+  return scope.target === "project"
+    ? query.where("project_id", "=", scope.projectId)
+    : query.where("user_id", "=", scope.userId);
+};
+
+const KEPT_SNAPSHOTS = 5;
+
+/**
+ * Rewrite a scope as a whole, keeping what it held as a snapshot. `expected`
+ * are the ids the new entries were worked out from: if the scope changed
+ * meanwhile nothing is written, so no entry added in between is lost.
+ */
+export async function rewrite(
+  db: Db,
+  scope: Scope,
+  change: { expected: string[] | null; entries: { content: string; source: string }[]; reason: string },
+): Promise<boolean> {
+  return db.transaction().execute(async (tx) => {
+    await lock(tx, scope);
+    const current = await detailed(tx, scope);
+    if (change.expected && current.map((entry) => entry.id).join() !== change.expected.join()) return false;
+    await tx
+      .insertInto("memory_snapshots")
+      .values({
+        id: crypto.randomUUID(),
+        org_id: scope.orgId,
+        target: scope.target,
+        user_id: scope.target === "project" ? null : scope.userId,
+        project_id: scope.target === "project" ? scope.projectId : null,
+        entries: JSON.stringify(
+          current.map((entry) => ({
+            content: entry.content,
+            source: entry.source,
+            created_at: entry.created_at.toISOString(),
+          })),
+        ),
+        reason: change.reason,
+      })
+      .execute();
+    const stale = await snapshotsOf(tx, scope)
+      .select("id")
+      .orderBy("created_at", "desc")
+      .offset(KEPT_SNAPSHOTS)
+      .execute();
+    if (stale.length > 0)
+      await tx
+        .deleteFrom("memory_snapshots")
+        .where(
+          "id",
+          "in",
+          stale.map((row) => row.id),
+        )
+        .execute();
+    if (current.length > 0)
+      await tx
+        .deleteFrom("memories")
+        .where(
+          "id",
+          "in",
+          current.map((entry) => entry.id),
+        )
+        .execute();
+    // Entries are read back in the order they were written: keep the new list's order.
+    const base = Date.now();
+    if (change.entries.length > 0)
+      await tx
+        .insertInto("memories")
+        .values(
+          change.entries.map((entry, index) => ({
+            id: crypto.randomUUID(),
+            org_id: scope.orgId,
+            target: scope.target,
+            user_id: scope.target === "project" ? null : scope.userId,
+            project_id: scope.target === "project" ? scope.projectId : null,
+            content: entry.content,
+            source: entry.source,
+            created_at: new Date(base + index),
+          })),
+        )
+        .execute();
+    return true;
+  });
+}
+
+/** What the scope held before it was last rewritten. */
+export const latestSnapshot = (
+  db: Db,
+  scope: Scope,
+): Promise<{ entries: MemorySnapshotEntry[]; created_at: Date } | undefined> =>
+  snapshotsOf(db, scope).select(["entries", "created_at"]).orderBy("created_at", "desc").limit(1).executeTakeFirst();
 
 export const reviewedUntil = async (db: Db, sessionId: string): Promise<number> =>
   Number(

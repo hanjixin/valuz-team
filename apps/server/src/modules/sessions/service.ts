@@ -99,6 +99,10 @@ export async function transcriptSince(
   }));
 }
 
+/** How many turns finished after `since` (epoch ms). */
+export const turnsSince = async (ctx: Ctx, id: string, since: number): Promise<number> =>
+  (await repo.completedTurnsSince(ctx.db, id, since, 500)).length;
+
 /** As `access`, for someone who is going to send, interrupt or queue. */
 export async function drive(ctx: Ctx, auth: Auth, id: string) {
   const found = await access(ctx, auth, id);

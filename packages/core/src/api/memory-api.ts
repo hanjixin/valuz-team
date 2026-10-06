@@ -30,6 +30,16 @@ export interface MemoryView {
   custom_instructions: string;
   /** Entries per scope, keyed by target (user / global / project-when-bound). */
   entries: Record<string, string[]>;
+  /** agent-base: when each scope was last rewritten as a whole (epoch ms) — a scope listed here can be restored. */
+  snapshots?: Record<string, number>;
+}
+
+/** agent-base: what tidying a scope did. */
+export interface MemoryConsolidation {
+  changed: boolean;
+  before: number;
+  after: number;
+  memory: MemoryView;
 }
 
 export interface MemorySettings {
@@ -88,6 +98,28 @@ export const memoryApi = {
   }): Promise<MemoryView> {
     return fetchJson<MemoryView>("/v1/memory/scope", {
       ...jsonInit("DELETE", payload),
+      baseUrl: maybeProjectBase(payload.project_id),
+    });
+  },
+
+  /** agent-base: merge what overlaps and drop what is stale, with the member's own model. */
+  consolidate(payload: {
+    target: MemoryTarget;
+    project_id?: string;
+  }): Promise<MemoryConsolidation> {
+    return fetchJson<MemoryConsolidation>("/v1/memory/consolidate", {
+      ...jsonInit("POST", payload),
+      baseUrl: maybeProjectBase(payload.project_id),
+    });
+  },
+
+  /** agent-base: put a scope back as it was before it was last tidied. */
+  restore(payload: {
+    target: MemoryTarget;
+    project_id?: string;
+  }): Promise<MemoryView> {
+    return fetchJson<MemoryView>("/v1/memory/restore", {
+      ...jsonInit("POST", payload),
       baseUrl: maybeProjectBase(payload.project_id),
     });
   },

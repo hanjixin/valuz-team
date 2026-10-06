@@ -230,6 +230,13 @@ device; a turn ending sends the answer back. What the two platforms share is `ch
 off the bot is simply offline: the server takes no callback from either platform and posts nothing to them. The one
 call it makes is checking an app's credentials when a member presses "test".
 
+A group can stand for a project (`channels/chats.ts`): a member binds a group their Feishu bot is in to a project,
+and what is said to the bot there opens its session in that project — on the project's device, with its folder —
+instead of a quick chat. A chat holds one project; binding or unbinding starts its conversation afresh. The
+group side is the platform's to say — which groups the bot is in, making one with the bot in it, a link to join,
+dissolving one the bot made — and is asked of the bot's device too (`channels.chats`), so it needs that device
+online. Only a group the bot owns can be dissolved from here; any other is merely unbound.
+
 ## The desktop app
 
 `apps/desktop` is the carried-over Electron shell with its backend replaced (`src/main/services/team.ts`). There

@@ -93,6 +93,124 @@ paths:
               schema:
                 $ref: "#/components/schemas/FeishuBinding"
 
+  /v1/channels/feishu/chats:
+    get:
+      summary: The groups the member's Feishu bot is in
+      operationId: listFeishuChats
+      tags: [channels]
+      description: |
+        For the project page's picker. The bot must already be in a group —
+        or the group is made here, with the bot in it. Asked of the device
+        that keeps the bot connected, so it must be online.
+      parameters:
+        - {name: agent_slug, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/ChannelChatItem"}
+        "404": {description: The member has no enabled Feishu bot}
+        "409": {description: The bot's device is not online}
+    post:
+      summary: Make a Feishu group with the bot in it, bound to a project
+      operationId: createFeishuChat
+      tags: [channels]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, project_id]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 100}
+                project_id: {type: string}
+                channel_instance_id: {type: string}
+      responses:
+        "201":
+          description: The group, and a link to join it
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CreatedChat"}
+  /v1/channels/feishu/chats/{external_chat_id}/link:
+    get:
+      summary: A join link for a group the bot is in
+      operationId: getFeishuChatLink
+      tags: [channels]
+      parameters:
+        - {name: external_chat_id, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  share_link: {type: string, nullable: true}
+  /v1/channels/feishu/chats/{external_chat_id}:
+    delete:
+      summary: Dissolve a group the bot made, and drop its binding
+      operationId: deleteFeishuChat
+      tags: [channels]
+      parameters:
+        - {name: external_chat_id, in: path, required: true, schema: {type: string}}
+        - {name: channel_instance_id, in: query, required: false, schema: {type: string}}
+      responses:
+        "204": {description: Dissolved}
+        "409": {description: The bot did not make this group; unlink it instead}
+  /v1/channels/chat-bindings:
+    get:
+      summary: The chats bound to a project
+      operationId: listChatBindings
+      tags: [channels]
+      parameters:
+        - {name: project_id, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/ChatProjectBinding"}
+    put:
+      summary: Bind a chat to a project — "this group is that project"
+      operationId: bindChatToProject
+      tags: [channels]
+      description: A chat holds one project; binding it again moves it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [external_chat_id, project_id]
+              properties:
+                channel_instance_id: {type: string}
+                external_chat_id: {type: string, minLength: 1}
+                project_id: {type: string, minLength: 1}
+                external_chat_name: {type: string, nullable: true}
+                default_agent_slug: {type: string, nullable: true}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ChatProjectBinding"}
+    delete:
+      summary: Unbind a chat from its project
+      operationId: unbindChat
+      tags: [channels]
+      parameters:
+        - {name: external_chat_id, in: query, required: true, schema: {type: string}}
+        - {name: channel_instance_id, in: query, required: false, schema: {type: string}}
+      responses:
+        "204": {description: Unbound}
+        "404": {description: No such binding}
   /v1/channels/feishu/bindings/{agent_slug}/test:
     post:
       summary: Probe a Feishu binding — validate credentials and report connection status
@@ -7884,6 +8002,35 @@ components:
       required: [auto_learn]
       properties:
         auto_learn: {type: boolean}
+    ChannelChatItem:
+      type: object
+      required: [external_chat_id, name]
+      properties:
+        external_chat_id: {type: string}
+        name: {type: string}
+        bound_project_id: {type: string, nullable: true}
+        created_by_valuz: {type: boolean, description: "The bot made this group, so it may be dissolved from here."}
+        needs_join: {type: boolean, description: "…and nobody has joined yet: a join link is the only way in."}
+    ChatProjectBinding:
+      type: object
+      required: [channel_instance_id, external_chat_id, project_id]
+      properties:
+        channel_instance_id: {type: string}
+        external_chat_id: {type: string}
+        project_id: {type: string}
+        external_chat_name: {type: string, nullable: true}
+        default_agent_slug: {type: string, nullable: true}
+        platform: {type: string}
+        created_by_valuz: {type: boolean}
+        needs_join: {type: boolean}
+    CreatedChat:
+      type: object
+      required: [external_chat_id, name, project_id]
+      properties:
+        external_chat_id: {type: string}
+        name: {type: string}
+        project_id: {type: string}
+        share_link: {type: string, nullable: true}
     MemorySettings:
       type: object
       required: [enabled, auto_extract, custom_instructions]

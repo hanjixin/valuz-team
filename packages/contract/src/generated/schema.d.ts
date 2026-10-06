@@ -40,6 +40,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/channels/feishu/chats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The groups the member's Feishu bot is in
+         * @description For the project page's picker. The bot must already be in a group —
+         *     or the group is made here, with the bot in it. Asked of the device
+         *     that keeps the bot connected, so it must be online.
+         */
+        get: operations["listFeishuChats"];
+        put?: never;
+        /** Make a Feishu group with the bot in it, bound to a project */
+        post: operations["createFeishuChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/channels/feishu/chats/{external_chat_id}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A join link for a group the bot is in */
+        get: operations["getFeishuChatLink"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/channels/feishu/chats/{external_chat_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Dissolve a group the bot made, and drop its binding */
+        delete: operations["deleteFeishuChat"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/channels/chat-bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The chats bound to a project */
+        get: operations["listChatBindings"];
+        /**
+         * Bind a chat to a project — "this group is that project"
+         * @description A chat holds one project; binding it again moves it.
+         */
+        put: operations["bindChatToProject"];
+        post?: never;
+        /** Unbind a chat from its project */
+        delete: operations["unbindChat"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/channels/feishu/bindings/{agent_slug}/test": {
         parameters: {
             query?: never;
@@ -5257,6 +5336,31 @@ export interface components {
         SkillSettings: {
             auto_learn: boolean;
         };
+        ChannelChatItem: {
+            external_chat_id: string;
+            name: string;
+            bound_project_id?: string | null;
+            /** @description The bot made this group, so it may be dissolved from here. */
+            created_by_valuz?: boolean;
+            /** @description …and nobody has joined yet: a join link is the only way in. */
+            needs_join?: boolean;
+        };
+        ChatProjectBinding: {
+            channel_instance_id: string;
+            external_chat_id: string;
+            project_id: string;
+            external_chat_name?: string | null;
+            default_agent_slug?: string | null;
+            platform?: string;
+            created_by_valuz?: boolean;
+            needs_join?: boolean;
+        };
+        CreatedChat: {
+            external_chat_id: string;
+            name: string;
+            project_id: string;
+            share_link?: string | null;
+        };
         MemorySettings: {
             enabled: boolean;
             auto_extract: boolean;
@@ -9483,6 +9587,203 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FeishuBinding"];
                 };
+            };
+        };
+    };
+    listFeishuChats: {
+        parameters: {
+            query?: {
+                agent_slug?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelChatItem"][];
+                };
+            };
+            /** @description The member has no enabled Feishu bot */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The bot's device is not online */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createFeishuChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    project_id: string;
+                    channel_instance_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The group, and a link to join it */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedChat"];
+                };
+            };
+        };
+    };
+    getFeishuChatLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                external_chat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        share_link?: string | null;
+                    };
+                };
+            };
+        };
+    };
+    deleteFeishuChat: {
+        parameters: {
+            query?: {
+                channel_instance_id?: string;
+            };
+            header?: never;
+            path: {
+                external_chat_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dissolved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The bot did not make this group; unlink it instead */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listChatBindings: {
+        parameters: {
+            query?: {
+                project_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatProjectBinding"][];
+                };
+            };
+        };
+    };
+    bindChatToProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    channel_instance_id?: string;
+                    external_chat_id: string;
+                    project_id: string;
+                    external_chat_name?: string | null;
+                    default_agent_slug?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatProjectBinding"];
+                };
+            };
+        };
+    };
+    unbindChat: {
+        parameters: {
+            query: {
+                external_chat_id: string;
+                channel_instance_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unbound */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such binding */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

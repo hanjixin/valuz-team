@@ -549,6 +549,18 @@ export interface ChannelBindingsTable {
   updated_at: Timestamp;
 }
 
+export interface ChannelChatBindingsTable {
+  id: string;
+  org_id: string;
+  binding_id: string;
+  external_chat_id: string;
+  project_id: string;
+  external_chat_name: string | null;
+  default_agent_slug: string | null;
+  created_by_bot: ColumnType<boolean, boolean | undefined, boolean>;
+  created_at: Timestamp;
+}
+
 export interface ChannelThreadsTable {
   binding_id: string;
   external_chat_id: string;
@@ -632,6 +644,7 @@ export interface Database {
   artifact_revisions: ArtifactRevisionsTable;
   channel_bindings: ChannelBindingsTable;
   channel_threads: ChannelThreadsTable;
+  channel_chat_bindings: ChannelChatBindingsTable;
   automations: AutomationsTable;
   automation_runs: AutomationRunsTable;
   memories: MemoriesTable;

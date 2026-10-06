@@ -72,6 +72,16 @@ export const ChannelBot = z.object({
 });
 export type ChannelBot = z.infer<typeof ChannelBot>;
 
+/** A group a bot is in, as its platform describes it. */
+export interface ChannelChat {
+  chat_id: string;
+  name: string;
+  /** The bot made the group, so it owns it and may dissolve it. */
+  bot_owned: boolean;
+  /** Somebody besides the bot is in it. */
+  has_people: boolean;
+}
+
 export interface ChannelBotStatus {
   connected: boolean;
   status: "connected" | "connecting" | "error";
@@ -129,6 +139,19 @@ export const RpcMethods = {
   "channels.sync": z.object({ bots: z.array(ChannelBot) }),
   /** Post text to one of a bot's chats. */
   "channels.send": z.object({ bot_id: z.string(), chat_id: z.string(), text: z.string() }),
+  /**
+   * The groups a bot is in, on its platform: list them, make one (the bot in it), ask for a
+   * join link, dissolve one the bot made. Asked of the device that keeps the bot connected —
+   * it is the one that speaks to the platform.
+   */
+  "channels.chats": z.object({
+    bot_id: z.string(),
+    op: z.enum(["list", "create", "link", "remove"]),
+    /** create: the new group's name. */
+    name: z.string().default(""),
+    /** link / remove: the group. */
+    chat_id: z.string().default(""),
+  }),
   /** Which of these skill packages (by digest) the device does not hold yet. */
   "skills.missing": z.object({ hashes: z.array(z.string()) }),
   /** How each bot's connection stands. */

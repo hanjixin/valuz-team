@@ -72,16 +72,24 @@ async function sessionFor(ctx: Ctx, binding: repo.BindingRow, owner: Auth, chatI
   const existing = await repo.threadSession(ctx.db, binding.id, chatId);
   if (existing) return existing;
   const label = labelOf(binding.platform);
+  // "This group is that project": what is said there is work in the project, where the project's
+  // folder is. Any other chat is a quick chat, run where the bot is connected.
+  const bound = await repo.chatBinding(ctx.db, binding.id, chatId);
   const session = await sessions.create(
     ctx,
     owner,
-    {
-      project_id: "chat-default",
-      agent_slug: binding.agent_slug,
-      title: `${label} · ${binding.agent_slug}`,
-      // The chat runs where the bot is connected.
-      ...(binding.device_id ? { device_id: binding.device_id } : {}),
-    },
+    bound
+      ? {
+          project_id: bound.project_id,
+          agent_slug: bound.default_agent_slug ?? binding.agent_slug,
+          title: `${label} · ${bound.external_chat_name ?? binding.agent_slug}`,
+        }
+      : {
+          project_id: "chat-default",
+          agent_slug: binding.agent_slug,
+          title: `${label} · ${binding.agent_slug}`,
+          ...(binding.device_id ? { device_id: binding.device_id } : {}),
+        },
     { origin: "user", metadata: { valuz: { channel: { binding_id: binding.id, chat_id: chatId } } } },
   );
   return repo.openThread(ctx.db, binding.id, chatId, session.id);

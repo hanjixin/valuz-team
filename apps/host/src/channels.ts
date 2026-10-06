@@ -8,7 +8,7 @@
  * The platform sides are the official SDKs.
  */
 import * as lark from "@larksuiteoapi/node-sdk";
-import type { ChannelBot, ChannelBotStatus } from "@agent-base/protocol";
+import type { ChannelBot, ChannelBotStatus, ChannelChat } from "@agent-base/protocol";
 import { type WsFrame, WSClient as WeComClient } from "@wecom/aibot-node-sdk";
 
 const REPLY_LIMIT = 18_000;
@@ -21,9 +21,14 @@ export interface Heard {
   text: string | null;
 }
 
+/** What can be asked about a bot's groups, and what comes back. */
+export type ChatsRequest = { op: "list" | "create" | "link" | "remove"; name: string; chat_id: string };
+
 interface Line {
   bot: ChannelBot;
   send(chatId: string, text: string): Promise<void>;
+  /** The bot's groups on its platform; absent where the platform offers no such thing. */
+  chats?(request: ChatsRequest): Promise<unknown>;
   status(): ChannelBotStatus;
   close(): void;
 }
@@ -78,6 +83,58 @@ function feishu(bot: ChannelBot, heard: (message: Heard) => void): Line {
         params: { receive_id_type: "chat_id" },
         data: { receive_id: chatId, msg_type: "text", content: JSON.stringify({ text: clip(text) }) },
       });
+    },
+    async chats({ op, name, chat_id }) {
+      // The platform answers `{code, msg, data}`; anything but code 0 is a refusal with its reason.
+      const ok = <T extends { code?: number; msg?: string }>(res: T, what: string): T => {
+        if (res.code !== 0) throw new Error(`Feishu ${what} failed: ${res.code ?? ""} ${res.msg ?? ""}`.trim());
+        return res;
+      };
+      const linkOf = async (chatId: string): Promise<string | null> =>
+        ok(await api.im.chat.link({ path: { chat_id: chatId }, data: { validity_period: "permanently" } }), "chat link")
+          .data?.share_link ?? null;
+      if (op === "create") {
+        const chatId = ok(await api.im.chat.create({ data: { name } }), "chat create").data?.chat_id;
+        if (!chatId) throw new Error("Feishu chat create failed: no chat id came back");
+        // The bot is the creator, so nobody else is in yet: the link is how a person joins.
+        // Best effort — the group exists either way, and the link can be asked for again.
+        return { chat_id: chatId, share_link: await linkOf(chatId).catch(() => null) };
+      }
+      if (op === "link") return { share_link: await linkOf(chat_id) };
+      if (op === "remove") {
+        ok(await api.im.chat.delete({ path: { chat_id } }), "chat delete");
+        return { removed: true };
+      }
+      const chats: ChannelChat[] = [];
+      let pageToken: string | undefined;
+      // Bounded: a bot in more than a few hundred groups is not a picker problem.
+      for (let page = 0; page < 10; page++) {
+        const { data } = ok(
+          await api.im.chat.list({ params: { page_size: 100, ...(pageToken ? { page_token: pageToken } : {}) } }),
+          "chat list",
+        );
+        for (const item of data?.items ?? [])
+          if (item.chat_id)
+            // A group the bot made comes back with no owner: the app owns it.
+            chats.push({
+              chat_id: item.chat_id,
+              name: item.name || item.chat_id,
+              bot_owned: !item.owner_id,
+              has_people: true,
+            });
+        pageToken = data?.has_more ? data.page_token : undefined;
+        if (!pageToken) break;
+      }
+      // The list carries no member count; only for the bot's own groups does "is anyone in it" matter.
+      await Promise.all(
+        chats
+          .filter((chat) => chat.bot_owned)
+          .map(async (chat) => {
+            const detail = await api.im.chat.get({ path: { chat_id: chat.chat_id } }).catch(() => null);
+            if (detail?.code === 0) chat.has_people = Number(detail.data?.user_count ?? 1) > 0;
+          }),
+      );
+      return { chats };
     },
     status() {
       const connected = socket.getConnectionStatus?.().state === "connected";
@@ -167,6 +224,13 @@ export class ChannelLines {
     const line = this.lines.get(botId);
     if (!line) throw new Error("this device holds no connection for that bot");
     await line.send(chatId, text);
+  }
+
+  async chats(botId: string, request: ChatsRequest): Promise<unknown> {
+    const line = this.lines.get(botId);
+    if (!line) throw new Error("this device holds no connection for that bot");
+    if (!line.chats) throw new Error("this platform's groups cannot be managed from here");
+    return line.chats(request);
   }
 
   status(): Record<string, ChannelBotStatus> {

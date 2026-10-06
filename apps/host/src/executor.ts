@@ -329,10 +329,15 @@ export class Host {
       }
       case "channels.sync":
       case "channels.send":
+      case "channels.chats":
       case "channels.status": {
         // A bot's credentials and its chats are its binder's: only the owner's own bots connect from here.
         if (!this.isOwner(actor)) throw new RpcError("forbidden", "only the device owner's bots connect from here");
         if (method === "channels.status") return { bots: this.channels.status() };
+        if (method === "channels.chats") {
+          const p = parsed.data as ReturnType<(typeof RpcMethods)["channels.chats"]["parse"]>;
+          return this.channels.chats(p.bot_id, p);
+        }
         if (method === "channels.sync") {
           this.channels.sync((parsed.data as ReturnType<(typeof RpcMethods)["channels.sync"]["parse"]>).bots);
           return { synced: true };

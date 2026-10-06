@@ -18,6 +18,11 @@ export interface FeishuPlatform {
   endpointCalls: { AppID?: string; AppSecret?: string }[];
   /** How many long connections are open right now. */
   live(): number;
+  /**
+   * The groups the bot is in. One it made has no `owner_id`; `people` are its members besides the bot.
+   * Put a group here to stand for one somebody added the bot to.
+   */
+  chats: Map<string, { name: string; owner_id?: string; people: number }>;
   /** Deliver an event to an app over its long connection, as the platform does. */
   push(appId: string, event: unknown): void;
   stop(): Promise<void>;
@@ -52,6 +57,7 @@ function eventFrame(id: string, event: unknown): Buffer {
 export async function startFeishuPlatform(): Promise<FeishuPlatform> {
   const sent: FeishuPlatform["sent"] = [];
   const endpointCalls: FeishuPlatform["endpointCalls"] = [];
+  const chats: FeishuPlatform["chats"] = new Map();
   const port = (): number => (server.address() as AddressInfo).port;
   const server: Server = createServer((req, res) => {
     let raw = "";
@@ -81,6 +87,39 @@ export async function startFeishuPlatform(): Promise<FeishuPlatform> {
             : { code: 1000040345, msg: "app secret invalid" },
         );
       }
+      const chatRoute = /\/im\/v1\/chats(?:\/([^/?]+))?(\/link)?(?:\?|$)/.exec(req.url ?? "");
+      if (chatRoute) {
+        const [, chatId, link] = chatRoute;
+        const found = chatId ? chats.get(decodeURIComponent(chatId)) : undefined;
+        if (chatId && !found) return answer({ code: 232006, msg: "chat not found" });
+        if (!chatId && req.method === "GET")
+          return answer({
+            code: 0,
+            msg: "ok",
+            data: {
+              items: [...chats].map(([id, chat]) => ({
+                chat_id: id,
+                name: chat.name,
+                ...(chat.owner_id ? { owner_id: chat.owner_id } : {}),
+              })),
+              has_more: false,
+              page_token: "",
+            },
+          });
+        if (!chatId && req.method === "POST") {
+          const id = `oc_made_${chats.size + 1}`;
+          chats.set(id, { name: body["name"] ?? "", people: 0 });
+          return answer({ code: 0, msg: "ok", data: { chat_id: id, name: body["name"] } });
+        }
+        if (link) return answer({ code: 0, msg: "ok", data: { share_link: `https://applink.example/join/${chatId}` } });
+        if (req.method === "DELETE") {
+          // Only its owner may dissolve a group; the bot owns what it made.
+          if (found?.owner_id) return answer({ code: 232017, msg: "operator is not the group owner" });
+          chats.delete(decodeURIComponent(chatId as string));
+          return answer({ code: 0, msg: "ok", data: {} });
+        }
+        return answer({ code: 0, msg: "ok", data: { name: found?.name, user_count: String(found?.people ?? 0) } });
+      }
       if (req.url?.includes("/im/v1/messages")) {
         sent.push({
           chat: body["receive_id"] ?? "",
@@ -106,6 +145,7 @@ export async function startFeishuPlatform(): Promise<FeishuPlatform> {
     sent,
     endpointCalls,
     live: () => open.size,
+    chats,
     push(appId, event) {
       for (const [socket, app] of open) if (app === appId) socket.send(eventFrame(`push_${++pushed}`, event));
     },

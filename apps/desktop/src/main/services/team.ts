@@ -50,8 +50,17 @@ export interface TeamServiceManager extends DesktopServiceManager {
   /** Point the desktop at a server (checked to be one). Restarts the services. */
   setServerUrl(url: string): Promise<TeamConnection>;
   /** Register this computer as the signed-in member's device and start the host. */
-  linkDevice(accessToken: string): Promise<TeamConnection>;
+  linkDevice(accessToken: string, orgId?: string): Promise<TeamConnection>;
   unlinkDevice(): Promise<TeamConnection>;
+  /**
+   * Someone signed in, or moved to another of their organizations. A computer is
+   * a device in one organization for one member, so each account-in-an-organization
+   * has a link of its own here: the one it had is taken up again, and — unless
+   * `link` is false — one is made the first time.
+   */
+  useAccount(account: { accessToken: string; orgId: string; userId: string; link?: boolean }): Promise<TeamConnection>;
+  /** Nobody is signed in: the host stops. The links are kept for whoever signs in again. */
+  signOut(): Promise<TeamConnection>;
 }
 
 const readJson = <T>(file: string): T | null => {
@@ -86,6 +95,8 @@ export function createTeamServiceManager(
   const settingsFile = path.join(userDataDir, "desktop.json");
   const hostHome = path.join(userDataDir, "host");
   const hostConfigFile = path.join(hostHome, "host.json");
+  /** Every link this computer has, by `<organization>:<member>`; `host.json` is the one in use. */
+  const linksFile = path.join(hostHome, "links.json");
   const controlToken = crypto.randomBytes(24).toString("hex");
   const logs: string[] = [];
 
@@ -99,6 +110,49 @@ export function createTeamServiceManager(
   let hostState: HostState = "stopped";
   let restart: NodeJS.Timeout | null = null;
   let stopping = false;
+  /** Who is signed in, and in which of their organizations. */
+  let account: { orgId: string; userId: string } | null = null;
+
+  type Links = Record<string, HostConfig>;
+  const keyOf = (who: { orgId: string; userId: string }): string => `${who.orgId}:${who.userId}`;
+  const readLinks = (): Links => readJson<Links>(linksFile) ?? {};
+  /** The files hold device tokens: readable by their owner only. */
+  const writeSecret = (file: string, value: unknown): void => {
+    mkdirSync(hostHome, { recursive: true });
+    writeFileSync(file, JSON.stringify(value, null, 2), { mode: 0o600 });
+  };
+  const forgetLink = (deviceId: string): void =>
+    writeSecret(linksFile, Object.fromEntries(Object.entries(readLinks()).filter(([, link]) => link.device_id !== deviceId)));
+
+  /** Register this computer with the server as a device of the caller, in the given organization. */
+  async function register(accessToken: string, orgId?: string): Promise<HostConfig> {
+    if (!serverUrl) throw new Error("server_url_missing");
+    const res = await fetch(`${serverUrl}/v1/devices`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+        ...(orgId ? { "x-org-id": orgId } : {}),
+      },
+      body: JSON.stringify({ name: hostname() }),
+    });
+    const body = (await res.json().catch(() => ({}))) as {
+      id?: string;
+      token?: string;
+      owner_id?: string;
+      message?: string;
+    };
+    if (!res.ok || !body.id || !body.token || !body.owner_id)
+      throw new Error(body.message ?? `the server refused to register this computer (${res.status})`);
+    return {
+      server_url: serverUrl,
+      device_id: body.id,
+      device_token: body.token,
+      owner_user_id: body.owner_id,
+      shared_roots: [],
+      allow_exec: false,
+    };
+  }
 
   const log = (line: string): void => {
     logs.push(`[${new Date().toISOString().slice(11, 23)}] ${line}`);
@@ -310,38 +364,48 @@ export function createTeamServiceManager(
       return connection();
     },
 
-    async linkDevice(accessToken) {
-      if (!serverUrl) throw new Error("server_url_missing");
-      const res = await fetch(`${serverUrl}/v1/devices`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
-        body: JSON.stringify({ name: hostname() }),
-      });
-      const body = (await res.json().catch(() => ({}))) as {
-        id?: string;
-        token?: string;
-        owner_id?: string;
-        message?: string;
-      };
-      if (!res.ok || !body.id || !body.token || !body.owner_id)
-        throw new Error(body.message ?? `the server refused to register this computer (${res.status})`);
-      const config: HostConfig = {
-        server_url: serverUrl,
-        device_id: body.id,
-        device_token: body.token,
-        owner_user_id: body.owner_id,
-        shared_roots: [],
-        allow_exec: false,
-      };
-      mkdirSync(hostHome, { recursive: true });
-      // The file holds the device token: readable by its owner only.
-      writeFileSync(hostConfigFile, JSON.stringify(config, null, 2), { mode: 0o600 });
+    async linkDevice(accessToken, orgId) {
+      const config = await register(accessToken, orgId ?? account?.orgId);
+      const who = { orgId: orgId ?? account?.orgId ?? "", userId: config.owner_user_id };
+      if (who.orgId) writeSecret(linksFile, { ...readLinks(), [keyOf(who)]: config });
+      writeSecret(hostConfigFile, config);
       startHost();
       return connection();
     },
 
     async unlinkDevice() {
       stopHost();
+      const config = readJson<HostConfig>(hostConfigFile);
+      if (config) forgetLink(config.device_id);
+      rmSync(hostConfigFile, { force: true });
+      return connection();
+    },
+
+    async useAccount({ accessToken, orgId, userId, link }) {
+      stopHost();
+      account = { orgId, userId };
+      const links = readLinks();
+      const key = keyOf(account);
+      let config = links[key] && normalize(links[key].server_url) === serverUrl ? links[key] : null;
+      // A link made before links were kept per organization: it was this member's, in the one they had.
+      const legacy = readJson<HostConfig>(hostConfigFile);
+      if (!config && legacy && legacy.owner_user_id === userId && Object.keys(links).length === 0 && linked())
+        config = legacy;
+      if (!config && link !== false) config = await register(accessToken, orgId);
+      if (!config) {
+        rmSync(hostConfigFile, { force: true });
+        return connection();
+      }
+      writeSecret(linksFile, { ...links, [key]: config });
+      writeSecret(hostConfigFile, config);
+      startHost();
+      return connection();
+    },
+
+    async signOut() {
+      stopHost();
+      account = null;
+      // With nobody signed in nothing runs here; the link itself is in links.json for their return.
       rmSync(hostConfigFile, { force: true });
       return connection();
     },

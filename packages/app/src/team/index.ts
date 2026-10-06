@@ -5,6 +5,8 @@
  */
 import { registerPlugin } from "@valuz/core";
 import { DevicesSection } from "./DevicesSection";
+
+export { AccountMenu } from "./AccountMenu";
 import { OrganizationSection } from "./OrganizationSection";
 import { SharingSection } from "./SharingSection";
 

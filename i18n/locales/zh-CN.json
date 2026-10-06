@@ -3547,6 +3547,14 @@
       "editHint": "能修改它",
       "controlHint": "能远程操作（设备的文件与命令、会话的发送与中断）"
     },
+    "account": {
+      "manage": "组织与成员…",
+      "title": "账号",
+      "signOut": "退出登录",
+      "organization": "当前组织",
+      "newOrganization": "新组织的名称",
+      "create": "新建并切换"
+    },
     "org": {
       "title": "组织",
       "name": "组织名称",

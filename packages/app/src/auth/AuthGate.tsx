@@ -5,16 +5,21 @@
 import { type FormEvent, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import { authApi, getAuthSession, subscribeAuthSession } from "@valuz/core";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label, Tabs, TabsList, TabsTrigger, useI18n } from "@valuz/ui";
-import { linkThisComputer } from "../team/ThisComputer";
+import { enterAccount } from "../team/ThisComputer";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const session = useSyncExternalStore(subscribeAuthSession, getAuthSession, getAuthSession);
-  const token = session?.access_token ?? "";
-  const signedIn = Boolean(token);
-  // In the desktop app, signing in is enough to run agents: this computer is linked without being asked.
+  const signedIn = Boolean(session?.access_token);
+  const orgId = session?.org_id ?? "";
+  // In the desktop app, signing in is enough to run agents: this computer is linked without being asked —
+  // for this member, in the organization they are acting in, and again when they move to another.
   useEffect(() => {
-    if (signedIn) void linkThisComputer(getAuthSession()?.access_token ?? "");
-  }, [signedIn]);
+    if (!signedIn) return;
+    void authApi.me().then(
+      (me) => enterAccount(getAuthSession()?.access_token ?? "", orgId || me.current_org_id, me.user.id),
+      () => undefined,
+    );
+  }, [signedIn, orgId]);
   return session ? <>{children}</> : <SignInPage />;
 }
 

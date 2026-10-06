@@ -17,6 +17,7 @@ import {
   useI18n,
 } from "@valuz/ui";
 import { ErrorLine, Section, attempt, useLoaded } from "./shared";
+import { moveToOrganization as moveTo } from "./AccountMenu";
 
 const ROLES: OrgRole[] = ["owner", "admin", "member"];
 
@@ -43,6 +44,7 @@ export function OrganizationSection() {
   };
   const inviteLink = (token: string) => `${window.location.origin}/?invite=${token}`;
 
+  const [newOrg, setNewOrg] = useState("");
   return (
     <div className="flex flex-col gap-4">
       <ErrorLine message={error ?? members.error ?? org.error} />
@@ -63,6 +65,28 @@ export function OrganizationSection() {
               {t("team.common.save")}
             </Button>
           ) : null}
+        </div>
+        {/* Switching organizations and signing out are in the account menu, bottom left; a new one starts here. */}
+        <div className="mt-3 flex items-center gap-2" data-testid="new-organization">
+          <Input
+            aria-label={t("team.account.newOrganization")}
+            placeholder={t("team.account.newOrganization")}
+            value={newOrg}
+            onChange={(event) => setNewOrg(event.target.value)}
+          />
+          <Button
+            variant="outline"
+            disabled={!newOrg.trim()}
+            onClick={() =>
+              void (async () => {
+                let created: { id: string } | null = null;
+                setError(await attempt(async () => void (created = await authApi.createOrganization(newOrg.trim()))));
+                if (created) moveTo((created as { id: string }).id);
+              })()
+            }
+          >
+            {t("team.account.create")}
+          </Button>
         </div>
       </Section>
 

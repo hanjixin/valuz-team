@@ -94,6 +94,24 @@ test("a new desktop connects to the team's server, links this computer, and runs
     await page.screenshot({ path: "test-results/desktop-conversation.png" });
     const sessions = (await (await request.get("/v1/sessions", { headers })).json()).sessions as { status: string }[];
     expect(sessions).toHaveLength(1);
+
+    // 5. Signing out — from the bottom-left corner — stops this computer working for them…
+    const online = async () =>
+      ((await (await request.get("/v1/devices", { headers })).json()).devices as { online: boolean }[]).filter(
+        (device) => device.online,
+      ).length;
+    await page.getByTestId("account-menu").click();
+    await page.getByRole("menuitem", { name: "退出登录" }).click();
+    await expect(page.locator("#auth-email")).toBeVisible();
+    await expect.poll(online, { timeout: 30_000 }).toBe(0);
+    // …and signing back in takes up the same link: no second device for the same computer.
+    const before = ((await (await request.get("/v1/devices", { headers })).json()).devices as unknown[]).length;
+    await page.locator("#auth-email").fill("desk@example.com");
+    await page.locator("#auth-password").fill("e2e-password-1");
+    await page.locator("button[type=submit]").click();
+    await expect(page.locator("#auth-email")).toHaveCount(0);
+    await expect.poll(online, { timeout: 30_000 }).toBe(1);
+    expect(((await (await request.get("/v1/devices", { headers })).json()).devices as unknown[]).length).toBe(before);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

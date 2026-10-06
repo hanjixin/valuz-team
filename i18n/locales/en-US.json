@@ -3547,6 +3547,14 @@
       "editHint": "Changes it",
       "controlHint": "Drives it remotely (a device's files and commands, a session's messages)"
     },
+    "account": {
+      "manage": "Organization & members…",
+      "title": "Account",
+      "signOut": "Sign out",
+      "organization": "Current organization",
+      "newOrganization": "Name of a new organization",
+      "create": "Create and switch"
+    },
     "org": {
       "title": "Organization",
       "name": "Organization name",

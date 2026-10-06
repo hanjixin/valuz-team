@@ -114,6 +114,10 @@ export const authApi = {
 
   me: (): Promise<Me> => requestJson<Me>("/v1/me"),
 
+  /** Start a new organization, owned by the caller. */
+  createOrganization: (name: string): Promise<{ id: string; name: string }> =>
+    requestJson("/v1/orgs", { method: "POST", json: { name } }),
+
   /** Act in another of the user's organizations from the next request on. */
   switchOrganization(orgId: string): void {
     if (session) setAuthSession({ ...session, org_id: orgId });

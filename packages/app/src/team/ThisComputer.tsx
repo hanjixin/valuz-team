@@ -41,17 +41,33 @@ const keepUnlinked = (keep: boolean): void => {
 
 /**
  * Agents run on the member's own computer, so the desktop app links it as soon
- * as someone is signed in — unless they unlinked it here themselves. Quiet on
- * failure: Settings → Devices shows the state and offers the button.
+ * as someone is signed in — unless they unlinked it here themselves. A computer
+ * is a device in one organization for one member, so the app is told who is
+ * signed in and where: it takes up the link that account has in that
+ * organization, or makes one. Quiet on failure: Settings → Devices shows the
+ * state and offers the button.
  */
-export async function linkThisComputer(accessToken: string): Promise<void> {
+export async function enterAccount(accessToken: string, orgId: string, userId: string): Promise<void> {
   const desktop = bridge();
-  if (!desktop || !accessToken || keptUnlinked()) return;
+  if (!desktop || !accessToken || !orgId || !userId) return;
   try {
-    const current = await desktop.invoke<Connection>("team_connection");
-    if (current.device_id === null) await desktop.invoke<Connection>("team_link_device", { access_token: accessToken });
+    await desktop.invoke<Connection>("team_use_account", {
+      access_token: accessToken,
+      org_id: orgId,
+      user_id: userId,
+      link: !keptUnlinked(),
+    });
   } catch {
-    // left unlinked
+    // left as it is
+  }
+}
+
+/** Nobody is signed in any more: nothing of theirs keeps running on this computer. */
+export async function leaveAccount(): Promise<void> {
+  try {
+    await bridge()?.invoke<Connection>("team_sign_out");
+  } catch {
+    // nothing to stop
   }
 }
 
@@ -111,7 +127,12 @@ export function ThisComputer({ onChanged }: { onChanged: () => void }) {
           <Button
             size="sm"
             disabled={busy}
-            onClick={() => void act("team_link_device", { access_token: getAuthSession()?.access_token ?? "" })}
+            onClick={() =>
+              void act("team_link_device", {
+                access_token: getAuthSession()?.access_token ?? "",
+                org_id: getAuthSession()?.org_id ?? "",
+              })
+            }
           >
             {t("team.devices.linkThis")}
           </Button>

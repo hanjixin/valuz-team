@@ -33,9 +33,20 @@ export const registerIpcHandlers = () => {
   ipcMain.handle("team_set_server_url", (_event, args: { url?: string }) =>
     getTeamManager().setServerUrl(args?.url ?? ""),
   );
-  ipcMain.handle("team_link_device", (_event, args: { access_token?: string }) =>
-    getTeamManager().linkDevice(args?.access_token ?? ""),
+  ipcMain.handle("team_link_device", (_event, args: { access_token?: string; org_id?: string }) =>
+    getTeamManager().linkDevice(args?.access_token ?? "", args?.org_id || undefined),
   );
+  ipcMain.handle(
+    "team_use_account",
+    (_event, args: { access_token?: string; org_id?: string; user_id?: string; link?: boolean }) =>
+      getTeamManager().useAccount({
+        accessToken: args?.access_token ?? "",
+        orgId: args?.org_id ?? "",
+        userId: args?.user_id ?? "",
+        link: args?.link !== false,
+      }),
+  );
+  ipcMain.handle("team_sign_out", () => getTeamManager().signOut());
   ipcMain.handle("team_unlink_device", () => getTeamManager().unlinkDevice());
 
   ipcMain.handle("select_directory", async () => {

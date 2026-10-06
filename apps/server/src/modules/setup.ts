@@ -14,6 +14,15 @@ import * as knowledge from "./knowledge/service.ts";
 import { DOCS_INSTRUCTIONS, DOCS_TOOLKIT, DOCS_TOOLS, callTool as callDocsTool } from "./knowledge/tools.ts";
 import * as devices from "./devices/service.ts";
 import * as memoryReview from "./memory/review.ts";
+import * as skillLearning from "./skills/learn.ts";
+import { TURN_HINT as SKILLS_HINT } from "./skills/prompts.ts";
+import {
+  type Caller as SkillsCaller,
+  SKILLS_TOOLKIT,
+  SKILLS_TOOLS,
+  authorize as authorizeSkills,
+  callTool as callSkillsTool,
+} from "./skills/tools.ts";
 import * as memory from "./memory/service.ts";
 import {
   MEMORY_TOOLKIT,
@@ -110,6 +119,22 @@ export async function setupModules(app: FastifyInstance): Promise<void> {
     tools: MEMORY_TOOLS,
     authorize: (sessionId) => authorizeMemory(app.ctx, sessionId),
     call: (owner, tool, args) => callMemoryTool(app.ctx, owner, tool, args),
+  });
+
+  // Skills an agent writes itself: a tool to keep a procedure it worked out, and a look
+  // at any turn or task that took real work for one it did not think to keep.
+  skillLearning.start(app);
+  registerTurnExtras(app.ctx, async (session) => {
+    if (!(await authorizeSkills(app.ctx, session.id))) return null;
+    return { instructions: SKILLS_HINT, mcpServers: [toolkitServer(app, session.id, SKILLS_TOOLKIT)] };
+  });
+  onTurnEnd(app.ctx, (turn) => skillLearning.turnEnded(app.ctx, turn));
+  tasks.onTaskFinished(app.ctx, (taskId) => skillLearning.taskFinished(app.ctx, taskId));
+  mountToolkit<SkillsCaller>(app, {
+    ...SKILLS_TOOLKIT,
+    tools: SKILLS_TOOLS,
+    authorize: (sessionId) => authorizeSkills(app.ctx, sessionId),
+    call: (caller, tool, args) => callSkillsTool(app.ctx, caller, tool, args),
   });
 
   // Automations: the clock starts runs, and a turn ending tells a run how it went.

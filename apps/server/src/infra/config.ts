@@ -55,6 +55,11 @@ const Env = z.object({
   WECOM_WS_URL: z.string().default(""),
   /** The shortest interval an automation may repeat at. */
   AUTOMATION_MIN_INTERVAL_SECONDS: z.coerce.number().int().min(1).default(30),
+  /**
+   * A turn that used at least this many tools is reviewed afterwards for a procedure worth
+   * keeping as a skill. 0 turns the review off (agents can still write skills themselves).
+   */
+  SKILL_LEARN_MIN_TOOL_CALLS: z.coerce.number().int().min(0).default(8),
   /** A long conversation is also reviewed for what to remember every this many turns. 0 = only once it is quiet. */
   MEMORY_REVIEW_EVERY_TURNS: z.coerce.number().int().min(0).default(20),
   /** How long a conversation must be quiet before it is reviewed for what to remember. 0 turns the review off. */

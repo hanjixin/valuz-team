@@ -1421,6 +1421,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/skills/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether agents may write skills from what they learn
+         * @description agent-base: a member's own setting. When on, their agents can save a
+         *     procedure they worked out as a skill, or correct one they own, and a
+         *     turn that took real work is reviewed afterwards for the same.
+         */
+        get: operations["getSkillSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change it */
+        patch: operations["patchSkillSettings"];
+        trace?: never;
+    };
     "/v1/skills/scan": {
         parameters: {
             query?: never;
@@ -5231,6 +5254,9 @@ export interface components {
             after: number;
             memory: components["schemas"]["MemoryView"];
         };
+        SkillSettings: {
+            auto_learn: boolean;
+        };
         MemorySettings: {
             enabled: boolean;
             auto_extract: boolean;
@@ -6510,7 +6536,7 @@ export interface components {
              * @default discovered
              * @enum {string}
              */
-            creation_origin: "created" | "imported" | "discovered";
+            creation_origin: "created" | "imported" | "discovered" | "learned";
             /**
              * @description Version lineage of this skill — the `kind=skill` artifact whose
              *     revisions are the skill's saved versions. `null` for a skill that
@@ -12060,6 +12086,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SkillView"];
+                };
+            };
+        };
+    };
+    getSkillSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillSettings"];
+                };
+            };
+        };
+    };
+    patchSkillSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkillSettings"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillSettings"];
                 };
             };
         };

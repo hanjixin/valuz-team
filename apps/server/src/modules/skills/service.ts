@@ -9,6 +9,7 @@ import type { Schema } from "@agent-base/contract";
 import type { SkillFile } from "@agent-base/db";
 import matter from "gray-matter";
 import type { Auth, Ctx } from "../../infra/context.ts";
+import { redactSecrets, unsafeReason } from "../../infra/safety.ts";
 import { badRequest, conflict, forbidden, notFound } from "../../infra/errors.ts";
 import { deriveSlug, ensureUniqueSlug } from "../agents/slug.ts";
 import * as audit from "../audit/service.ts";
@@ -215,6 +216,101 @@ export function create(ctx: Ctx, auth: Auth, input: Schema<"SkillCreateRequest">
     { name, description, files: [{ path: MANIFEST, content: writeManifest(name, description, instructions) }] },
     "created",
   );
+}
+
+// -- What an agent writes itself --
+
+const LEARNING_KEY = "skill-learning";
+export type LearningSettings = Schema<"SkillSettings">;
+
+/** Whether this member's agents may write skills. On until they switch it off. */
+export const learningSettings = (ctx: Ctx, member: { orgId: string; userId: string }): Promise<LearningSettings> =>
+  settings.get(ctx.db, { orgId: member.orgId, userId: member.userId }, LEARNING_KEY, { auto_learn: true });
+
+export async function patchLearningSettings(
+  ctx: Ctx,
+  member: { orgId: string; userId: string },
+  patch: Partial<LearningSettings>,
+): Promise<LearningSettings> {
+  const next = { ...(await learningSettings(ctx, member)), ...patch };
+  await settings.set(ctx.db, { orgId: member.orgId, userId: member.userId }, LEARNING_KEY, next);
+  return next;
+}
+
+const MAX_LEARNED_CHARS = 20_000;
+
+/**
+ * Text a model wrote for a skill: a later model will follow it as instructions,
+ * so it is held to what memory is — no instructions aimed at the reader, no
+ * credentials — and to a size a person can still read.
+ */
+function learnedText(text: string, what: string): string {
+  const clean = redactSecrets(text.trim());
+  if (!clean) throw badRequest(`a skill's ${what} cannot be empty`);
+  if (clean.length > MAX_LEARNED_CHARS)
+    throw badRequest(`a skill's ${what} is at most ${MAX_LEARNED_CHARS} characters`);
+  if (unsafeReason(clean)) throw badRequest(`the ${what} was blocked by the safety scan`, "unsafe_content");
+  return clean;
+}
+
+/** A skill an agent wrote from what it worked out. It belongs to the member the agent was working for. */
+export function learn(
+  ctx: Ctx,
+  auth: Auth,
+  input: { name: string; description: string; instructions: string },
+): Promise<View> {
+  const name = learnedText(input.name, "name").slice(0, 80);
+  const description = learnedText(input.description, "description").slice(0, 500);
+  const instructions = learnedText(input.instructions, "instructions");
+  return createWith(
+    ctx,
+    auth,
+    { name, description, files: [{ path: MANIFEST, content: writeManifest(name, description, instructions) }] },
+    "learned",
+  );
+}
+
+/**
+ * Correct a skill's instructions in one place: `oldText` → `newText`. Only a
+ * skill the caller may edit — never a built-in one, never one merely shared for
+ * use. A new version, so the correction can be looked at and undone.
+ */
+export async function amend(ctx: Ctx, auth: Auth, key: string, oldText: string, newText: string): Promise<View> {
+  const row = await mustFind(ctx, auth, key, "edit");
+  const instructions = instructionsOf(row.files);
+  if (!oldText || instructions.split(oldText).length !== 2)
+    throw badRequest("`old_text` must match exactly one place in the skill's instructions", "no_unique_match");
+  const amended = learnedText(
+    instructions.replace(oldText, () => newText),
+    "instructions",
+  );
+  const manifest = writeManifest(row.name, row.description, amended);
+  await save(ctx, auth, row, {
+    name: row.name,
+    description: row.description,
+    files: row.files.map((file) => (file.path === MANIFEST ? { ...file, content: manifest } : file)),
+  });
+  return view(ctx, auth, row.id);
+}
+
+/** Add or replace one supporting file of a skill the caller may edit, held to the same checks. */
+export async function attachFile(ctx: Ctx, auth: Auth, key: string, path: string, content: string): Promise<View> {
+  if (path.trim().replace(/^\.\//, "") === MANIFEST)
+    throw badRequest("change the instructions with `patch`, not by replacing SKILL.md");
+  await changeFile(ctx, auth, key, { action: "create", path, content: learnedText(content, "file") });
+  return view(ctx, auth, key);
+}
+
+/** The instructions of a skill the caller can see, for an agent deciding whether to correct it. */
+export async function instructionsFor(ctx: Ctx, auth: Auth, key: string) {
+  const row = await mustFind(ctx, auth, key);
+  return {
+    slug: row.slug,
+    name: row.name,
+    description: row.description,
+    editable: !isBuiltin(row) && sharing.permissionAtLeast(row.permission ?? "view", "edit"),
+    instructions: instructionsOf(row.files),
+  };
 }
 
 /** Store new content for a skill as its next version — unless nothing actually changed. */

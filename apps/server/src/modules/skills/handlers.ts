@@ -106,3 +106,13 @@ export const restoreSkillVersion: Handler = async (req) => {
   const { ctx, auth, key, params } = await caller(req);
   return service.restoreVersion(ctx, auth, key, params.revision_id ?? "");
 };
+
+export const getSkillSettings: Handler = async (req) => {
+  const { ctx, auth } = await caller(req);
+  return service.learningSettings(ctx, auth);
+};
+
+export const patchSkillSettings: Handler = async (req) => {
+  const { ctx, auth } = await caller(req);
+  return service.patchLearningSettings(ctx, auth, req.body as Schema<"SkillSettings">);
+};

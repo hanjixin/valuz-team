@@ -184,6 +184,10 @@ function badgeForCategory(
 ):
   | { label: string; tone: "default" | "valuz" | "claude" | "codex" }
   | undefined {
+  // agent-base: a skill an agent wrote itself says so, wherever it is listed.
+  if (skill.creation_origin === "learned") {
+    return { label: t("skill.originLearned"), tone: "valuz" };
+  }
   if (categoryId === "official") {
     return {
       label:

@@ -2242,6 +2242,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/SkillView"
 
+  /v1/skills/settings:
+    get:
+      summary: Whether agents may write skills from what they learn
+      operationId: getSkillSettings
+      tags: [skills]
+      description: |
+        agent-base: a member's own setting. When on, their agents can save a
+        procedure they worked out as a skill, or correct one they own, and a
+        turn that took real work is reviewed afterwards for the same.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillSettings"
+    patch:
+      summary: Change it
+      operationId: patchSkillSettings
+      tags: [skills]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SkillSettings"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillSettings"
+
   /v1/skills/scan:
     post:
       summary: Rescan the skill library and re-index from disk
@@ -7845,6 +7879,11 @@ components:
         before: {type: integer, description: "Entries before."}
         after: {type: integer, description: "Entries after."}
         memory: {$ref: "#/components/schemas/MemoryView"}
+    SkillSettings:
+      type: object
+      required: [auto_learn]
+      properties:
+        auto_learn: {type: boolean}
     MemorySettings:
       type: object
       required: [enabled, auto_extract, custom_instructions]
@@ -9604,7 +9643,7 @@ components:
             backfills); the sort puts `null` last.
         creation_origin:
           type: string
-          enum: [created, imported, discovered]
+          enum: [created, imported, discovered, learned]
           default: discovered
           description: |
             Skill origin marker — host-side bookkeeping kept only in the

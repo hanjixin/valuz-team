@@ -265,3 +265,24 @@ export async function copy(ctx: Ctx, auth: Auth, slug: string, input: Schema<"Co
 
 /** The agent a session is bound to, as it is now. No permission check: the session is the authorization. */
 export const forSession = (ctx: Ctx, id: string) => repo.findById(ctx.db, id);
+
+/**
+ * Give an agent a skill it just wrote, so its next session has it. Only an
+ * agent that names its skills and that this member may edit: the built-in
+ * assistant has every skill of its member's anyway. False when it was not given.
+ */
+export async function equip(ctx: Ctx, auth: Auth, agentId: string, skillSlug: string): Promise<boolean> {
+  const agent = await repo.findById(ctx.db, agentId);
+  if (!agent || agent.kind === "system" || agent.skills.includes(skillSlug)) return false;
+  const mine = await repo.findBySlug(ctx.db, auth, agent.slug);
+  if (mine?.id !== agent.id || !sharing.permissionAtLeast(mine.permission ?? "view", "edit")) return false;
+  await repo.update(ctx.db, agent.id, { skills: [...agent.skills, skillSlug] });
+  await audit.record(
+    ctx.db,
+    auth,
+    "agent.update",
+    { type: "agent", id: agent.id },
+    { fields: ["skills"], learned: skillSlug },
+  );
+  return true;
+}

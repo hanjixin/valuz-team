@@ -383,6 +383,18 @@ export async function appendEvent(
   return row ?? null;
 }
 
+/** What tools a session's turns called since `sinceTs`, and how each call came out — oldest first. */
+export const toolEventsSince = (db: Db, sessionId: string, sinceTs: number, limit: number) =>
+  db
+    .selectFrom("events")
+    .select(["type", "data", "message_id"])
+    .where("session_id", "=", sessionId)
+    .where("type", "in", ["tool_use", "tool_result"])
+    .where("ts", ">", sinceTs)
+    .orderBy("seq")
+    .limit(limit)
+    .execute();
+
 export const eventsAfter = (db: Db, sessionId: string, afterSeq: number, limit: number): Promise<StoredEventRow[]> =>
   db
     .selectFrom("events")

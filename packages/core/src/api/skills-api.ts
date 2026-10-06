@@ -25,7 +25,8 @@ export type SkillTargetScope = "user" | "project" | "official" | "tenant";
  *   hand-dropped or symlinked into ~/.agents/skills/), not originated
  *   by Valuz. Renders no badge.
  */
-export type SkillCreationOrigin = "created" | "imported" | "discovered";
+// agent-base adds "learned": a skill an agent wrote from what it worked out.
+export type SkillCreationOrigin = "created" | "imported" | "discovered" | "learned";
 
 export interface SkillView {
   id: string;
@@ -222,7 +223,25 @@ function invalidateSkills(): void {
   invalidateRequestCache({ tags: [SKILLS_TAG] });
 }
 
+/** agent-base: whether a member's agents may write skills from what they learn. */
+export interface SkillSettings {
+  auto_learn: boolean;
+}
+
 export const skillsApi = {
+  /** agent-base: the member's own switch for agent-written skills. */
+  getSettings(): Promise<SkillSettings> {
+    return fetchJson("/v1/skills/settings");
+  },
+  patchSettings(payload: SkillSettings): Promise<SkillSettings> {
+    return fetchJson("/v1/skills/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  },
+
+
   list(
     projectId?: string,
     options: SkillListOptions = {},

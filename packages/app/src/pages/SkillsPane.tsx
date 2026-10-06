@@ -137,6 +137,10 @@ function badgeForCategory(
 ):
   | { label: string; tone: "default" | "valuz" | "claude" | "codex" }
   | undefined {
+  // agent-base: a skill an agent wrote itself says so, wherever it is listed.
+  if (skill.creation_origin === "learned") {
+    return { label: t("skill.originLearned"), tone: "valuz" };
+  }
   if (categoryId === "official") {
     return {
       label:
@@ -387,9 +391,47 @@ export function SkillsPane({
     }
   };
 
+  // agent-base: whether this member's agents may write skills from what they learn.
+  const [autoLearn, setAutoLearn] = useState<boolean | null>(null);
+  useEffect(() => {
+    skillsApi
+      .getSettings()
+      .then((settings) => setAutoLearn(settings.auto_learn))
+      .catch(() => setAutoLearn(null));
+  }, []);
+  const toggleAutoLearn = async (next: boolean) => {
+    setAutoLearn(next);
+    try {
+      setAutoLearn((await skillsApi.patchSettings({ auto_learn: next })).auto_learn);
+    } catch {
+      setAutoLearn(!next);
+      toast.error(t("common.operationFailed"));
+    }
+  };
+
   return (
     <>
       <div className="w-[345px] shrink-0 overflow-y-auto border-r border-surface-border">
+        {/* agent-base: the member's switch for skills their agents write themselves. */}
+        {autoLearn !== null && (
+          <label
+            className="flex items-start justify-between gap-3 border-b border-surface-border px-4 py-3"
+            data-testid="skill-auto-learn"
+          >
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-ink-heading">
+                {t("skill.autoLearnLabel")}
+              </span>
+              <span className="block text-xs text-ink-meta">
+                {t("skill.autoLearnDesc")}
+              </span>
+            </span>
+            <Switch
+              checked={autoLearn}
+              onCheckedChange={(next: boolean) => void toggleAutoLearn(next)}
+            />
+          </label>
+        )}
         {loading ? (
           <PageLoader />
         ) : (

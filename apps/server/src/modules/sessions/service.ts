@@ -99,6 +99,43 @@ export async function transcriptSince(
   }));
 }
 
+export interface ToolCall {
+  messageId: string;
+  name: string;
+  input: Record<string, unknown>;
+  /** Null while it has not come back. */
+  failed: boolean | null;
+  result: string;
+}
+
+/** The tool calls a session's turns made after `since` (epoch ms), each with how it came out. */
+export async function toolCallsSince(ctx: Ctx, id: string, since: number): Promise<ToolCall[]> {
+  const calls = new Map<string, ToolCall>();
+  for (const event of await repo.toolEventsSince(ctx.db, id, since, 1000)) {
+    const data = event.data as {
+      tool_use_id?: string;
+      name?: string;
+      input?: unknown;
+      content?: unknown;
+      is_error?: unknown;
+    };
+    const key = String(data.tool_use_id ?? "");
+    if (event.type === "tool_use")
+      calls.set(key, {
+        messageId: event.message_id,
+        name: String(data.name ?? ""),
+        input: (data.input ?? {}) as Record<string, unknown>,
+        failed: null,
+        result: "",
+      });
+    else {
+      const call = calls.get(key);
+      if (call) Object.assign(call, { failed: data.is_error === true, result: String(data.content ?? "") });
+    }
+  }
+  return [...calls.values()];
+}
+
 /** How many turns finished after `since` (epoch ms). */
 export const turnsSince = async (ctx: Ctx, id: string, since: number): Promise<number> =>
   (await repo.completedTurnsSince(ctx.db, id, since, 500)).length;

@@ -7,6 +7,7 @@
  */
 import type { Schema } from "@agent-base/contract";
 import type { Auth, Ctx } from "../../infra/context.ts";
+import { redactSecrets, unsafeReason } from "../../infra/safety.ts";
 import { badRequest, notFound } from "../../infra/errors.ts";
 import * as projects from "../projects/service.ts";
 import * as settings from "../settings/service.ts";
@@ -41,31 +42,16 @@ const scopeOf = (owner: Owner, target: Target): repo.Scope => {
 
 // ------------------------------------------------------------------ safety
 
-const INVISIBLE = /[\u200b-\u200d\u202a-\u202e\u2066-\u2069\ufeff]/;
-const THREATS = [
-  /ignore (all )?previous instructions/i,
-  /\byou are now\b/i,
-  /disregard (the )?(above|system)/i,
-  /curl[^\n]*\$(\w*)(KEY|TOKEN|SECRET)/i,
-  /cat\s+[^\n]*\.env/i,
-  /~\/\.ssh|authorized_keys/i,
-];
 const BLOCKED = "[BLOCKED: failed safety scan; use memory(remove) to delete the original]";
 
 /** Why this text may not be stored or shown to a model, if there is a reason. */
 function unsafe(content: string): string | null {
-  if (INVISIBLE.test(content)) return "memory content contains invisible/bidi characters";
-  return THREATS.some((pattern) => pattern.test(content)) ? "memory content blocked by safety scan" : null;
+  const reason = unsafeReason(content);
+  if (reason === "invisible") return "memory content contains invisible/bidi characters";
+  return reason === "threat" ? "memory content blocked by safety scan" : null;
 }
 
-const SECRETS = [
-  /\bsk-[A-Za-z0-9_-]{16,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\bBearer\s+[A-Za-z0-9._-]{8,}/gi,
-  /\b(api[_-]?key|token|secret|password)\s*[=:]\s*\S+/gi,
-];
-export const redactSecrets = (text: string): string =>
-  SECRETS.reduce((out, pattern) => out.replace(pattern, "[REDACTED_SECRET]"), text);
+export { redactSecrets };
 
 // ------------------------------------------------------------------ the store
 

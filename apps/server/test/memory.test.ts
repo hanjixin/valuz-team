@@ -111,19 +111,33 @@ describe("memory", () => {
   });
 
   it("starts empty and switched on, and each member sets it for themselves", async () => {
-    expect(await memoryOf(alice)).toEqual({
+    // A member starts with guidance on what is worth keeping, in their language, there to read and change.
+    const fresh = await memoryOf(alice);
+    expect(fresh).toEqual({
       enabled: true,
       auto_extract: true,
-      custom_instructions: "",
+      custom_instructions: expect.stringContaining("优先记："),
       entries: { user: [], global: [] },
       snapshots: {},
     });
+    expect(fresh.custom_instructions.length).toBeLessThanOrEqual(1500);
+    // Flipping a switch leaves it the default — which follows the member's language…
+    await call(alice, "PATCH", "/v1/memory/settings", { auto_extract: false });
+    await call(alice, "PATCH", "/v1/settings/preferences", { default_locale: "en-US" });
+    expect((await memoryOf(alice)).custom_instructions).toContain("Keep, first of all:");
+    await call(alice, "PATCH", "/v1/settings/preferences", { default_locale: "zh-CN" });
+    await call(alice, "PATCH", "/v1/memory/settings", { auto_extract: true });
     expect((await memoryOf(alice, projectId)).entries).toEqual({ user: [], global: [], project: [] });
     const patched = await call(alice, "PATCH", "/v1/memory/settings", { custom_instructions: `  ${"x".repeat(2000)}` });
     expect(patched.body.custom_instructions).toHaveLength(1500);
     expect(patched.body).toMatchObject({ enabled: true, auto_extract: true });
     await call(alice, "PATCH", "/v1/memory/settings", { custom_instructions: "", auto_extract: false });
-    expect(await memoryOf(bob)).toMatchObject({ auto_extract: true, custom_instructions: "" });
+    // …and what a member writes, or clears, is theirs: emptied stays empty. Each member's own.
+    expect((await memoryOf(alice)).custom_instructions).toBe("");
+    expect(await memoryOf(bob)).toMatchObject({
+      auto_extract: true,
+      custom_instructions: expect.stringContaining("优先记："),
+    });
   });
 
   it("lets an agent keep what it learns, and shows it to every later session", async () => {

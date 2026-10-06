@@ -24,6 +24,51 @@ const CUSTOM_INSTRUCTIONS_MAX = 1500;
 const SETTINGS_KEY = "memory";
 const DEFAULT_SETTINGS: Settings = { enabled: true, auto_extract: true, custom_instructions: "" };
 
+/**
+ * The guidance a member starts with, until they write their own: what to keep,
+ * what to leave, and how an entry should read. It is shown in their settings
+ * like anything they typed, in their language, and is theirs to change or clear.
+ */
+const DEFAULT_INSTRUCTIONS = {
+  "zh-CN": [
+    "优先记：",
+    "- 我明确说“记住”的内容，以及我对你做法的纠正——按我的原意记，不要改写成泛泛的结论；",
+    "- 我的长期偏好：回答用的语言和详略、输出格式、常用的工具和命令、命名习惯；",
+    "- 项目里的决定和它的理由、团队约定、谁负责什么、关键的时间点；",
+    "- 踩过的坑，以及验证过有效的解决办法。",
+    "",
+    "不要记：",
+    "- 一次性的任务细节和临时的调试过程；",
+    "- 从代码、文档或知识库里能直接查到的内容；",
+    "- 没有把握的推测，和只在这一次对话里有用的东西。",
+    "",
+    "写法：",
+    "- 一条只说一件事，写清楚它适用于什么情况；",
+    "- 涉及时间写具体日期，不写“上周”“最近”；",
+    "- 发现旧的记忆过时了，或和新情况矛盾，直接改那一条，不要再加一条。",
+  ].join("\n"),
+  "en-US": [
+    "Keep, first of all:",
+    "- what I explicitly ask you to remember, and my corrections of how you work — as I meant them, not reworded into something general;",
+    "- my lasting preferences: the language and depth of answers, output formats, the tools and commands I use, naming habits;",
+    "- a project's decisions with their reasons, team conventions, who is responsible for what, key dates;",
+    "- pitfalls we hit, and the fixes that were verified to work.",
+    "",
+    "Leave out:",
+    "- one-off task details and temporary debugging;",
+    "- anything that can be looked up in the code, the docs or the knowledge base;",
+    "- guesses, and things that only matter in this one conversation.",
+    "",
+    "How to write an entry:",
+    "- one thing per entry, saying when it applies;",
+    "- real dates, never “last week” or “recently”;",
+    "- when an entry is out of date or contradicts something new, change that entry rather than adding another.",
+  ].join("\n"),
+} as const;
+
+/** As stored: `custom_set` marks guidance the member wrote (or cleared) themselves. */
+type StoredSettings = Settings & { custom_set?: boolean };
+
 /** A write the store refuses, with a reason an agent or a person can act on. */
 export class MemoryError extends Error {}
 
@@ -222,21 +267,34 @@ export async function all(ctx: Ctx, owner: Owner): Promise<Record<string, string
 
 const member = (owner: { orgId: string; userId: string }) => ({ orgId: owner.orgId, userId: owner.userId });
 
-export const getSettings = (ctx: Ctx, owner: { orgId: string; userId: string }): Promise<Settings> =>
-  settings.get(ctx.db, member(owner), SETTINGS_KEY, DEFAULT_SETTINGS);
+export async function getSettings(ctx: Ctx, owner: { orgId: string; userId: string }): Promise<Settings> {
+  const { custom_set, ...stored } = await settings.get<StoredSettings>(
+    ctx.db,
+    member(owner),
+    SETTINGS_KEY,
+    DEFAULT_SETTINGS,
+  );
+  // Guidance the member wrote — or emptied on purpose — is used as it is.
+  if (custom_set) return stored;
+  const { default_locale } = await settings.getPreferences(ctx.db, member(owner));
+  return { ...stored, custom_instructions: DEFAULT_INSTRUCTIONS[default_locale === "en-US" ? "en-US" : "zh-CN"] };
+}
 
 export async function patchSettings(
   ctx: Ctx,
   owner: { orgId: string; userId: string },
   patch: Schema<"MemorySettingsPatch">,
 ): Promise<Settings> {
-  const next = { ...(await getSettings(ctx, owner)) };
+  // What is stored, not what is shown: flipping a switch must not turn the default guidance into the member's own.
+  const next = { ...(await settings.get<StoredSettings>(ctx.db, member(owner), SETTINGS_KEY, DEFAULT_SETTINGS)) };
   if (patch.enabled !== undefined) next.enabled = patch.enabled;
   if (patch.auto_extract !== undefined) next.auto_extract = patch.auto_extract;
-  if (patch.custom_instructions !== undefined)
+  if (patch.custom_instructions !== undefined) {
     next.custom_instructions = patch.custom_instructions.trim().slice(0, CUSTOM_INSTRUCTIONS_MAX);
+    next.custom_set = true;
+  }
   await settings.set(ctx.db, member(owner), SETTINGS_KEY, next);
-  return next;
+  return getSettings(ctx, owner);
 }
 
 // ------------------------------------------------------------------ what a turn is shown

@@ -207,6 +207,127 @@ describe("agent templates and the first-run tour", () => {
       (await call(bob, "GET", "/v1/skills")).body.skills.filter((s: { source: string }) => s.source !== "builtin"),
     ).toHaveLength(1);
   });
+  it("carries a project to a colleague as one file: its instructions, team, automations, connectors and memory", async () => {
+    const project = (await call(alice, "POST", "/v1/projects", { name: "Newsroom" })).body;
+    await call(
+      alice,
+      "PUT",
+      `/v1/projects/${project.id}/instructions?instructions_md=${encodeURIComponent("Write for a general reader.")}`,
+    );
+    const deployed = await call(alice, "POST", `/v1/projects/${project.id}/agents:deploy`, {
+      source_agent_slug: "editor",
+      agent_slug: "desk-editor",
+    });
+    expect(deployed.status).toBe(201);
+    await call(alice, "PUT", `/v1/projects/${project.id}/connectors`, { slugs: ["wire-service"] });
+    const automation = await call(alice, "POST", "/v1/automations", {
+      name: "Morning digest",
+      project_kind: "project",
+      project_id: project.id,
+      agent_kind: "project_member",
+      agent_slug: "desk-editor",
+      prompt_template: "Summarize overnight news.",
+      trigger: { kind: "cron", cron_expr: "0 7 * * 1-5", timezone: "Asia/Shanghai" },
+      action_kind: "chat",
+    });
+    expect(automation.status).toBe(201);
+
+    const exported = await t.server.app.inject({
+      method: "GET",
+      url: `/v1/projects/${project.id}/export`,
+      headers: { authorization: `Bearer ${alice.token}` },
+    });
+    expect(exported.statusCode).toBe(200);
+    expect(exported.headers["content-disposition"]).toContain("Newsroom.valuzpack");
+    // No channel and no file of the project's folder travels with it.
+    expect(exported.rawPayload.toString("latin1")).not.toContain("provider_id");
+    expect((await call(bob, "GET", `/v1/projects/${project.id}/export`)).status).toBe(404); // not his to export
+
+    const url = await t.listen();
+    const upload = async (account: Account, bytes: Uint8Array, route = "/v1/projects/import-preview") => {
+      const form = new FormData();
+      form.append("file", new Blob([Buffer.from(bytes)]), "Newsroom.valuzpack");
+      const res = await fetch(`${url}${route}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${account.token}` },
+        body: form,
+      });
+      return { status: res.status, body: (await res.json()) as Json };
+    };
+    // carol is new here: nothing of the project is in her library yet.
+    const carol = await joinOrg(t, alice, "carol");
+    await addChannel(carol);
+    const preview = await upload(carol, exported.rawPayload);
+    expect(preview.status).toBe(200);
+    expect(preview.body).toMatchObject({
+      project: { name: "Newsroom", kind: "project", instructions_md: "Write for a general reader." },
+      // alice shared nothing with carol, so to carol there is no project of that name.
+      name_conflict: false,
+      members: [{ agent_slug: "desk-editor", source_agent_slug: "editor", name: "Editor", in_library: false }],
+      automations: [
+        {
+          name: "Morning digest",
+          agent_slug: "desk-editor",
+          trigger_kind: "cron",
+          cron_expr: "0 7 * * 1-5",
+          status: "paused",
+        },
+      ],
+      project_connectors: ["wire-service"],
+      skills: [{ source: "embedded" }],
+    });
+    expect(preview.body.connectors.map((connector: Json) => [connector.slug, connector.already_present])).toEqual([
+      ["github", false],
+      ["wire-service", false],
+    ]);
+    // Looking changed nothing.
+    expect((await call(carol, "GET", "/v1/projects")).body.projects.filter((p: Json) => p.kind !== "chat")).toEqual([]);
+
+    const done = await call(carol, "POST", "/v1/projects/import/confirm", { preview_id: preview.body.preview_id });
+    expect(done.body).toMatchObject({
+      status: "created",
+      project_name: "Newsroom",
+      members_created: 1,
+      agents_created: 1,
+      automations_created: 1,
+      automation_errors: [],
+      members: [{ agent_slug: "desk-editor" }],
+    });
+    expect(done.body.connectors_to_configure.map((connector: Json) => connector.slug)).toEqual([
+      "github",
+      "wire-service",
+    ]);
+    const landed = done.body.project_id as string;
+    expect(landed).not.toBe(project.id);
+    expect((await call(carol, "GET", `/v1/projects/${landed}`)).body).toMatchObject({
+      name: "Newsroom",
+      instructions_md: "Write for a general reader.",
+      owner_id: carol.userId,
+    });
+    const team = (await call(carol, "GET", `/v1/projects/${landed}/agents`)).body.agents as Json[];
+    expect(team.map((entry) => entry.member.agent_slug)).toEqual(["desk-editor"]);
+    expect((await call(carol, "GET", `/v1/projects/${landed}/connectors`)).body).toEqual({ slugs: ["wire-service"] });
+    // An imported automation waits to be switched on: nothing runs because a file was opened.
+    const groups = (await call(carol, "GET", `/v1/automations?project_id=${landed}`)).body.groups as Json[];
+    expect(groups[0].automations).toMatchObject([{ name: "Morning digest", status: "paused" }]);
+
+    // The preview is spent; the same pack again finds the project already there and makes no second one.
+    expect(
+      (await call(carol, "POST", "/v1/projects/import/confirm", { preview_id: preview.body.preview_id })).body.code,
+    ).toBe("preview_expired");
+    const again = await upload(carol, exported.rawPayload);
+    expect(again.body.name_conflict).toBe(true);
+    expect(
+      (await call(carol, "POST", "/v1/projects/import/confirm", { preview_id: again.body.preview_id })).body,
+    ).toMatchObject({
+      status: "skipped_name_conflict",
+      project: null,
+    });
+    // An agent pack is not a project pack, and the other way round.
+    expect((await upload(carol, new TextEncoder().encode("nope"))).body.code).toBe("invalid_pack");
+    expect((await upload(carol, exported.rawPayload, "/v1/agent-packs/import")).body.code).toBe("invalid_pack");
+  });
+
   it("works for a member whose default is a subscription: the roles run on the device's own login", async () => {
     const dana = await joinOrg(t, alice, "dana");
     await call(dana, "POST", "/v1/providers/default", { provider_id: "ch-claude-subscription" });

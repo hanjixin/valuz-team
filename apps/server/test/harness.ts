@@ -88,11 +88,13 @@ export async function startTestServer(
   const server = await buildServer(loadConfig(fullEnv));
   await migrateToLatest(server.ctx.db);
   await server.app.ready();
+  let listening: Promise<string> | undefined;
   return {
     server,
     ...(redis ? { redis } : {}),
     env: fullEnv,
-    listen: () => server.app.listen({ port: 0, host: "127.0.0.1" }),
+    // Asked for again, it is the address it already has.
+    listen: () => (listening ??= server.app.listen({ port: 0, host: "127.0.0.1" })),
     async call(method, url, options = {}) {
       const res = await server.app.inject({
         method: method as "GET",

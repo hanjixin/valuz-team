@@ -16,7 +16,7 @@ import { ensure, held, modelDefaults } from "./service.ts";
 
 type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
-interface Manifest {
+export interface Manifest {
   schema_version: 1;
   kind: "agent-pack";
   collection?: { id: string; name: string; description: string; scenario: string; icon: string } | null;
@@ -42,17 +42,17 @@ interface Staged {
   skillFiles: Record<string, SkillFile[]>;
 }
 
-const MANIFEST = "manifest.json";
+export const MANIFEST = "manifest.json";
 const STAGE_SECONDS = 15 * 60;
 const stageKey = (auth: Auth, id: string): string => `agent-pack:${auth.orgId}:${auth.userId}:${id}`;
 
-export async function exportPack(
+/** The portable part of some agents: their definitions, the skills they carry (as files), the connectors they name. */
+export async function bundle(
   ctx: Ctx,
   auth: Auth,
-  input: Schema<"ExportPackRequest">,
-): Promise<{ bytes: Buffer; filename: string }> {
-  if (input.agent_slugs.length === 0) throw badRequest("choose at least one agent to export");
-  const chosen = await Promise.all([...new Set(input.agent_slugs)].map((slug) => agents.get(ctx, auth, slug)));
+  slugs: string[],
+): Promise<Pick<Manifest, "agents" | "skills" | "connectors"> & { files: Record<string, Uint8Array> }> {
+  const chosen = await Promise.all([...new Set(slugs)].map((slug) => agents.get(ctx, auth, slug)));
   const known = new Map((await connectors.list(ctx, auth)).map((connector) => [connector.slug, connector]));
   const files: Record<string, Uint8Array> = {};
   const packed = new Map<string, Manifest["skills"][number]>();
@@ -63,19 +63,8 @@ export async function exportPack(
     packed.set(slug, { slug, source: "embedded", name: skill.name, description: skill.description });
     for (const file of skill.files) files[`skills/${slug}/${file.path}`] = strToU8(file.content);
   }
-  const collection = input.collection?.name
-    ? {
-        id: chosen[0]?.slug ?? "pack",
-        name: input.collection.name,
-        description: input.collection.description ?? "",
-        scenario: input.collection.scenario ?? "",
-        icon: input.collection.icon ?? "bot",
-      }
-    : null;
-  const manifest: Manifest = {
-    schema_version: 1,
-    kind: "agent-pack",
-    collection,
+  return {
+    files,
     agents: chosen.map((agent) => ({
       slug: agent.slug,
       name: agent.name,
@@ -95,25 +84,52 @@ export async function exportPack(
       display_name: known.get(slug)?.display_name ?? slug,
     })),
   };
-  files[MANIFEST] = strToU8(JSON.stringify(manifest, null, 2));
-  return { bytes: Buffer.from(zipSync(files)), filename: `${collection?.id ?? chosen[0]?.slug ?? "agents"}.valuzpack` };
 }
 
-function read(bytes: Buffer): Staged {
+export async function exportPack(
+  ctx: Ctx,
+  auth: Auth,
+  input: Schema<"ExportPackRequest">,
+): Promise<{ bytes: Buffer; filename: string }> {
+  if (input.agent_slugs.length === 0) throw badRequest("choose at least one agent to export");
+  const { files, ...carried } = await bundle(ctx, auth, input.agent_slugs);
+  const collection = input.collection?.name
+    ? {
+        id: carried.agents[0]?.slug ?? "pack",
+        name: input.collection.name,
+        description: input.collection.description ?? "",
+        scenario: input.collection.scenario ?? "",
+        icon: input.collection.icon ?? "bot",
+      }
+    : null;
+  const manifest: Manifest = { schema_version: 1, kind: "agent-pack", collection, ...carried };
+  files[MANIFEST] = strToU8(JSON.stringify(manifest, null, 2));
+  return {
+    bytes: Buffer.from(zipSync(files)),
+    filename: `${collection?.id ?? carried.agents[0]?.slug ?? "agents"}.valuzpack`,
+  };
+}
+
+/** A pack's manifest and the files of the skills it carries. `what` names the kind of pack in what is said when it is not one. */
+export function readPack<M extends { skills?: Manifest["skills"] }>(
+  bytes: Buffer,
+  what: string,
+  valid: (manifest: M) => boolean,
+): { manifest: M; skillFiles: Record<string, SkillFile[]> } {
   let entries: Record<string, Uint8Array>;
   try {
     entries = unzipSync(new Uint8Array(bytes));
   } catch {
-    throw badRequest("that file is not an agent pack (it is not a zip archive)", "invalid_pack");
+    throw badRequest(`that file is not ${what} (it is not a zip archive)`, "invalid_pack");
   }
-  let manifest: Manifest;
+  let manifest: M;
   try {
-    manifest = JSON.parse(strFromU8(entries[MANIFEST] ?? new Uint8Array())) as Manifest;
+    manifest = JSON.parse(strFromU8(entries[MANIFEST] ?? new Uint8Array())) as M;
   } catch {
-    throw badRequest("that file is not an agent pack (no readable manifest)", "invalid_pack");
+    throw badRequest(`that file is not ${what} (no readable manifest)`, "invalid_pack");
   }
-  if (manifest.kind !== "agent-pack" || !Array.isArray(manifest.agents) || manifest.agents.length === 0)
-    throw badRequest("that file is not an agent pack", "invalid_pack");
+  if (!manifest || typeof manifest !== "object" || !valid(manifest))
+    throw badRequest(`that file is not ${what}`, "invalid_pack");
   const skillFiles: Record<string, SkillFile[]> = {};
   for (const skill of manifest.skills ?? []) {
     const prefix = `skills/${skill.slug}/`;
@@ -123,6 +139,13 @@ function read(bytes: Buffer): Staged {
   }
   return { manifest, skillFiles };
 }
+
+const read = (bytes: Buffer): Staged =>
+  readPack<Manifest>(
+    bytes,
+    "an agent pack",
+    (manifest) => manifest.kind === "agent-pack" && Array.isArray(manifest.agents) && manifest.agents.length > 0,
+  );
 
 /** Read an uploaded pack and say what importing it would do. Nothing is changed yet. */
 export async function preview(ctx: Ctx, auth: Auth, bytes: Buffer): Promise<Schema<"ImportPackPreviewResponse">> {
@@ -159,6 +182,23 @@ export async function confirm(ctx: Ctx, auth: Auth, previewId: string): Promise<
   if (!raw)
     throw badRequest("this import preview has expired or was already used; upload the pack again", "preview_expired");
   const { manifest, skillFiles } = JSON.parse(raw) as Staged;
+  const landed = await land(ctx, auth, manifest, skillFiles);
+  const created = landed.results.filter((result) => result.created).length;
+  return {
+    created,
+    skipped: landed.results.length - created,
+    roles: landed.results.map((result) => result.agent),
+    connectors_to_configure: landed.connectorsToConfigure,
+  };
+}
+
+/** Bring a pack's agents into the member's library: the skills first, then the agents that carry them. */
+export async function land(
+  ctx: Ctx,
+  auth: Auth,
+  manifest: Pick<Manifest, "agents" | "skills" | "connectors">,
+  skillFiles: Record<string, SkillFile[]>,
+) {
   await modelDefaults(ctx, auth);
 
   // An agent already in the library keeps what it has; only new agents bring their skills in.
@@ -190,12 +230,9 @@ export async function confirm(ctx: Ctx, auth: Auth, previewId: string): Promise<
       }),
     );
   const present = new Set((await connectors.list(ctx, auth)).map((connector) => connector.slug));
-  const created = results.filter((result) => result.created).length;
   return {
-    created,
-    skipped: results.length - created,
-    roles: results.map((result) => result.agent),
-    connectors_to_configure: (manifest.connectors ?? [])
+    results,
+    connectorsToConfigure: (manifest.connectors ?? [])
       .filter((connector) => !present.has(connector.slug))
       .map((connector) => ({ ...connector, requires_credentials: true, requires_setup: true })),
   };

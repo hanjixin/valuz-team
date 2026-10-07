@@ -369,7 +369,7 @@ export async function setLibraryState(ctx: Ctx, auth: Auth, key: string, enabled
 type Node = Schema<"SkillFileNode">;
 
 /** The package as a tree: directories first, then files, each level by name. */
-function treeOf(files: SkillFile[]): Node[] {
+export function treeOf(files: SkillFile[]): Node[] {
   const root: Node[] = [];
   for (const file of files) {
     let level = root;

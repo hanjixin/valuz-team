@@ -10,12 +10,12 @@
  */
 import type { Schema } from "@agent-base/contract";
 import type { SkillFile } from "@agent-base/db";
-import { strFromU8, unzipSync } from "fflate";
 import type { Auth, Ctx } from "../../infra/context.ts";
 import { HttpError, notFound } from "../../infra/errors.ts";
 import * as agents from "../agents/service.ts";
 import * as connectors from "../connectors/service.ts";
 import * as settings from "../settings/service.ts";
+import { filesOfZip, skillsIn } from "../skills/import.ts";
 import * as skills from "../skills/service.ts";
 import * as templates from "../templates/service.ts";
 import * as index from "./index-client.ts";
@@ -25,9 +25,6 @@ type Detail = Schema<"MarketplaceItemDetail">;
 type Result = Schema<"MarketplaceInstallResult">;
 type Locale = "zh-CN" | "en-US";
 type Localized = Partial<Record<Locale, string>> | string | null | undefined;
-
-const MAX_SKILL_FILES = 200;
-const MAX_SKILL_FILE_BYTES = 1_000_000;
 
 const localeOf = async (ctx: Ctx, auth: Auth): Promise<Locale> =>
   (await settings.getPreferences(ctx.db, { orgId: auth.orgId, userId: auth.userId })).default_locale === "en-US"
@@ -125,18 +122,11 @@ export async function item(ctx: Ctx, auth: Auth, itemId: string): Promise<Detail
 
 // ------------------------------------------------------------------ installing
 
-/** The files of a skill package: text only, and from inside its one top folder if it has one. */
+/** The files of a market skill's package: the one skill it holds. */
 function unpack(zip: Uint8Array): SkillFile[] {
-  const entries = Object.entries(unzipSync(zip)).filter(
-    ([path, bytes]) => !path.endsWith("/") && !path.startsWith("__MACOSX/") && bytes.byteLength <= MAX_SKILL_FILE_BYTES,
-  );
-  const manifest = entries.map(([path]) => path).find((path) => /(^|\/)SKILL\.md$/.test(path));
-  if (!manifest) throw new HttpError(422, "not_a_skill", "the package holds no SKILL.md");
-  const root = manifest.slice(0, manifest.length - "SKILL.md".length);
-  return entries
-    .filter(([path, bytes]) => path.startsWith(root) && !bytes.includes(0)) // a NUL byte: not text
-    .slice(0, MAX_SKILL_FILES)
-    .map(([path, bytes]) => ({ path: path.slice(root.length), content: strFromU8(bytes) }));
+  const [skill] = skillsIn(filesOfZip(zip));
+  if (!skill) throw new HttpError(422, "not_a_skill", "the package holds no SKILL.md");
+  return skill.files;
 }
 
 /** Put a market skill in the member's library under its market slug. False when it is already there. */

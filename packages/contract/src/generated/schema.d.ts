@@ -6940,6 +6940,9 @@ export interface components {
             /** @enum {string} */
             type: "file" | "directory";
             size?: number | null;
+            name?: string;
+            /** @description agent-base: a directory's entries, in the same shape. */
+            children?: components["schemas"]["SkillImportPreviewFile"][];
         };
         SkillImportArchiveConfirmRequest: {
             preview_id: string;

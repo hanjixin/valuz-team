@@ -1,7 +1,9 @@
 import type { Schema } from "@agent-base/contract";
 import { requireAuth } from "../../infra/auth.ts";
+import { uploaded } from "../../infra/upload.ts";
 import type { Handler } from "../../infra/context.ts";
 import { badRequest } from "../../infra/errors.ts";
+import * as importing from "./import.ts";
 import * as service from "./service.ts";
 
 type Req = Parameters<Handler>[0];
@@ -116,3 +118,25 @@ export const patchSkillSettings: Handler = async (req) => {
   const { ctx, auth } = await caller(req);
   return service.patchLearningSettings(ctx, auth, req.body as Schema<"SkillSettings">);
 };
+
+// -- Bringing a skill in from outside: preview what a source holds, then take the ones chosen --
+
+export const importArchivePreview: Handler = async (req) => {
+  const { ctx, auth } = await caller(req);
+  const [file] = await uploaded(req);
+  return importing.previewArchive(ctx, auth, (file as NonNullable<typeof file>).bytes);
+};
+
+export const importUrlPreview: Handler = async (req) => {
+  const { ctx, auth } = await caller(req);
+  return importing.previewUrl(ctx, auth, (req.body as Schema<"SkillImportUrlPreviewRequest">).url);
+};
+
+const confirmImport: Handler = async (req, reply) => {
+  const { ctx, auth } = await caller(req);
+  return reply
+    .code(201)
+    .send(await importing.confirm(ctx, auth, req.body as Schema<"SkillImportArchiveConfirmRequest">));
+};
+export const confirmArchiveImport = confirmImport;
+export const confirmUrlImport = confirmImport;

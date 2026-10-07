@@ -10384,6 +10384,13 @@ components:
         size:
           type: integer
           nullable: true
+        name:
+          type: string
+        children:
+          type: array
+          description: "agent-base: a directory's entries, in the same shape."
+          items:
+            $ref: "#/components/schemas/SkillImportPreviewFile"
 
     SkillImportArchiveConfirmRequest:
       type: object

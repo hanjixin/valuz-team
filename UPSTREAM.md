@@ -168,6 +168,15 @@ Deliberate differences in behaviour:
   `MEMORY_REVIEW_EVERY_TURNS` turns, and for automation sessions (project scope only).
 - A channel's models can declare an input window (`model_limits` on create/update, `LLMModel.max_input_tokens`);
   there is no field for it in the channel form yet — it is set through the API.
+- Skill import takes a zip or a link (`/v1/skills/import/archive`, `/url`, and their confirms); importing a
+  directory on the server's disk, and the skill-creator staging flow, stay unimplemented. The preview's file tree
+  nests (`children`, added to the contract).
+- Project export/import uses this repository's own pack format (`kind: "project-pack"`), not upstream's
+  schema_version 2 pack: a project exported by valuz-agent cannot be imported here, nor the reverse. A project's
+  files and per-project skill settings are not carried. `/v1/projects/{id}/connectors` is added to the contract;
+  `/worktrees` answers with none.
+- The project page hides its playbooks tab and panel (`ProjectDetailPage.tsx`, `use-project-playbooks.ts`); the
+  sidebar's own Settings entry is dropped when an account menu is given (`ProjectLayoutBase.tsx`).
 - Packaging (`apps/desktop/build`): the app archive leaves out all of node_modules and names back only what the
   main process loads at run time (electron-updater and its dependencies) — upstream excludes a list of large
   packages instead, and its test of that list is changed to match. `afterPack.cjs` is new: it checks that

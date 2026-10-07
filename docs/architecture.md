@@ -70,6 +70,10 @@ index (empty switches the marketplace off).
 A turn's skills travel to the device as packages. A device keeps each by the digest of its files, so the server
 asks what the device lacks (`skills.missing`) and sends only that; the rest go by digest alone.
 
+A skill also comes in from outside (`modules/skills/import.ts`): a zip a member uploads, or a link — a GitHub
+repository, folder or SKILL.md, an archive, a raw SKILL.md. A source is previewed first, listing every skill it
+holds and what was left out (what is not text), and each one chosen is then taken into the library.
+
 ## Access control
 
 Every shareable row carries `org_id` and `owner_id`. The caller's permission on it is `admin` for its owner
@@ -113,6 +117,14 @@ Who may do what with a session flows from three places: the session (its owner a
 (`edit` there lets a teammate drive it, `view`/`use` watch it), and its device (`control` there is remote
 control of everything on it). A session with no folder of its own — a quick chat, a project not bound to a
 folder — works in a workspace the host manages (`@managed/<name>`).
+
+## A project as one file
+
+A project can be exported and imported (`modules/templates/project-pack.ts`, on the agent pack's bundle, read and
+land): its instructions, its team with the agents and the skills they carry, its automations — which arrive
+paused — the connectors it names, and its project memory. Not its files, which stay on the device, and no channel
+or secret. A project also names connectors of its own (`projects.connectors`), given to every session in it
+whatever agent runs.
 
 ## Tasks
 
@@ -261,6 +273,13 @@ Not every channel has a credential on the server. The Claude and Codex runtimes 
 already has (a Claude Pro/Max or ChatGPT subscription), so those two are built-in channels that hold nothing
 (`modules/providers/subscriptions.ts`): a session on one carries no channel, and the kernel leaves the runtime to
 the device's own sign-in.
+
+A connector's server may ask for a sign-in instead of a key (`modules/connectors/oauth.ts`). The server finds the
+authorization server from the MCP server, registers as a client where that is allowed (or uses one the member
+brings), and sends the member to sign in with PKCE; the browser comes back to `PUBLIC_URL` +
+`/v1/connectors/oauth/callback`, where the `state` — good once, for ten minutes — is the authorization. The
+tokens are sealed on the connector, renewed before a turn or a test uses them, and a connector whose sign-in ran
+out is left out of the turn and says so. The protocol itself is the MCP SDK's.
 
 Credentials are sealed at rest with `infra/secret-box.ts` (keyed from `APP_SECRET`, per purpose) and are never
 returned by the API.

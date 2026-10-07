@@ -99,6 +99,22 @@ export async function startMarketIndex(): Promise<MarketIndex> {
       },
       install_manifest: null,
     },
+    "market:automation:weekly-digest": {
+      ...summary("market:automation:weekly-digest", "automation_template", "每周要点整理", {
+        install_target: "automation_builder",
+      }),
+      install_manifest: {
+        prompt_template: {
+          "zh-CN": "整理本周的要点，列出下一步。",
+          "en-US": "Summarize this week and list next steps.",
+        },
+        default_agent_slug: null,
+        trigger: { kind: "cron", cron_expr: "0 9 * * 1", timezone: "Asia/Shanghai" },
+        action_kind: "chat",
+        worktree: false,
+        resources: [{ kind: "skill", name: { "zh-CN": "documents", "en-US": "Documents" }, required: false }],
+      },
+    },
     "market:agent:reviewer": {
       ...summary("market:agent:reviewer", "agent_template", "代码审查员"),
       install_manifest: {

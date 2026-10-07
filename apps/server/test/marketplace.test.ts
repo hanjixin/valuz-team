@@ -63,6 +63,20 @@ describe("marketplace", () => {
     expect((await call(alice, "GET", "/v1/marketplace/categories?kind=plugin")).body.categories).toEqual([]);
     expect(index.requests).toHaveLength(before);
 
+    // Automation templates are browsed like the rest; using one opens the builder, filled in from what it carries.
+    expect((await call(alice, "GET", "/v1/marketplace/categories?kind=automation")).body.categories).toHaveLength(1);
+    const templates = await items(alice, "automation_template");
+    expect(templates.items.map((item: Json) => [item.id, item.install_target])).toEqual([
+      ["market:automation:weekly-digest", "automation_builder"],
+    ]);
+    const template = (await call(alice, "GET", "/v1/marketplace/items/market:automation:weekly-digest")).body;
+    expect(template.install_manifest).toMatchObject({
+      prompt_template: { "zh-CN": "整理本周的要点，列出下一步。" },
+      trigger: { kind: "cron", cron_expr: "0 9 * * 1", timezone: "Asia/Shanghai" },
+      action_kind: "chat",
+    });
+    expect((await install(alice, "market:automation:weekly-digest")).body.code).toBe("not_installable");
+
     const detail = (await call(alice, "GET", "/v1/marketplace/items/market:connector:task-master")).body;
     expect(detail.connector_config).toMatchObject({ transport: "stdio", command: "npx" });
     expect((await call(alice, "GET", "/v1/marketplace/items/market:skill:nope")).status).toBe(404);

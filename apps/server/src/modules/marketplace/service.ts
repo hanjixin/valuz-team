@@ -5,7 +5,8 @@
  * hand — a skill package into the skill library, a role into the agent library.
  *
  * Connectors are not installed here: the app reads an item's `connector_config`
- * and creates the connector itself. Plugin bundles are not provided at all.
+ * and creates the connector itself; nor are automation templates, which the app
+ * opens in its automation builder. Plugin bundles are not provided at all.
  */
 import type { Schema } from "@agent-base/contract";
 import type { SkillFile } from "@agent-base/db";
@@ -69,8 +70,8 @@ function installedIn(have: Library, item: Item): boolean {
 
 export async function categories(ctx: Ctx, auth: Auth, kind: string): Promise<Schema<"MarketplaceCategoryList">> {
   const empty = { categories: [], degraded: !index.configured(ctx) };
-  // Plugin bundles, playbooks and automation templates are not provided here.
-  if (!index.configured(ctx) || !["skill", "agent", "connector"].includes(kind)) return empty;
+  // Plugin bundles and playbooks are not provided here.
+  if (!index.configured(ctx) || !["skill", "agent", "connector", "automation"].includes(kind)) return empty;
   try {
     const answer = (await index.categories(ctx, kind, await localeOf(ctx, auth))) as Partial<typeof empty> | null;
     return { categories: answer?.categories ?? [], degraded: answer?.degraded ?? false };
@@ -89,7 +90,9 @@ export async function items(
   const page_size = Number(query["page_size"] ?? 30);
   const none = (degraded: boolean) => ({ items: [], total: 0, page, page_size, degraded });
   const type = String(query["type"] ?? "");
-  if (!["skill", "connector", "agent_template", "agent_team_template"].includes(type)) return none(false);
+  // An automation template is not installed: the app opens its builder filled in from the item.
+  if (!["skill", "connector", "agent_template", "agent_team_template", "automation_template"].includes(type))
+    return none(false);
   if (!index.configured(ctx)) return none(true);
   const params: Record<string, string> = { locale: await localeOf(ctx, auth) };
   for (const [key, value] of Object.entries(query))

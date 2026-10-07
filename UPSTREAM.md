@@ -176,8 +176,8 @@ Deliberate differences in behaviour:
   (`source: "builtin"`, ids `builtin-<slug>`). valuz-handbook, automation, browser, citation and
   valuz-project-docs are not carried: they describe features this server does not have.
 - The marketplace reads the same market index (`MARKETPLACE_INDEX_URLS`, tried in order) but has no direct
-  SkillHub / ModelScope fallback: with the index down it is empty and `degraded`. Plugin bundles, playbook and
-  automation templates are not offered — their tab and the skills "suites" shelf are hidden
+  SkillHub / ModelScope fallback: with the index down it is empty and `degraded`. Plugin bundles and playbook
+  templates are not offered (automation templates are: the automation page's template library reads them) — their tab and the skills "suites" shelf are hidden
   (`MarketplacePage.tsx`). Installs record no provenance row. A market skill keeps its market slug, which is how
   `installed` is told.
 - Recommended connectors list only what works without an OAuth sign-in (Firecrawl).

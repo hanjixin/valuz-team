@@ -18,11 +18,10 @@ test("the app shows no door to what this server does not provide", async ({ page
   await page.goto("/marketplace");
   await expect(page.getByRole("tablist").first().getByRole("tab")).toHaveText(["智能体", "技能", "连接器"]);
 
-  // Automations stand alone: no playbooks beside them, no template library.
+  // Automations stand alone — no playbooks beside them — with the template library to start from.
   await page.goto("/automations");
   await expect(page.getByRole("button", { name: "自动化", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "执行手册" })).toHaveCount(0);
-  await expect(page.getByRole("tab", { name: "模板库" })).toHaveCount(0);
 
   // Settings list only what has a server behind it.
   await page.goto("/settings");

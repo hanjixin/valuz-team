@@ -16,8 +16,8 @@ export const UNAVAILABLE: {
   /** The marketplace is provided (skills, connectors, agents, teams) — without its plugin bundles. */
   marketplace: false,
   playbooks: true,
-  /** The automation template library (it is filled from the marketplace). */
-  automationTemplates: true,
+  /** The automation template library, filled from the marketplace. */
+  automationTemplates: false,
   /** Settings sections with no server behind them. */
   settingsSections: ["browser", "parsing", "backup"],
 };

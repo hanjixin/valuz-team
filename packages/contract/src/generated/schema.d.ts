@@ -5665,7 +5665,9 @@ export interface components {
             evaluation?: components["schemas"]["MarketplaceEvaluationReport"] | null;
             connector_config?: components["schemas"]["MarketplaceConnectorConfig"] | null;
             /** @description Plugins — the package's `plugin.json` object (Agent Plugins 1.0.0 manifest). */
-            plugin_manifest?: Record<string, never> | null;
+            plugin_manifest?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * @description Opaque, type-varies-by-`type` install payload from the market
              *     index: skill -> {download_url, sha256?, size_bytes?};
@@ -5677,7 +5679,9 @@ export interface components {
              *     creation-form prefill values. Only the market index sets this
              *     field. Template use never calls the install endpoint.
              */
-            install_manifest?: Record<string, never> | null;
+            install_manifest?: {
+                [key: string]: unknown;
+            } | null;
         };
         MarketplaceItemList: {
             items: components["schemas"]["MarketplaceItem"][];

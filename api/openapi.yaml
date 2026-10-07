@@ -8438,10 +8438,12 @@ components:
             plugin_manifest:
               type: object
               nullable: true
+              additionalProperties: true
               description: "Plugins — the package's `plugin.json` object (Agent Plugins 1.0.0 manifest)."
             install_manifest:
               type: object
               nullable: true
+              additionalProperties: true
               description: |
                 Opaque, type-varies-by-`type` install payload from the market
                 index: skill -> {download_url, sha256?, size_bytes?};

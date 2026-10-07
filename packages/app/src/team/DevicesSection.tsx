@@ -1,5 +1,5 @@
 /** Settings → Devices: the computers linked to the server, and reaching into them. (agent-base addition.) */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type Device, type DeviceFsEntry, authApi, teamApi } from "@valuz/core";
 import {
   Badge,
@@ -87,6 +87,13 @@ export function DevicesSection() {
   const { t } = useI18n();
   const me = useLoaded(() => authApi.me());
   const devices = useLoaded(() => teamApi.devices());
+  // A computer comes and goes: what is listed is kept current while the page is open.
+  const refresh = useRef(devices.reload);
+  refresh.current = devices.reload;
+  useEffect(() => {
+    const timer = setInterval(() => refresh.current(), 5000);
+    return () => clearInterval(timer);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [sharing, setSharing] = useState<Device | null>(null);
   const [browsing, setBrowsing] = useState<Device | null>(null);

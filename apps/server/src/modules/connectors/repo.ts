@@ -35,6 +35,7 @@ export interface Values {
   config: ConnectorConfig;
   secret_enc: string | null;
   enabled: boolean;
+  oauth_enc?: string | null;
 }
 
 export const insert = async (
@@ -66,6 +67,10 @@ export async function update(
 
 export const remove = async (db: Db, id: string): Promise<void> =>
   void (await db.deleteFrom("connectors").where("id", "=", id).execute());
+
+/** A connector by id, with no permission check — for the sign-in callback, which the browser's `state` authorizes. */
+export const byId = (db: Db, id: string) =>
+  db.selectFrom("connectors").selectAll().where("id", "=", id).executeTakeFirst();
 
 /** The enabled connectors an agent's turn needs, by slug. No permission check: the agent using them is the authorization. */
 export const enabledBySlug = (db: Db, orgId: string, slugs: string[]) =>

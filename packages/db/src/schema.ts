@@ -348,6 +348,8 @@ export interface ConnectorsTable {
   auth_type: ColumnType<string, string | undefined, string>;
   config: ColumnType<ConnectorConfig, string, string>;
   secret_enc: string | null;
+  /** Sealed: the OAuth client, endpoints and tokens of a connector that is signed in to. */
+  oauth_enc: string | null;
   enabled: ColumnType<boolean, boolean | undefined, boolean>;
   status: ColumnType<string, string | undefined, string>;
   tool_count: number | null;

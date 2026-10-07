@@ -4,6 +4,11 @@ const flag = z.enum(["0", "1", "true", "false"]).transform((v) => v === "1" || v
 
 const Env = z.object({
   HOST: z.string().default("0.0.0.0"),
+  /**
+   * This server's address as a browser reaches it (https://agents.example.com). Where a person is
+   * sent back to after signing in to a connector. Empty = http://127.0.0.1:<PORT>, right for one machine.
+   */
+  PUBLIC_URL: z.string().default(""),
   PORT: z.coerce.number().int().default(8787),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   REDIS_URL: z.string().min(1, "REDIS_URL is required"),

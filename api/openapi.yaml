@@ -6580,6 +6580,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/DiscoverConnectorResponse"
 
+  /v1/connectors/oauth/callback:
+    get:
+      summary: Where a browser returns after signing in to a connector's server
+      operationId: connectorOAuthCallback
+      tags: [connectors]
+      security: []
+      description: |
+        agent-base: the redirect target of the OAuth authorization request a
+        connector's sign-in starts (`PUBLIC_URL` + this path). The `state` is
+        the authorization; it is good once, for ten minutes.
+      parameters:
+        - {name: code, in: query, required: false, schema: {type: string}}
+        - {name: state, in: query, required: false, schema: {type: string}}
+        - {name: error, in: query, required: false, schema: {type: string}}
+        - {name: error_description, in: query, required: false, schema: {type: string}}
+      responses:
+        "200":
+          description: A page saying the sign-in worked
+          content:
+            text/html:
+              schema: {type: string}
+        "400":
+          description: A page saying why it did not
+          content:
+            text/html:
+              schema: {type: string}
   /v1/connectors/recommended:
     get:
       summary: A directory of ready-made connectors
@@ -13669,6 +13695,12 @@ components:
           type: object
           nullable: true
           additionalProperties: {type: string}
+        oauth_authorization_endpoint: {type: string, nullable: true, description: "For a server that publishes no OAuth metadata: where people are sent to sign in."}
+        oauth_token_endpoint: {type: string, nullable: true}
+        oauth_registration_endpoint: {type: string, nullable: true}
+        oauth_scopes:
+          type: array
+          items: {type: string}
     CreateConnectorResponse:
       type: object
       required: [id, slug, needs_auth, authorization_url]

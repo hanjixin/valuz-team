@@ -51,25 +51,101 @@ export const testConnector: Handler = async (req) => {
   return service.test(ctx, auth, key);
 };
 
-/** OAuth-protected servers are not supported yet: every server is treated as taking a key or nothing. */
+/** What the server at this address says about signing in to it, so the form can ask for the right thing. */
 export const discoverConnector: Handler = async (req) => {
-  await caller(req);
-  return {
-    auth_type: "none",
-    discovered: false,
-    oauth_authorization_endpoint: null,
-    oauth_token_endpoint: null,
-    oauth_registration_endpoint: null,
-  };
+  const { ctx } = await caller(req);
+  return service.discover(ctx, String((req.body as { url?: string }).url ?? "").trim());
+};
+
+const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+
+/**
+ * Where a browser lands after a person signed in to a connector's server. Public: the `state` in
+ * the address is the authorization. It answers with a page for a person, and tells the window that
+ * opened it (the app) how it went.
+ */
+export const connectorOAuthCallback: Handler = async (req, reply) => {
+  const outcome = await service.signedIn(req.server.ctx, req.query as Record<string, string>);
+  const message = JSON.stringify(
+    outcome.ok ? { type: "connector_oauth_success" } : { type: "connector_oauth_error", error: outcome.message },
+  ).replace(/</g, "\\u003c");
+  return reply
+    .code(outcome.ok ? 200 : 400)
+    .type("text/html; charset=utf-8")
+    .header("cache-control", "no-store")
+    .send(
+      `<!doctype html><meta charset="utf-8"><title>${outcome.ok ? "Signed in" : "Sign-in failed"}</title>` +
+        `<body style="font:16px system-ui;margin:15vh auto;max-width:28rem;text-align:center;color:#222">` +
+        `<h1 style="font-size:1.25rem">${outcome.ok ? "✓" : "✗"} ${escapeHtml(outcome.message)}</h1>` +
+        `<script>try{window.opener&&window.opener.postMessage(${message},"*")}catch(e){}` +
+        `${outcome.ok ? "setTimeout(function(){window.close()},1500)" : ""}</script></body>`,
+    );
 };
 
 /**
- * Ready-made connectors to add with one click. Only ones that work here are
- * listed: servers that need an OAuth sign-in are not supported yet, so of
- * valuz-agent's catalogue the one that takes no credentials remains. The
- * marketplace offers many more.
+ * Ready-made connectors to add with one click: valuz-agent's catalogue, without the entries that
+ * are that product's own data service. The ones that say `oauth` send the member to sign in.
  */
-const RECOMMENDED = [
+interface Recommended {
+  kind: "connector";
+  slug: string;
+  display_name: string;
+  description: string | { "zh-CN": string; "en-US": string };
+  icon_url: string;
+  categories: string[];
+  url: string;
+  auth_type: "none" | "oauth";
+  transport: "http";
+  credentials_help_url?: string;
+  /** What the member must bring: a client they registered, where the server registers none itself. */
+  oauth_credentials_schema?: { key: string; label: string; placeholder: string; required: boolean; secret: boolean }[];
+}
+
+const RECOMMENDED: Recommended[] = [
+  {
+    kind: "connector",
+    slug: "github",
+    display_name: "GitHub",
+    description: {
+      "zh-CN": "访问 GitHub 的仓库、Issue、Pull Request 等。需要先在 GitHub 注册一个 OAuth App。",
+      "en-US": "Access GitHub repositories, issues, pull requests and more. Needs an OAuth App registered with GitHub.",
+    },
+    icon_url: "https://github.com/favicon.ico",
+    categories: ["developer"],
+    url: "https://api.githubcopilot.com/mcp/",
+    auth_type: "oauth",
+    transport: "http",
+    credentials_help_url: "https://github.com/settings/developers",
+    oauth_credentials_schema: [
+      { key: "client_id", label: "Client ID", placeholder: "Ov23li...", required: true, secret: false },
+      { key: "client_secret", label: "Client Secret", placeholder: "Client Secret", required: true, secret: true },
+    ],
+  },
+  {
+    kind: "connector",
+    slug: "linear",
+    display_name: "Linear",
+    description: {
+      "zh-CN": "管理 Linear 的 Issue、项目和迭代。",
+      "en-US": "Manage Linear issues, projects and cycles.",
+    },
+    icon_url: "https://linear.app/favicon.ico",
+    categories: ["productivity"],
+    url: "https://mcp.linear.app/mcp",
+    auth_type: "oauth",
+    transport: "http",
+  },
+  {
+    kind: "connector",
+    slug: "notion",
+    display_name: "Notion",
+    description: { "zh-CN": "读写 Notion 的页面和数据库。", "en-US": "Read and write Notion pages and databases." },
+    icon_url: "https://www.notion.so/images/favicon.ico",
+    categories: ["productivity"],
+    url: "https://mcp.notion.com/mcp",
+    auth_type: "oauth",
+    transport: "http",
+  },
   {
     kind: "connector",
     slug: "firecrawl",
@@ -84,7 +160,7 @@ const RECOMMENDED = [
     auth_type: "none",
     transport: "http",
   },
-] as const;
+];
 
 export const listRecommendedConnectors: Handler = async (req) => {
   const { ctx, auth } = await caller(req);
@@ -97,9 +173,9 @@ export const listRecommendedConnectors: Handler = async (req) => {
   return {
     items: RECOMMENDED.map((entry) => ({
       ...entry,
-      description: entry.description[locale],
+      description: typeof entry.description === "string" ? entry.description : entry.description[locale],
       installed: have.has(entry.slug),
-      oauth_credentials_schema: [],
+      oauth_credentials_schema: entry.oauth_credentials_schema ?? [],
       header_schema: [],
       param_schema: [],
     })),

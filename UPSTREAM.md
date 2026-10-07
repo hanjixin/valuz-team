@@ -180,7 +180,7 @@ Deliberate differences in behaviour:
   templates are not offered (automation templates are: the automation page's template library reads them) — their tab and the skills "suites" shelf are hidden
   (`MarketplacePage.tsx`). Installs record no provenance row. A market skill keeps its market slug, which is how
   `installed` is told.
-- Recommended connectors list only what works without an OAuth sign-in (Firecrawl).
+- Connectors that are signed in to (OAuth) work as upstream's do from the app's side — `needs_auth` + `authorization_url`, the popup's `connector_oauth_success` message, re-signing-in by creating again under the same slug — on the MCP SDK's own OAuth client helpers. `PUBLIC_URL` names where the browser returns. Not carried: sharing one sign-in between connectors of the same service, and a published client-metadata document. The recommended list is upstream's catalogue without its Valuz data-service entries.
 - The built-in assistant (Valurion / 小万) is one per member of an organization rather than one per installation;
   its product instructions are not carried over (it runs with none of its own), and `effective-resources` lists the
   member's enabled skills and connectors and the organization's knowledge bases.

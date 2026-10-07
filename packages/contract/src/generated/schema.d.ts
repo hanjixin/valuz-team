@@ -4386,6 +4386,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/connectors/oauth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where a browser returns after signing in to a connector's server
+         * @description agent-base: the redirect target of the OAuth authorization request a
+         *     connector's sign-in starts (`PUBLIC_URL` + this path). The `state` is
+         *     the authorization; it is good once, for ten minutes.
+         */
+        get: operations["connectorOAuthCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/connectors/recommended": {
         parameters: {
             query?: never;
@@ -9109,6 +9131,11 @@ export interface components {
             env?: {
                 [key: string]: string;
             } | null;
+            /** @description For a server that publishes no OAuth metadata: where people are sent to sign in. */
+            oauth_authorization_endpoint?: string | null;
+            oauth_token_endpoint?: string | null;
+            oauth_registration_endpoint?: string | null;
+            oauth_scopes?: string[];
         };
         CreateConnectorResponse: {
             id: string;
@@ -17345,6 +17372,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiscoverConnectorResponse"];
+                };
+            };
+        };
+    };
+    connectorOAuthCallback: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+                error_description?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page saying the sign-in worked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description A page saying why it did not */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
                 };
             };
         };

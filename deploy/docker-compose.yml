@@ -20,6 +20,7 @@ services:
       AUTOMATION_MIN_INTERVAL_SECONDS: ${AUTOMATION_MIN_INTERVAL_SECONDS:-30}
       FEISHU_API_BASE: ${FEISHU_API_BASE:-}
       WECOM_WS_URL: ${WECOM_WS_URL:-}
+      PUBLIC_URL: ${PUBLIC_URL:-}
       MARKETPLACE_INDEX_URLS: ${MARKETPLACE_INDEX_URLS:-https://api.valuz.cn/cloud,https://api.valuz.io/cloud}
       # Knowledge-base documents live here, and uploads wait here until they are delivered to a device.
       # Projects themselves stay on devices.

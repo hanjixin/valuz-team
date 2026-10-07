@@ -53,3 +53,23 @@ export const getProjectLastSessionPick: Handler = async (req) => {
   await service.require(ctx, auth, id);
   return { runtime_provider: null, provider_id: null, model_id: null, agent_slug: null, task_agent_slug: null };
 };
+
+export const getProjectConnectors: Handler = async (req) => {
+  const { ctx, auth, id } = await caller(req);
+  return service.connectorsOf(ctx, auth, id);
+};
+
+export const setProjectConnectors: Handler = async (req) => {
+  const { ctx, auth, id } = await caller(req);
+  return service.setConnectors(ctx, auth, id, (req.body as { slugs: string[] }).slugs);
+};
+
+/**
+ * Git worktrees are not provided: a project's sessions all work in its one folder.
+ * The project page asks what there is, and the answer is none — not an error.
+ */
+export const listProjectWorktrees: Handler = async (req) => {
+  const { ctx, auth, id } = await caller(req);
+  await service.get(ctx, auth, id);
+  return { git: { git_available: false, is_repo: false }, worktrees: [] };
+};

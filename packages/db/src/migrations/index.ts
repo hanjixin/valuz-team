@@ -23,6 +23,7 @@ import * as builtinAgent from "./0021_builtin_agent.ts";
 import * as memorySnapshots from "./0022_memory_snapshots.ts";
 import * as channelChatBindings from "./0023_channel_chat_bindings.ts";
 import * as connectorOauth from "./0024_connector_oauth.ts";
+import * as projectConnectors from "./0025_project_connectors.ts";
 
 /**
  * Every migration, keyed by name; Kysely applies them in key order. Listed
@@ -54,4 +55,5 @@ export const migrations: Record<string, Migration> = {
   "0022_memory_snapshots": memorySnapshots,
   "0023_channel_chat_bindings": channelChatBindings,
   "0024_connector_oauth": connectorOauth,
+  "0025_project_connectors": projectConnectors,
 };

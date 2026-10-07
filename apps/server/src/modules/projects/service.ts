@@ -134,7 +134,20 @@ export async function remove(ctx: Ctx, auth: Auth, id: string): Promise<void> {
 export async function contextForSession(
   ctx: Ctx,
   id: string,
-): Promise<{ name: string; instructions: string; kind: string } | null> {
+): Promise<{ name: string; instructions: string; kind: string; connectors: string[] } | null> {
   const row = await repo.byId(ctx.db, id);
-  return row ? { name: row.name, instructions: row.instructions_md, kind: row.kind } : null;
+  return row ? { name: row.name, instructions: row.instructions_md, kind: row.kind, connectors: row.connectors } : null;
+}
+
+/** The connectors a project gives every session in it, whatever agent runs — by slug. */
+export const connectorsOf = async (ctx: Ctx, auth: Auth, id: string): Promise<{ slugs: string[] }> => ({
+  slugs: (await require(ctx, auth, id)).connectors,
+});
+
+export async function setConnectors(ctx: Ctx, auth: Auth, id: string, slugs: string[]): Promise<{ ok: boolean }> {
+  const project = await require(ctx, auth, id, "edit");
+  const next = [...new Set(slugs.map((slug) => slug.trim()).filter(Boolean))];
+  await repo.update(ctx.db, project.id, { connectors: next });
+  await audit.record(ctx.db, auth, "project.update", { type: "project", id: project.id }, { fields: ["connectors"] });
+  return { ok: true };
 }

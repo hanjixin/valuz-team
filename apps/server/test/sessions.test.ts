@@ -456,6 +456,24 @@ describe("sessions", () => {
         .payload;
       expect(result).toMatchObject({ is_error: "false" });
       expect(result?.["content"]).toContain("sonnet: found in the catalogue");
+
+      // A project can bring a connector to every session in it, whatever agent runs there.
+      await call(alice, "PATCH", "/v1/agents/Poet", { connector_types: [] });
+      const project = (await call(alice, "POST", "/v1/projects", { name: "Reference desk" })).body;
+      const route = `/v1/projects/${project.id}/connectors`;
+      expect((await call(alice, "GET", route)).body).toEqual({ slugs: [] });
+      expect((await call(bob, "PUT", route, { slugs: ["catalogue"] })).status).toBe(404); // not his project
+      expect((await call(alice, "PUT", route, { slugs: ["catalogue", "catalogue", " "] })).body).toEqual({ ok: true });
+      expect((await call(alice, "GET", route)).body).toEqual({ slugs: ["catalogue"] });
+      const inProject = await newChat(alice, { project_id: project.id, agent_slug: "Poet" });
+      model.replies.push({ content: "Ready." });
+      await say(alice, inProject.id, "hello");
+      expect(model.requests.at(-1)?.tools?.map((tool) => tool.function.name)).toContain("mcp__catalogue__lookup");
+      // A project's sessions all work in its one folder: there are no worktrees to list.
+      expect((await call(alice, "GET", `/v1/projects/${project.id}/worktrees`)).body).toEqual({
+        git: { git_available: false, is_repo: false },
+        worktrees: [],
+      });
     } finally {
       await mcp.stop();
     }

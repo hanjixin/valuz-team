@@ -141,7 +141,13 @@ async function kernelSession(ctx: Ctx, row: Row): Promise<{ session: Session; sk
     ...(await connectors.serversFor(
       ctx,
       row.org_id,
-      all ? all.connectors.map((connector) => connector.slug) : (agent?.connector_types ?? []),
+      // What its agent names, and what its project brings to every session in it.
+      [
+        ...new Set([
+          ...(all ? all.connectors.map((connector) => connector.slug) : (agent?.connector_types ?? [])),
+          ...(project?.connectors ?? []),
+        ]),
+      ],
     )),
     ...extras.flatMap((extra) => extra.mcpServers),
   ];

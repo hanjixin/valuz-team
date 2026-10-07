@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
+  UNAVAILABLE,
   getEntityOrigin,
   playbooksApi,
   recordEntityOrigin,
@@ -38,7 +39,8 @@ export function useProjectPlaybooks(projectId: string) {
   const [runningId, setRunningId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    if (!projectId) {
+    // agent-base: playbooks are not provided; there is nothing to ask for.
+    if (!projectId || UNAVAILABLE.playbooks) {
       setDefinitions([]);
       return;
     }
@@ -55,7 +57,7 @@ export function useProjectPlaybooks(projectId: string) {
 
   useEffect(() => {
     let cancelled = false;
-    if (!projectId) {
+    if (!projectId || UNAVAILABLE.playbooks) {
       setDefinitions([]);
       return;
     }

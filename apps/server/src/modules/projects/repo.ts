@@ -35,11 +35,15 @@ export const insert = async (
 export const update = async (
   db: Db,
   id: string,
-  values: { name?: string; instructions_md?: string; default_lead_agent_slug?: string | null },
+  values: { name?: string; instructions_md?: string; default_lead_agent_slug?: string | null; connectors?: string[] },
 ): Promise<void> =>
   void (await db
     .updateTable("projects")
-    .set({ ...values, updated_at: new Date() })
+    .set({
+      ...values,
+      ...(values.connectors ? { connectors: JSON.stringify(values.connectors) } : {}),
+      updated_at: new Date(),
+    } as never)
     .where("id", "=", id)
     .execute());
 

@@ -68,7 +68,12 @@ import { ExecutionLocationBar } from "../components/ExecutionLocationBar";
 import { useProjectOutlet } from "@valuz/app/layout";
 import { usePlatform } from "@valuz/app/platform";
 import { useProjectKbBindings, useKbDocTree } from "@valuz/app/hooks";
-import { RUNTIME_DISPLAY_NAME, memoryApi, useTranslation } from "@valuz/core";
+import {
+  RUNTIME_DISPLAY_NAME,
+  UNAVAILABLE,
+  memoryApi,
+  useTranslation,
+} from "@valuz/core";
 import { useAgentEffectiveSkills } from "../hooks/use-agent-effective-skills";
 import { preserveLoadedChildren, toFileTree } from "../lib/file-tree";
 import { ArtifactSplitPane } from "../components/ArtifactSplitPane";
@@ -1534,7 +1539,10 @@ export const ProjectDetailPage = () => {
         initialOpenSection={null}
         instructions={instructions}
         onInstructionsChange={handleInstructionsChange}
-        playbooks={projectPlaybookDefinitions.map((definition) => ({
+        playbooks={(UNAVAILABLE.playbooks
+          ? undefined
+          : projectPlaybookDefinitions
+        )?.map((definition) => ({
           id: definition.id,
           name: definition.name,
           version: definition.current_version,
@@ -1865,9 +1873,12 @@ export const ProjectDetailPage = () => {
                       <TabsTrigger value="automation">
                         {t("activity.automationTag" as Parameters<typeof t>[0])}
                       </TabsTrigger>
-                      <TabsTrigger value="playbook">
-                        {t("playbook.title" as Parameters<typeof t>[0])}
-                      </TabsTrigger>
+                      {/* agent-base: playbooks are not provided. */}
+                      {UNAVAILABLE.playbooks ? null : (
+                        <TabsTrigger value="playbook">
+                          {t("playbook.title" as Parameters<typeof t>[0])}
+                        </TabsTrigger>
+                      )}
                     </TabsList>
                   </div>
                   <TabsContent value="all" className="mt-5">

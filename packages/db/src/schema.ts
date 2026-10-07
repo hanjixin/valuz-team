@@ -169,6 +169,8 @@ export interface ProjectsTable {
   default_lead_agent_slug: string | null;
   device_id: string | null;
   root_path: string | null;
+  /** Connectors every session in the project is given, by slug. */
+  connectors: ColumnType<string[], string | undefined, string>;
   created_at: Timestamp;
   updated_at: Timestamp;
 }

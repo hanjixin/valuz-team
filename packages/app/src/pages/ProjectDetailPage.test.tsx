@@ -7,10 +7,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from "vitest";
 import { initI18n } from "@valuz/shared/i18n";
 import type { ChatProjectBinding, Task } from "@valuz/core";
-import { channelsApi, useSessionStore } from "@valuz/core";
+import { UNAVAILABLE, channelsApi, useSessionStore } from "@valuz/core";
 import type { SessionListItem } from "@valuz/shared";
 
 // ── Shared, hoisted test state the module mocks read from ────────────────────
@@ -546,6 +546,10 @@ describe("ProjectDetailPage auto-refresh wiring", () => {
   });
 
   it("projects associated Playbooks into the right panel", async () => {
+    // agent-base hides playbooks (the server does not provide them); this test is of the page with them present.
+    const hidden = UNAVAILABLE.playbooks;
+    UNAVAILABLE.playbooks = false;
+    onTestFinished(() => void (UNAVAILABLE.playbooks = hidden));
     h.playbooks = [
       {
         id: "pb-1",
